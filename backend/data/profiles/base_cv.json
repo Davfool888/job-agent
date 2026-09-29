@@ -1,0 +1,26 @@
+{
+  "_nota": "PERFIL BASE (fuente de verdad para matching y CV). Completa TUS datos reales. El sistema NUNCA inventa experiencia, tecnologias, cargos o logros: el CV solo usa lo que este aqui.",
+  "personal": {
+    "full_name": "",
+    "title": "",
+    "location": "",
+    "email": "",
+    "phone": "",
+    "linkedin": "",
+    "github": "",
+    "portfolio": ""
+  },
+  "professional_summary": "",
+  "education": [],
+  "experience": [],
+  "projects": [],
+  "skills": {
+    "programming": [],
+    "data": [],
+    "bi": [],
+    "databases": [],
+    "tools": []
+  },
+  "languages": [],
+  "certifications": []
+}
