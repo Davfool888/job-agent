@@ -64,10 +64,13 @@ export function applyJobFilters(jobs: Job[], f: JobFilterState): Job[] {
     return true;
   });
 
-  const byIdDesc = (a: Job, b: Job) => b.id - a.id;
+  const byIdDesc = (a: Job, b: Job) => Number(b.id) - Number(a.id);
+  const byFoundDesc = (a: Job, b: Job) =>
+    new Date(b.found_at ?? b.created_at).getTime() -
+    new Date(a.found_at ?? a.created_at).getTime();
   switch (f.sort) {
     case "oldest":
-      return filtered.sort((a, b) => a.id - b.id);
+      return filtered.sort((a, b) => Number(a.id) - Number(b.id));
     case "match":
       return filtered.sort(
         (a, b) => (b.match_score ?? -1) - (a.match_score ?? -1) || byIdDesc(a, b),
@@ -79,6 +82,9 @@ export function applyJobFilters(jobs: Job[], f: JobFilterState): Job[] {
     case "title":
       return filtered.sort((a, b) => a.title.localeCompare(b.title));
     case "recent":
+      return filtered.sort(byIdDesc);
+    case "found":
+      return filtered.sort(byFoundDesc);
     default:
       return filtered.sort(byIdDesc);
   }

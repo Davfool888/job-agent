@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SearchProfile",
+  "description": "Perfil de busqueda automatica definido por el usuario. Vive en la coleccion `search_profiles` (Firestore) o tabla search_profiles (SQLite).",
+  "type": "object",
+  "required": ["title", "sources"],
+  "properties": {
+    "name": {"type": "string"},
+    "title": {"type": "string", "description": "Cargo objetivo, ej. Analista de Datos"},
+    "location": {"type": ["string", "null"]},
+    "modality": {"type": ["string", "null"]},
+    "keywords": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Palabras relacionadas que se buscan ademas del titulo"
+    },
+    "sources": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Subset de fuentes del registry (computrabajo, magneto, linkedin, ...)"
+    },
+    "active": {"type": "boolean"},
+    "frequency_minutes": {"type": "integer", "minimum": 5, "maximum": 1440},
+    "last_run_at": {"type": ["string", "null"], "format": "date-time"},
+    "next_run_at": {"type": ["string", "null"], "format": "date-time"},
+    "last_run_status": {
+      "type": ["string", "null"],
+      "enum": ["running", "ok", "error", null]
+    },
+    "last_found": {"type": "integer", "minimum": 0},
+    "last_new": {"type": "integer", "minimum": 0},
+    "last_error": {"type": ["string", "null"]},
+    "created_at": {"type": ["string", "null"], "format": "date-time"},
+    "updated_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

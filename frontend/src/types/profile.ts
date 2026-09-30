@@ -71,7 +71,7 @@ export interface TailoredBlock {
 }
 
 export interface TailorResult {
-  job_id: number;
+  job_id: number | string;
   analysis: {
     match_score: number | null;
     detected_role: string | null;

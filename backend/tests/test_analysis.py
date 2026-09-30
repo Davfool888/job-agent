@@ -86,6 +86,7 @@ def test_discovery_dedup_y_discovered_by():
         }
         from app.database.connection import SessionLocal
         from app.database.models import Job
+        from app.services.job_service import refresh_job
         from app.services.job_service import save_jobs
         from app.analysis.discovery import _tag_discovered
 
@@ -97,10 +98,13 @@ def test_discovery_dedup_y_discovered_by():
             second = save_jobs(db, [base], search_query="analista de datos")
             _tag_discovered(db, [second[0].id], "analista-de-datos")
             assert first[0].id == second[0].id
-            db.refresh(first[0])
+            fresh = refresh_job(db, first[0])
             import json
 
-            assert json.loads(first[0].discovered_by) == [
+            discovered = fresh.discovered_by
+            if isinstance(discovered, str):
+                discovered = json.loads(discovered)
+            assert discovered == [
                 "power-bi",
                 "analista-de-datos",
             ]

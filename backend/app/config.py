@@ -17,6 +17,13 @@ APP_NAME = os.getenv("APP_NAME", "job-agent")
 _DEFAULT_DB = f"sqlite:///{(BASE_DIR / 'data' / 'job_agent.db').as_posix()}"
 DATABASE_URL = os.getenv("DATABASE_URL", _DEFAULT_DB)
 
+# --- Motor de persistencia: sqlite (local, defecto) o firestore (nube).
+# Cambiar a firestore requiere FIREBASE_PROJECT_ID + credenciales Admin SDK.
+DB_BACKEND = os.getenv("DB_BACKEND", "sqlite").strip().lower()
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
+FIRESTORE_DATABASE = os.getenv("FIRESTORE_DATABASE", "(default)")
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+
 COMPUTRABAJO_BASE_URL = os.getenv(
     "COMPUTRABAJO_BASE_URL",
     "https://co.computrabajo.com",
@@ -97,6 +104,20 @@ OPENAI_COMPAT_BASE_URL = os.getenv(
 )
 OPENAI_COMPAT_API_KEY = os.getenv("OPENAI_COMPAT_API_KEY", "")
 OPENAI_COMPAT_MODEL = os.getenv("OPENAI_COMPAT_MODEL", "gpt-4o-mini")
+
+# --- Scheduler de busqueda automatica ---
+# En Render (gratuito) la instancia duerme: ademas del scheduler interno,
+# un cron externo puede llamar POST /scheduler/tick (ver SCHEDULER_CRON_SECRET).
+SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "true").lower() == "true"
+SCHEDULER_INTERVAL_SECONDS = int(os.getenv("SCHEDULER_INTERVAL_SECONDS", "60"))
+SCHEDULER_CRON_SECRET = os.getenv("SCHEDULER_CRON_SECRET", "")
+
+# --- Scheduler de busqueda automatica ---
+# En Render (gratuito) la instancia duerme: ademas del scheduler interno,
+# un cron externo puede llamar POST /scheduler/tick (ver SCHEDULER_CRON_SECRET).
+SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "true").lower() == "true"
+SCHEDULER_INTERVAL_SECONDS = int(os.getenv("SCHEDULER_INTERVAL_SECONDS", "60"))
+SCHEDULER_CRON_SECRET = os.getenv("SCHEDULER_CRON_SECRET", "")
 
 CVS_DIR = BASE_DIR / "data" / "cvs"
 PROFILES_DIR = BASE_DIR / "data" / "profiles"

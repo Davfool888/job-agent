@@ -241,6 +241,121 @@ class Job(Base):
         nullable=True,
     )
 
+    # --- Busqueda automatica: a que perfiles pertenece y cuando se vio ---
+    search_profile_ids = Column(
+        Text,  # JSON array de ids de search_profiles
+        nullable=True,
+    )
+
+    found_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    first_seen_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
+
+class SearchProfile(Base):
+    """Perfil de busqueda automatica definido por el usuario."""
+
+    __tablename__ = "search_profiles"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
+
+    name = Column(
+        String(200),
+        nullable=False,
+        default="",
+    )
+
+    title = Column(
+        String(300),
+        nullable=False,
+        default="",
+    )
+
+    location = Column(
+        String(200),
+        nullable=True,
+    )
+
+    modality = Column(
+        String(100),
+        nullable=True,
+    )
+
+    keywords = Column(
+        Text,  # JSON array
+        nullable=True,
+    )
+
+    sources = Column(
+        Text,  # JSON array de fuentes (subset de registry)
+        nullable=True,
+    )
+
+    active = Column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+
+    frequency_minutes = Column(
+        Integer,
+        nullable=False,
+        default=10,
+    )
+
+    last_run_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    next_run_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    last_run_status = Column(
+        String(50),
+        nullable=True,
+    )
+
+    last_found = Column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    last_new = Column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    last_error = Column(
+        Text,
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
 
 class Profile(Base):
     """Perfil profesional singleton (id=1). `data` es un JSON con

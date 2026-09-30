@@ -10,6 +10,7 @@ import { JobDetail } from "./pages/JobDetail";
 import { Jobs } from "./pages/Jobs";
 import { NotFound } from "./pages/NotFound";
 import { ProfilePage } from "./pages/Profile";
+import { Search } from "./pages/Search";
 import { Settings } from "./pages/Settings";
 
 // Recharts es pesado: se carga solo al entrar a /analytics.
@@ -25,6 +26,7 @@ export default function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/jobs" element={<Jobs />} />
+        <Route path="/search" element={<Search />} />
         <Route path="/jobs/:id" element={<JobDetail />} />
         <Route path="/discarded" element={<Discarded />} />
         <Route path="/applications" element={<Applications />} />

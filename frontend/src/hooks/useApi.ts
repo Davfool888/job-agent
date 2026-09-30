@@ -71,12 +71,12 @@ function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): AsyncState<T> {
 }
 
 export function useJobs(status?: string): AsyncState<Job[]> & {
-  mutate: (id: number, payload: StatusUpdatePayload) => Promise<Job>;
+  mutate: (id: number | string, payload: StatusUpdatePayload) => Promise<Job>;
 } {
   const state = useAsync(() => fetchJobs(500, status), [status]);
 
   const mutate = useCallback(
-    async (id: number, payload: StatusUpdatePayload) => {
+    async (id: number | string, payload: StatusUpdatePayload) => {
       const updated = await updateJobStatus(id, payload);
       state.reload();
       return updated;
@@ -88,11 +88,11 @@ export function useJobs(status?: string): AsyncState<Job[]> & {
   return { ...state, mutate };
 }
 
-export function useJob(id: number): AsyncState<Job> {
+export function useJob(id: number | string): AsyncState<Job> {
   return useAsync(() => fetchJob(id), [id]);
 }
 
-export function useJobExtra(id: number): AsyncState<JobDetailExtra> {
+export function useJobExtra(id: number | string): AsyncState<JobDetailExtra> {
   return useAsync(() => fetchJobDetailExtra(id), [id]);
 }
 

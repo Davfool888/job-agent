@@ -23,7 +23,7 @@ export async function saveFullProfile(
   return data;
 }
 
-export async function tailorJob(jobId: number): Promise<TailorResult> {
+export async function tailorJob(jobId: number | string): Promise<TailorResult> {
   const { data } = await api.post<TailorResult>(`/jobs/${jobId}/tailor`);
   return data;
 }

@@ -6,7 +6,10 @@ import {
   BookmarkCheck,
   Building2,
   ExternalLink,
+  Eye,
+  FileText,
   MapPin,
+  RefreshCw,
   Send,
   Sparkles,
   Target,
@@ -22,6 +25,12 @@ import {
 } from "../components/jobs/States";
 import { useJob, useJobExtra } from "../hooks/useApi";
 import { analyzeJob, updateJobStatus } from "../services/jobs";
+import { API_URL } from "../services/api";
+import {
+  fetchCustomizedCv,
+  generateCv,
+  type CustomizedCv,
+} from "../services/cv";
 import { tailorJob } from "../services/profile";
 import type { Job } from "../types/job";
 import type { TailorResult } from "../types/profile";
@@ -30,7 +39,7 @@ import { formatDate, formatDateTime, timeAgo } from "../utils/format";
 export function JobDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const jobId = Number(id);
+  const jobId = id ?? "";
   const job = useJob(jobId);
   const extra = useJobExtra(jobId);
   const [discarding, setDiscarding] = useState<Job | null>(null);
@@ -73,6 +82,45 @@ export function JobDetail() {
   const [tailored, setTailored] = useState<TailorResult | null>(null);
   const [tailoring, setTailoring] = useState(false);
 
+  const [cvView, setCvView] = useState<{
+    phase: "loading" | "ready" | "error";
+    data?: CustomizedCv;
+    error?: string;
+  } | null>(null);
+  const [generating, setGenerating] = useState(false);
+
+  const showCv = async () => {
+    setCvView({ phase: "loading" });
+    setError(null);
+    try {
+      const data = await fetchCustomizedCv(jobId);
+      setCvView({ phase: "ready", data });
+    } catch (e) {
+      setCvView({
+        phase: "error",
+        error: e instanceof Error ? e.message : "Error inesperado",
+      });
+    }
+  };
+
+  const generate = async (force: boolean) => {
+    setGenerating(true);
+    setError(null);
+    try {
+      await generateCv(jobId, force);
+      const data = await fetchCustomizedCv(jobId);
+      setCvView({ phase: "ready", data });
+      job.reload();
+    } catch (e) {
+      setCvView({
+        phase: "error",
+        error: e instanceof Error ? e.message : "Error inesperado",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const tailor = async () => {
     setTailoring(true);
     setError(null);
@@ -97,7 +145,7 @@ export function JobDetail() {
       />
       <div className="content">
         {error && <div className="alert-error">{error}</div>}
-        {Number.isNaN(jobId) ? (
+        {!jobId ? (
           <EmptyState title="ID de oferta inválido." />
         ) : job.loading ? (
           <LoadingState label="Cargando oferta…" />
@@ -118,6 +166,10 @@ export function JobDetail() {
             onTailor={tailor}
             tailoring={tailoring}
             tailored={tailored}
+            onShowCv={() => void showCv()}
+            generatingCv={generating}
+            onGenerateCv={(force: boolean) => void generate(force)}
+            cvView={cvView}
           />
         )}
       </div>
@@ -152,6 +204,10 @@ function DetailBody({
   onTailor,
   tailoring,
   tailored,
+  onShowCv,
+  generatingCv,
+  onGenerateCv,
+  cvView,
 }: {
   job: Job;
   extraDesc: string | null;
@@ -166,6 +222,14 @@ function DetailBody({
   onTailor: () => void;
   tailoring: boolean;
   tailored: TailorResult | null;
+  onShowCv: () => void;
+  generatingCv: boolean;
+  onGenerateCv: (force: boolean) => void;
+  cvView: {
+    phase: "loading" | "ready" | "error";
+    data?: CustomizedCv;
+    error?: string;
+  } | null;
 }) {
   const description = extraDesc || job.description;
 
@@ -225,6 +289,14 @@ function DetailBody({
             title="Selecciona las perspectivas del perfil relevantes para esta vacante (POST /jobs/{id}/tailor)"
           >
             <Sparkles size={15} /> {tailoring ? "Adaptando…" : "Adaptar perfil"}
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={generatingCv}
+            onClick={onShowCv}
+            title="Ver el CV adaptado a esta oferta (GET /jobs/{id}/customized-cv, sin consumir IA)"
+          >
+            <Eye size={15} /> Ver CV adaptado
           </button>
           <a className="btn btn-ghost btn-sm" href={job.url} target="_blank" rel="noreferrer">
             <ExternalLink /> Ir a oferta laboral
@@ -427,6 +499,126 @@ function DetailBody({
           )}
         </div>
       )}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 className="card-title">
+          <FileText size={15} style={{ verticalAlign: -2 }} /> CV adaptado
+          a esta oferta
+        </h3>
+        {!cvView && (
+          <p className="card-sub" style={{ marginBottom: 0 }}>
+            Se genera solo bajo demanda al abrir esta oferta. Si ya existe,
+            se reutiliza sin consumir IA.
+          </p>
+        )}
+        {cvView?.phase === "loading" && (
+          <p className="card-sub" style={{ marginBottom: 0 }}>
+            Adaptando CV para el puesto…
+          </p>
+        )}
+        {cvView?.phase === "error" && (
+          <div>
+            <p style={{ color: "var(--danger)", fontSize: 13 }}>
+              No fue posible generar el CV: {cvView.error}
+            </p>
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={generatingCv}
+              onClick={() => onGenerateCv(true)}
+            >
+              <RefreshCw size={14} /> Reintentar
+            </button>
+          </div>
+        )}
+        {cvView?.phase === "ready" && cvView.data?.state === "NOT_GENERATED" && (
+          <div>
+            <p className="card-sub">
+              Aún no hay CV para esta oferta.{" "}
+              {cvView.data.hint ?? ""}
+            </p>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={generatingCv}
+              onClick={() => onGenerateCv(false)}
+            >
+              <FileText size={14} />{" "}
+              {generatingCv ? "Generando…" : "Generar CV adaptado"}
+            </button>
+          </div>
+        )}
+        {cvView?.phase === "ready" && cvView.data?.state === "ERROR" && (
+          <div>
+            <p style={{ color: "var(--danger)", fontSize: 13 }}>
+              No fue posible generar el CV: {cvView.data.error}
+            </p>
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={generatingCv}
+              onClick={() => onGenerateCv(true)}
+            >
+              <RefreshCw size={14} /> Reintentar
+            </button>
+          </div>
+        )}
+        {cvView?.phase === "ready" && cvView.data?.state === "READY" && (
+          <div>
+            <p className="card-sub" style={{ marginTop: 0 }}>
+              CV listo · versión {cvView.data.version} · generado el{" "}
+              {cvView.data.created_at
+                ? new Date(cvView.data.created_at).toLocaleString()
+                : "—"}
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+              {cvView.data.download_pdf && (
+                <a
+                  className="btn btn-primary btn-sm"
+                  href={`${API_URL}${cvView.data.download_pdf}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Eye size={14} /> Ver PDF
+                </a>
+              )}
+              {cvView.data.download_tex && (
+                <a
+                  className="btn btn-ghost btn-sm"
+                  href={`${API_URL}${cvView.data.download_tex}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Descargar LaTeX
+                </a>
+              )}
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={generatingCv}
+                onClick={() => onGenerateCv(true)}
+                title="Genera una nueva versión (consume IA)"
+              >
+                <RefreshCw size={14} /> Regenerar
+              </button>
+            </div>
+            {cvView.data.download_pdf && (
+              <iframe
+                title={`CV adaptado v${cvView.data.version}`}
+                src={`${API_URL}${cvView.data.download_pdf}`}
+                style={{
+                  width: "100%",
+                  height: 560,
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                }}
+              />
+            )}
+            {!cvView.data.download_pdf && (
+              <p className="card-sub" style={{ marginBottom: 0 }}>
+                PDF no disponible (pdflatex no instalado en el servidor);
+                descarga el LaTeX.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       <h3 className="section-title">Descripción original</h3>
       {description ? (

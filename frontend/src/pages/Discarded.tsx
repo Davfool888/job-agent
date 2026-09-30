@@ -16,7 +16,7 @@ import { applyJobFilters, uniqueSorted } from "../utils/jobs";
 export function Discarded() {
   const { data, loading, error, reload, mutate } = useJobs("discarded");
   const [filters, setFilters] = useState<JobFilterState>(DEFAULT_FILTERS);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const all = useMemo(() => data ?? [], [data]);
@@ -26,7 +26,7 @@ export function Discarded() {
   const locations = useMemo(() => uniqueSorted(all, (j) => j.location), [all]);
   const sources = useMemo(() => uniqueSorted(all, (j) => j.source), [all]);
 
-  const recover = async (id: number) => {
+  const recover = async (id: string) => {
     setBusyId(id);
     setActionError(null);
     try {

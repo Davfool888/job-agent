@@ -1,3 +1,10 @@
+"""Capa de acceso a datos agnostica al motor.
+
+`db` es un handle: Session (sqlite) o FirestoreDatabase (firestore).
+Toda funcion publica devuelve Records (id siempre str) o dicts, nunca
+ORM. El codigo de main/agents/discovery solo usa estas funciones mas
+update_job_fields/refresh_job/persist_job: jamas SQL directo.
+"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -6,6 +13,7 @@ import json
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.database.firestore_client import is_firestore
 from app.database.models import JOB_STATUSES
 from app.database.models import Job
 from app.database.models import Profile
@@ -30,43 +38,430 @@ DEFAULT_PROFILE = {
     "experience_level": "",
 }
 
+_LIST_FIELDS = (
+    "matched_skills", "missing_skills", "evidence", "discovered_by",
+    "requirements", "responsibilities", "search_profile_ids",
+)
+
+
+def _parse_list(value) -> list:
+    if isinstance(value, list):
+        return list(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except (ValueError, TypeError):
+            return []
+    return []
+
+
+class Record:
+    """Registro en forma-app con acceso por atributo (vale para ambos
+    motores; id siempre str)."""
+
+    def __init__(self, id: str, data: dict):
+        object.__setattr__(self, "id", str(id))
+        object.__setattr__(self, "_data", dict(data))
+
+    def __getattr__(self, name: str):
+        return self._data.get(name)
+
+    def __setattr__(self, name: str, value) -> None:
+        if name in ("id", "_data"):
+            object.__setattr__(self, name, value)
+        else:
+            self._data[name] = value
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, **dict(self._data)}
+
+
+def orm_to_record(row: Job) -> Record:
+    data = {}
+    for column in row.__table__.columns.keys():
+        value = getattr(row, column)
+        if column in _LIST_FIELDS:
+            value = _parse_list(value)
+        data[column] = value
+    data["cv_generated"] = bool(data.get("cv_generated"))
+    return Record(str(row.id), data)
+
+
+def _to_orm_fields(data: dict) -> dict:
+    """Convierte forma-app a columnas SQLite (listas -> JSON TEXT)."""
+    fields = {}
+    columns = set(Job.__table__.columns.keys()) - {"id"}
+    for key, value in data.items():
+        if key not in columns or key == "id":
+            continue
+        if key in _LIST_FIELDS and isinstance(value, list):
+            value = json.dumps(value, ensure_ascii=False)
+        fields[key] = value
+    return fields
+
+
+# ---------------------------------------------------------------------------
+# Primitivas de escritura/lectura (despachan segun el motor)
+# ---------------------------------------------------------------------------
+
+def get_jobs_by_ids(db, ids: list) -> list[Record]:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.get_jobs_by_ids(db, [str(i) for i in ids])
+    rows = db.query(Job).filter(
+        Job.id.in_([int(i) for i in ids])
+    ).all() if ids else []
+    return [orm_to_record(row) for row in rows]
+
+
+def iter_all_jobs(db, limit: int = 5000) -> list[Record]:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.iter_all_jobs(db, limit=limit)
+    rows = db.query(Job).order_by(Job.id.desc()).limit(limit).all()
+    return [orm_to_record(row) for row in rows]
+
+
+def create_job_row(db, data: dict) -> Record:
+    """Crea una oferta desde dict en forma-app. Devuelve Record."""
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.create_job_row(db, data)
+    row = Job(**_to_orm_fields(data))
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return orm_to_record(row)
+
+
+def update_job_fields(db, job_or_id, fields: dict) -> Record:
+    """Actualiza campos (forma-app) y devuelve el Record fresco."""
+    fields = {k: v for k, v in fields.items() if k != "id"}
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        job_id = job_or_id.id if isinstance(job_or_id, Record) else job_or_id
+        return fs.update_job_fields(db, job_id, fields)
+    job_id = job_or_id.id if isinstance(job_or_id, Record) else job_or_id
+    row = db.query(Job).filter(Job.id == int(job_id)).first()
+    if row is None:
+        raise ValueError(f"Oferta {job_id} no encontrada.")
+    for key, value in _to_orm_fields(fields).items():
+        setattr(row, key, value)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return orm_to_record(row)
+
+
+def persist_job(db, job: Record) -> Record:
+    """Escribe el Record completo (reemplaza db.add+commit manual)."""
+    data = job.to_dict()
+    data.pop("id", None)
+    return update_job_fields(db, job.id, data)
+
+
+def refresh_job(db, job: Record) -> Record:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        fresh = fs.get_job(db, job.id)
+    else:
+        row = db.query(Job).filter(Job.id == int(job.id)).first()
+        fresh = orm_to_record(row) if row else None
+    if fresh is None:
+        raise ValueError(f"Oferta {job.id} no encontrada.")
+    return fresh
+
+
+def delete_job(db, job_id) -> bool:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.delete_job(db, job_id)
+    row = db.query(Job).filter(Job.id == int(job_id)).first()
+    if not row:
+        return False
+    db.delete(row)
+    db.commit()
+    return True
+
+
+def count_by_fingerprint(db, fingerprint: str) -> int:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.count_by_fingerprint(db, fingerprint)
+    if not fingerprint:
+        return 0
+    return (
+        db.query(func.count(Job.id))
+        .filter(Job.fingerprint == fingerprint)
+        .scalar()
+        or 0
+    )
+
+
+def update_fingerprint_group(db, fingerprint: str, fields: dict) -> int:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.update_fingerprint_group(db, fingerprint, fields)
+    if not fingerprint:
+        return 0
+    orm_fields = _to_orm_fields(fields)
+    updated = (
+        db.query(Job)
+        .filter(Job.fingerprint == fingerprint)
+        .update(orm_fields, synchronize_session=False)
+    )
+    db.commit()
+    return updated
+
+
+def tag_discovered(db, ids: list, slug: str) -> None:
+    """Agrega el slug de la query a `discovered_by` sin duplicar."""
+    if not ids or not slug:
+        return
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.tag_discovered(db, ids, slug)
+    rows = db.query(Job).filter(
+        Job.id.in_([int(i) for i in ids])
+    ).all() if ids else []
+    for row in rows:
+        try:
+            current = json.loads(row.discovered_by or "[]")
+        except ValueError:
+            current = []
+        if slug not in current:
+            current.append(slug)
+            row.discovered_by = json.dumps(current, ensure_ascii=False)
+            db.add(row)
+    db.commit()
+
+
+def get_unscored_jobs(db, limit: int = 50) -> list[Record]:
+    limit = max(1, min(limit, 500))
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.get_unscored_jobs(db, limit=limit)
+    rows = (
+        db.query(Job)
+        .filter(Job.match_score.is_(None))
+        .filter(Job.description.isnot(None))
+        .filter(Job.description != "")
+        .order_by(Job.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [orm_to_record(row) for row in rows]
+
+
+def log_interaction(db, type: str, job_id=None, application_id=None,
+                    metadata: dict | None = None):
+    """Registra interaccion (append-only). Solo Firestore: SQLite no
+    tiene esta tabla y su comportamiento no cambia."""
+    if not is_firestore(db):
+        return None
+    from app.database import firestore_repo as fs
+
+    return fs.log_interaction(db, type, job_id, application_id, metadata)
+
+
+def is_firestore_handle(db) -> bool:
+    from app.database.firestore_client import is_firestore
+
+    return is_firestore(db)
+
+
+def register_job_view(db, job: Record) -> Record:
+    """Suma una vista (view_count + timestamps). Solo Firestore: SQLite
+    no tiene estas columnas y su comportamiento no cambia."""
+    if not is_firestore(db):
+        return job
+    now = datetime.utcnow()
+    return update_job_fields(db, job.id, {
+        "viewed": True,
+        "view_count": (job.view_count or 0) + 1,
+        "first_viewed_at": job.first_viewed_at or now,
+        "last_viewed_at": now,
+    })
+
+
+def register_cv_version(db, job_id, meta: dict) -> dict | None:
+    """Registra metadatos del CV en cvs/ (solo Firestore; en SQLite la
+    info vive en columnas cv_generated/cv_path y archivos locales)."""
+    if not is_firestore(db):
+        return None
+    from app.database import firestore_repo as fs
+
+    return fs.register_cv_version(db, job_id, meta)
+
+
+def get_customized_cv(db, job_id) -> dict | None:
+    """Ensambla el CV personalizado de una oferta sin consumir IA.
+
+    Devuelve None si nunca se genero. Estructura conceptual:
+    job -> customized_cv {analysis, selected_experience,
+    selected_skills, generated_content, latex, pdf, created_at, version}.
+    """
+    import json as _json
+
+    from app.cv import generator as cvgen
+
+    job = get_job_by_id(db, job_id)
+    if not job:
+        return None
+    directory = cvgen.job_cv_dir(job.id)
+    tex_path = directory / "cv.tex"
+    if not job.cv_generated or not tex_path.exists():
+        # Generado segun flags pero archivos ausentes = ERROR honesto.
+        if job.cv_generated:
+            return {
+                "state": "ERROR",
+                "job_id": job.id,
+                "error": "El CV estaba marcado como generado pero los "
+                "archivos no existen (cv.tex ausente). Regeneralo.",
+            }
+        return None
+    pdf_path = directory / "cv.pdf"
+    content_path = directory / "cv_content.json"
+    analysis_path = directory / "analysis.json"
+    generated_content = None
+    if content_path.exists():
+        try:
+            generated_content = _json.loads(
+                content_path.read_text(encoding="utf-8"))
+        except ValueError:
+            generated_content = None
+    analysis = None
+    if analysis_path.exists():
+        try:
+            analysis = _json.loads(
+                analysis_path.read_text(encoding="utf-8"))
+        except ValueError:
+            analysis = None
+    version = 1
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        versions = fs.list_cvs_for_job(db, job.id)
+        if versions:
+            version = versions[0].get("version", 1)
+    created_at = None
+    try:
+        from datetime import datetime as _dt
+
+        created_at = _dt.fromtimestamp(
+            tex_path.stat().st_mtime).isoformat()
+    except OSError:
+        created_at = None
+    selected_experience = []
+    selected_skills = []
+    if isinstance(generated_content, dict):
+        selected_experience = generated_content.get(
+            "selected_experience", []) or []
+        selected_skills = generated_content.get("skills", []) or []
+    return {
+        "state": "READY",
+        "job_id": job.id,
+        "version": version,
+        "analysis": analysis,
+        "selected_experience": selected_experience,
+        "selected_skills": selected_skills,
+        "generated_content": generated_content,
+        "latex_available": True,
+        "pdf_available": pdf_path.exists(),
+        "created_at": created_at,
+        "download_tex": f"/jobs/{job.id}/cv/download?format=tex",
+        "download_pdf": (
+            f"/jobs/{job.id}/cv/download?format=pdf"
+            if pdf_path.exists() else None
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Lecturas publicas
+# ---------------------------------------------------------------------------
 
 def get_all_jobs(
     db: Session,
     limit: int = 50,
     status: str | None = None,
-) -> list[Job]:
+    since: datetime | None = None,
+) -> list[Record]:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.list_jobs(db, limit=limit, status=status, since=since)
     limit = max(1, min(limit, 500))
     query = db.query(Job).order_by(Job.id.desc())
     if status:
         query = query.filter(Job.status == status)
-    return query.limit(limit).all()
+    if since:
+        query = query.filter(
+            (Job.found_at.isnot(None) & (Job.found_at >= since))
+            | ((Job.found_at.is_(None)) & (Job.created_at >= since))
+        )
+    return [orm_to_record(row) for row in query.limit(limit).all()]
 
 
-def get_job_by_id(db: Session, job_id: int) -> Job | None:
-    return db.query(Job).filter(Job.id == job_id).first()
+def get_job_by_id(db: Session, job_id) -> Record | None:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.get_job(db, job_id)
+    try:
+        numeric = int(job_id)
+    except (TypeError, ValueError):
+        return None
+    row = db.query(Job).filter(Job.id == numeric).first()
+    return orm_to_record(row) if row else None
 
 
-def get_job_by_url(db: Session, url: str) -> Job | None:
-    return db.query(Job).filter(Job.url == url).first()
+def get_job_by_url(db: Session, url: str) -> Record | None:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.get_by_url(db, url)
+    row = db.query(Job).filter(Job.url == url).first()
+    return orm_to_record(row) if row else None
 
 
 def get_job_by_external_id(
     db: Session, source: str, external_id: str
-) -> Job | None:
+) -> Record | None:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.get_by_external(db, source, external_id)
     if not source or not external_id:
         return None
-    return (
+    row = (
         db.query(Job)
         .filter(Job.source == source, Job.external_id == external_id)
         .first()
     )
+    return orm_to_record(row) if row else None
 
 
-def get_job_by_content_hash(db: Session, content_hash: str) -> Job | None:
+def get_job_by_content_hash(db: Session, content_hash: str) -> Record | None:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.get_by_hash(db, content_hash)
     if not content_hash:
         return None
-    return db.query(Job).filter(Job.content_hash == content_hash).first()
+    row = db.query(Job).filter(Job.content_hash == content_hash).first()
+    return orm_to_record(row) if row else None
 
 
 def _as_datetime(value) -> datetime | None:
@@ -87,9 +482,10 @@ def save_jobs(
     db: Session,
     jobs: list[dict],
     search_query: str | None = None,
-) -> list[Job]:
+    search_profile_id: str | None = None,
+) -> list[Record]:
     now = datetime.utcnow()
-    saved: list[Job] = []
+    saved: list[Record] = []
     touched_fps: set[str] = set()
 
     for raw in jobs:
@@ -105,7 +501,6 @@ def save_jobs(
         )
         published_at = _as_datetime(data.get("published_at"))
         content_hash = content_hash_of(data.get("description"))
-        data["content_hash"] = content_hash
 
         # Dedup §15: external_id > URL > hash de contenido.
         existing = get_job_by_external_id(
@@ -117,141 +512,195 @@ def save_jobs(
         if existing:
             # La oferta sigue publicada: refresca y marca el avistamiento.
             old_fp = existing.fingerprint
+            updates: dict = {}
             for field in ("title", "company", "location", "description"):
                 new_value = data.get(field) or ""
-                if getattr(existing, field) != new_value and new_value:
-                    setattr(existing, field, new_value)
+                if getattr(existing, field, None) != new_value and new_value:
+                    updates[field] = new_value
             if search_query and existing.search_query != search_query:
-                existing.search_query = search_query
+                updates["search_query"] = search_query
             # La huella depende de titulo/empresa/ubicacion: si alguno
             # cambio (ej: re-encode), recalcular para no partir el grupo.
+            merged_title = updates.get("title", existing.title)
+            merged_company = updates.get("company", existing.company)
+            merged_location = updates.get("location", existing.location)
             new_fp = fingerprint_of(
-                existing.title, existing.company, existing.location
+                merged_title, merged_company, merged_location
             )
             if new_fp != old_fp:
-                existing.fingerprint = new_fp
+                updates["fingerprint"] = new_fp
                 if old_fp:
                     touched_fps.add(old_fp)
             if published_at and not existing.published_at:
-                existing.published_at = published_at
-                existing.published_text = data.get("published_text") or ""
+                updates["published_at"] = published_at
+                updates["published_text"] = data.get("published_text") or ""
             # Rellena campos normalizados que falten (sin pisar datos).
             for norm_field in ("external_id", "sector", "modality",
                                "salary", "content_hash"):
                 if not getattr(existing, norm_field, None) and data.get(
                     norm_field
                 ):
-                    setattr(existing, norm_field, data[norm_field])
+                    updates[norm_field] = data[norm_field]
+            if content_hash and not getattr(existing, "content_hash", None):
+                updates["content_hash"] = content_hash
             for json_field in ("requirements", "responsibilities"):
                 if not getattr(existing, json_field, None) and data.get(
                     json_field
                 ):
-                    setattr(
-                        existing, json_field,
-                        json.dumps(data[json_field], ensure_ascii=False),
-                    )
-            existing.last_seen_at = now
-            db.add(existing)
+                    updates[json_field] = data[json_field]
+            # El perfil tambien encontro esta oferta: unir sin duplicar.
+            if search_profile_id:
+                merged_profiles = _merge_profile_ids(
+                    getattr(existing, "search_profile_ids", None),
+                    search_profile_id,
+                )
+                if merged_profiles != (
+                    getattr(existing, "search_profile_ids", None) or []
+                ):
+                    updates["search_profile_ids"] = merged_profiles
+            updates["last_seen_at"] = now
+            existing = update_job_fields(db, existing.id, updates)
             saved.append(existing)
             touched_fps.add(new_fp)
             continue
 
-        job = Job(
-            title=title,
-            company=data.get("company") or "",
-            location=data.get("location") or "",
-            url=url,
-            description=data.get("description") or "",
-            source=data.get("source") or "computrabajo",
-            search_query=search_query,
-            published_text=data.get("published_text") or "",
-            published_at=published_at,
-            fingerprint=fingerprint,
-            times_seen=1,
-            last_seen_at=now,
-            external_id=data.get("external_id"),
-            requirements=json.dumps(data.get("requirements") or [],
-                                    ensure_ascii=False),
-            responsibilities=json.dumps(
-                data.get("responsibilities") or [], ensure_ascii=False),
-            sector=data.get("sector") or "",
-            modality=data.get("modality") or "",
-            salary=data.get("salary") or "",
-            content_hash=content_hash,
-        )
-        db.add(job)
+        job = create_job_row(db, {
+            "title": title,
+            "company": data.get("company") or "",
+            "location": data.get("location") or "",
+            "url": url,
+            "description": data.get("description") or "",
+            "source": data.get("source") or "computrabajo",
+            "search_query": search_query,
+            "published_text": data.get("published_text") or "",
+            "published_at": published_at,
+            "fingerprint": fingerprint,
+            "times_seen": 1,
+            "last_seen_at": now,
+            "found_at": now,
+            "first_seen_at": now,
+            "search_profile_ids": (
+                [search_profile_id] if search_profile_id else []
+            ),
+            "external_id": data.get("external_id"),
+            "requirements": data.get("requirements") or [],
+            "responsibilities": data.get("responsibilities") or [],
+            "sector": data.get("sector") or "",
+            "modality": data.get("modality") or "",
+            "salary": data.get("salary") or "",
+            "content_hash": content_hash,
+        })
         saved.append(job)
         touched_fps.add(fingerprint)
-
-    db.commit()
 
     # Republicaciones: todas las filas con la misma huella comparten
     # `times_seen` = N.o de publicaciones distintas del grupo.
     for fp in touched_fps:
         if not fp:
             continue
-        count = (
-            db.query(func.count(Job.id))
-            .filter(Job.fingerprint == fp)
-            .scalar()
-            or 0
-        )
+        count = count_by_fingerprint(db, fp)
         if count:
-            db.query(Job).filter(Job.fingerprint == fp).update(
-                {"times_seen": count, "last_seen_at": now},
-                synchronize_session=False,
+            update_fingerprint_group(
+                db, fp, {"times_seen": count, "last_seen_at": now}
             )
-    db.commit()
 
-    for job in saved:
-        db.refresh(job)
+    return [refresh_job(db, job) for job in saved]
 
-    return saved
+
+def _merge_profile_ids(current, profile_id: str | None) -> list:
+    """Une un id de perfil a la lista sin duplicar."""
+    merged = _parse_list(current)
+    if profile_id and profile_id not in merged:
+        merged.append(profile_id)
+    return merged
 
 
 def update_job_status(
     db: Session,
-    job: Job,
+    job: Record,
     status: str,
     discard_reason: str | None = None,
     discard_note: str | None = None,
     application_status: str | None = None,
-) -> Job:
+) -> Record:
     if status not in JOB_STATUSES:
         raise ValueError(
             f"Estado invalido: {status}. "
             f"Permitidos: {', '.join(JOB_STATUSES)}"
         )
 
-    job.status = status
+    previous = job.status
+    fields: dict = {"status": status}
 
     if status == "discarded":
-        job.discard_reason = discard_reason
-        job.discard_note = discard_note
-        job.decided_at = datetime.utcnow()
+        fields["discard_reason"] = discard_reason
+        fields["discard_note"] = discard_note
+        fields["decided_at"] = datetime.utcnow()
     elif status == "kept":
-        job.discard_reason = None
-        job.discard_note = None
-        job.decided_at = datetime.utcnow()
+        fields["discard_reason"] = None
+        fields["discard_note"] = None
+        fields["decided_at"] = datetime.utcnow()
     elif status == "applied":
-        job.applied_at = job.applied_at or datetime.utcnow()
-        job.decided_at = job.decided_at or datetime.utcnow()
+        fields["applied_at"] = job.applied_at or datetime.utcnow()
+        fields["decided_at"] = job.decided_at or datetime.utcnow()
         if application_status:
-            job.application_status = application_status
+            fields["application_status"] = application_status
     elif status == "opened":
-        job.decided_at = job.decided_at or datetime.utcnow()
+        fields["decided_at"] = job.decided_at or datetime.utcnow()
     elif status == "new":
         # Recuperar: vuelve a nueva sin borrar el historial de fechas.
-        job.discard_reason = None
-        job.discard_note = None
+        fields["discard_reason"] = None
+        fields["discard_note"] = None
 
     if application_status and status != "applied":
-        job.application_status = application_status
+        fields["application_status"] = application_status
 
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return job
+    updated = update_job_fields(db, job.id, fields)
+
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        if status == "discarded":
+            log_interaction(db, "JOB_DISCARDED", job.id, None, {
+                "from": previous, "to": status,
+                "reason": discard_reason,
+            })
+        elif status == "kept":
+            log_interaction(db, "JOB_SAVED", job.id)
+        elif status == "new" and previous == "discarded":
+            log_interaction(db, "JOB_REOPENED", job.id)
+        elif status == "applied":
+            application = fs.find_application_by_job(db, updated.id)
+            if application is None:
+                application = fs.create_application(db, {
+                    "job_id": updated.id,
+                    "company": updated.company or "",
+                    "role": updated.detected_role or updated.title or "",
+                    "status": "APPLIED",
+                    "applied_at": updated.applied_at,
+                    "application_url": updated.url or "",
+                    "notes": "",
+                })
+                fs.append_application_event(db, application["id"], {
+                    "type": "APPLICATION_CREATED",
+                    "from": None,
+                    "to": "APPLIED",
+                    "notes": "",
+                })
+            if application_status:
+                fs.update_application(db, application["id"], {
+                    "status": fs.APP_STAGE_TO_FS.get(
+                        (application_status or "").strip().lower(), "APPLIED"),
+                })
+                fs.append_application_event(db, application["id"], {
+                    "type": "STATUS_CHANGED",
+                    "from": application.get("status"),
+                    "to": fs.APP_STAGE_TO_FS.get(
+                        (application_status or "").strip().lower(), "APPLIED"),
+                    "notes": f"stage: {application_status}",
+                })
+
+    return updated
 
 
 def get_stats(db: Session) -> dict:
@@ -263,6 +712,12 @@ def get_stats(db: Session) -> dict:
 
 
 def get_profile(db: Session) -> dict:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        merged = fs.get_profile_doc(db)
+        _merge_rich_profile(merged)
+        return merged
     row = db.query(Profile).filter(Profile.id == 1).first()
     if not row:
         row = Profile(id=1, data=json.dumps(DEFAULT_PROFILE))
@@ -371,6 +826,12 @@ def save_rich_profile(data: dict) -> dict:
 
 
 def save_profile(db: Session, data: dict) -> dict:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        merged = fs.save_profile_doc(db, data or {}, DEFAULT_PROFILE)
+        _merge_rich_profile(merged)
+        return merged
     row = db.query(Profile).filter(Profile.id == 1).first()
     if not row:
         row = Profile(id=1, data="{}")
@@ -385,42 +846,37 @@ def save_profile(db: Session, data: dict) -> dict:
 def backfill_fingerprints(db: Session) -> int:
     """Recalcula huellas con los valores actuales y contadores de grupo.
     Idempotente. Devuelve cuantas filas actualizo."""
-    rows = db.query(Job).all()
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        rows = fs.iter_all_jobs(db)
+    else:
+        rows = [orm_to_record(row) for row in db.query(Job).all()]
     touched = 0
     for job in rows:
         fresh = fingerprint_of(job.title, job.company, job.location)
         if job.fingerprint != fresh or not job.last_seen_at:
-            job.fingerprint = fresh
-            job.last_seen_at = job.last_seen_at or job.created_at
-            db.add(job)
+            update_job_fields(db, job.id, {
+                "fingerprint": fresh,
+                "last_seen_at": job.last_seen_at or job.created_at,
+            })
             touched += 1
-    db.commit()
-
     # Recalcula contadores de todos los grupos.
-    groups = [
-        row[0]
-        for row in db.query(Job.fingerprint, func.count(Job.id))
-        .filter(Job.fingerprint.isnot(None))
-        .group_by(Job.fingerprint)
-        .all()
-    ]
-    for fingerprint in groups:
-        count = (
-            db.query(func.count(Job.id))
-            .filter(Job.fingerprint == fingerprint)
-            .scalar()
-            or 0
-        )
-        db.query(Job).filter(Job.fingerprint == fingerprint).update(
-            {"times_seen": count}, synchronize_session=False
-        )
-    db.commit()
+    seen: set[str] = set()
+    for job in iter_all_jobs(db):
+        fingerprint = job.fingerprint
+        if fingerprint and fingerprint not in seen:
+            seen.add(fingerprint)
+            count = count_by_fingerprint(db, fingerprint)
+            update_fingerprint_group(
+                db, fingerprint, {"times_seen": count}
+            )
     return touched
 
 
 def save_analysis(
     db: Session,
-    job: Job,
+    job: Record,
     match_score: float | None,
     matched: list[str] | None = None,
     missing: list[str] | None = None,
@@ -428,20 +884,18 @@ def save_analysis(
     category: str | None = None,
     evidence: list[str] | None = None,
     experience: str | None = None,
-) -> Job:
+) -> Record:
     """Persiste el resultado de analyze_job. Solo toca campos de
     analisis: nunca decisiones del usuario (status, descartes)."""
-    job.match_score = match_score
-    job.matched_skills = json.dumps(matched or [], ensure_ascii=False)
-    job.missing_skills = json.dumps(missing or [], ensure_ascii=False)
-    job.detected_role = detected_role
-    job.category = category
-    job.evidence = json.dumps(evidence or [], ensure_ascii=False)
-    job.experience_required = experience
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return job
+    return update_job_fields(db, job.id, {
+        "match_score": match_score,
+        "matched_skills": matched or [],
+        "missing_skills": missing or [],
+        "detected_role": detected_role,
+        "category": category,
+        "evidence": evidence or [],
+        "experience_required": experience,
+    })
 
 
 def analyze_pending(db: Session, limit: int = 50) -> dict:
@@ -450,15 +904,7 @@ def analyze_pending(db: Session, limit: int = 50) -> dict:
 
     limit = max(1, min(limit, 500))
     profile = get_profile(db)
-    rows = (
-        db.query(Job)
-        .filter(Job.match_score.is_(None))
-        .filter(Job.description.isnot(None))
-        .filter(Job.description != "")
-        .order_by(Job.id.desc())
-        .limit(limit)
-        .all()
-    )
+    rows = get_unscored_jobs(db, limit=limit)
     analyzed = 0
     relevant = 0
     for row in rows:
@@ -482,3 +928,49 @@ def analyze_pending(db: Session, limit: int = 50) -> dict:
         if result["match_score"] >= 40 or result["category"] != "OTHER":
             relevant += 1
     return {"analyzed": analyzed, "relevant": relevant}
+
+
+def list_applications(db, limit: int = 200) -> list[dict]:
+    """Postulaciones con su ultimo evento. En sqlite se derivan de las
+    ofertas marcadas como aplicadas (compatibilidad)."""
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        apps = fs.list_applications(db, limit=limit)
+        for application in apps:
+            events = fs.list_application_events(db, application["id"])
+            application["events"] = events
+            application["last_event"] = events[0] if events else None
+        return apps
+    applied = get_all_jobs(db, limit=limit, status="applied")
+    return [
+        {
+            "id": f"job-{job.id}",
+            "job_id": job.id,
+            "company": job.company or "",
+            "role": job.detected_role or job.title or "",
+            "status": "APPLIED",
+            "applied_at": job.applied_at.isoformat()
+            if job.applied_at else None,
+            "application_url": job.url or "",
+            "cv_id": None,
+            "notes": f"stage: {job.application_status or 'iniciada'}",
+            "events": [],
+            "last_event": None,
+        }
+        for job in applied
+    ]
+
+
+def get_application(db, app_id: str) -> dict | None:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        ref = fs._col(db, "applications").document(str(app_id)).get()
+        if not ref.exists:
+            return None
+        data = ref.to_dict()
+        data["id"] = ref.id
+        data["events"] = fs.list_application_events(db, ref.id)
+        return data
+    return None

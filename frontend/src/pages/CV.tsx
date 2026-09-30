@@ -20,8 +20,8 @@ import type { Job } from "../types/job";
 export function CV() {
   const { data, loading, error, reload } = useJobs("kept");
   const kept = useMemo(() => data ?? [], [data]);
-  const [statuses, setStatuses] = useState<Record<number, CvStatus>>({});
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, CvStatus>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const refreshStatus = async (job: Job) => {

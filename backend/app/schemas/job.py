@@ -28,7 +28,7 @@ class JobResponse(JobBase):
     """Refleja la tabla `jobs`. Los campos de gestion/analisis son
     opcionales porque las filas antiguas y el scraper no los proveen."""
 
-    id: int
+    id: str
 
     created_at: datetime
 
@@ -88,6 +88,12 @@ class JobResponse(JobBase):
 
     experience_required: str | None = None
 
+    search_profile_ids: list[str] = Field(default_factory=list)
+
+    found_at: datetime | None = None
+
+    first_seen_at: datetime | None = None
+
     @field_validator(
         "matched_skills",
         "missing_skills",
@@ -95,6 +101,7 @@ class JobResponse(JobBase):
         "discovered_by",
         "requirements",
         "responsibilities",
+        "search_profile_ids",
         mode="before",
     )
     @classmethod

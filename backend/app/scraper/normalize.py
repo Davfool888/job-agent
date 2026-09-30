@@ -56,7 +56,8 @@ def normalize_job(raw: dict) -> dict:
         "sector": (data.get("sector") or "").strip(),
     }
     # Campos extra que algunos scrapers aportan (se conservan).
-    for key in ("tags", "skills", "contract", "jobkey", "job_id"):
+    for key in ("tags", "skills", "contract", "jobkey", "job_id",
+                "search_profile_ids"):
         if data.get(key) is not None:
             normalized[key] = data[key]
     return normalized

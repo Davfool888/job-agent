@@ -184,6 +184,17 @@ def test_router_status_endpoint():
 
 
 def test_cv_threshold_endpoints():
+    from app.config import BASE_CV_PATH
+
+    backup = BASE_CV_PATH.read_text(encoding="utf-8") \
+        if BASE_CV_PATH.exists() else None
+    # Perfil vacio para este test (el entorno puede tener perfil real).
+    BASE_CV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    BASE_CV_PATH.write_text(
+        '{"personal": {}, "skills": {}, "experience": [], '
+        '"projects": [], "education": []}',
+        encoding="utf-8",
+    )
     with TestClient(app) as client:
         from app.database.connection import SessionLocal
         from app.database.models import Job
@@ -226,6 +237,11 @@ def test_cv_threshold_endpoints():
                 synchronize_session=False)
             db.commit()
             db.close()
+            if backup is None:
+                if BASE_CV_PATH.exists():
+                    BASE_CV_PATH.unlink()
+            else:
+                BASE_CV_PATH.write_text(backup, encoding="utf-8")
 
 
 def test_analysis_json_schema():

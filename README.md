@@ -50,6 +50,10 @@ Búsqueda: `GET /jobs/search`, `POST /jobs/discover`, `GET /sources`,
 `GET /discovery/packs`. Análisis: `POST /jobs/{id}/analyze`,
 `POST /jobs/analyze-pending`. CV: `POST /jobs/{id}/cv`,
 `GET /jobs/{id}/cv`, `GET /jobs/{id}/cv/download?format=pdf|tex`.
+Búsqueda automática: `GET/POST /search-profiles`,
+`GET/PUT/DELETE /search-profiles/{id}`,
+`POST /search-profiles/{id}/run`, `GET /scheduler/status`,
+`POST /scheduler/tick`.
 Stats: `GET /stats`, `GET /analytics`, `GET /ai/status`, `GET /health`.
 
 ## Tests
@@ -65,3 +69,23 @@ El backend es stateless salvo SQLite: para servidor, usa Postgres
 (`DATABASE_URL`) y un cron que llame `POST /jobs/discover` +
 `POST /jobs/analyze-pending`. PDFs requieren `pdflatex` (TeX Live)
 en el servidor; sin él se entrega el `.tex`.
+
+## Búsqueda automática cada ~10 min
+
+Perfiles en la sección **Búsqueda** del frontend (`/search`) o vía API.
+El backend ejecuta los activos según su frecuencia (APScheduler en
+proceso, `SCHEDULER_ENABLED=true`, tick cada `SCHEDULER_INTERVAL_SECONDS`).
+
+**Importante en Render (plan gratuito):** la instancia duerme sin tráfico
+y con el PC apagado el scheduler interno se detiene. Para búsqueda real
+24/7 configura un cron externo gratuito (cron-job.org) cada 10 min hacia:
+
+```text
+POST https://tu-backend.onrender.com/scheduler/tick
+```
+
+con header `X-Cron-Secret: <SCHEDULER_CRON_SECRET>` (define el secreto en
+Render; sin secreto configurado el endpoint es público). Cada tick ejecuta
+solo los perfiles vencidos, con lock anti-solapamiento, y guarda en
+Firestore. Al reabrir la plataforma, las nuevas aparecen en
+**Ofertas → Recientes** (badge "N nuevas" + orden "Recién encontradas").

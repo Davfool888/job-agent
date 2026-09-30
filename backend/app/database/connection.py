@@ -72,6 +72,9 @@ def ensure_columns():
         "content_hash": "VARCHAR(64)",
         "cv_generated": "INTEGER NOT NULL DEFAULT 0",
         "cv_path": "VARCHAR(500)",
+        "search_profile_ids": "TEXT",
+        "found_at": "DATETIME",
+        "first_seen_at": "DATETIME",
     }
     with engine.begin() as conn:
         tables = {
@@ -91,31 +94,17 @@ def ensure_columns():
                 conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {column} {ddl}"))
 
 
-connect_args = {}
-
-if DATABASE_URL.startswith("sqlite"):
-    connect_args = {
-        "check_same_thread": False
-    }
-
-
-engine = create_engine(
-    DATABASE_URL,
-    connect_args=connect_args
-)
-
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
-
-
-Base = declarative_base()
-
-
 def get_db():
+    """Handle de BD segun DB_BACKEND: Session (sqlite) o
+    FirestoreDatabase (firestore). El codigo que recibe `db` no debe
+    asumir el motor: usa las funciones de app.services.job_service."""
+    from app.config import DB_BACKEND
+
+    if DB_BACKEND == "firestore":
+        from app.database.firestore_client import FirestoreDatabase
+
+        yield FirestoreDatabase()
+        return
     db = SessionLocal()
 
     try:

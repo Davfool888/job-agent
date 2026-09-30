@@ -1,29 +1,58 @@
-\documentclass[11pt,a4paper]{article}
+\documentclass[10pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[spanish]{babel}
-\usepackage{geometry}
-\usepackage{hyperref}
+\usepackage{lmodern}
+\usepackage[
+    top=1.25cm,
+    bottom=1.25cm,
+    left=1.45cm,
+    right=1.45cm
+]{geometry}
 \usepackage{enumitem}
-\geometry{margin=2cm}
-\setlength{\parindent}{0pt}
-\setlist[itemize]{topsep=2pt,itemsep=2pt,parsep=0pt}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{xcolor}
 
-% PLANTILLA FIJA controlada por el backend.
+% PLANTILLA FIJA controlada por el backend (estilo del CV base del usuario).
 % El generador solo sustituye marcadores con texto escapado.
 % La IA nunca escribe este archivo.
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\setlist[itemize]{
+    leftmargin=0.45cm,
+    itemsep=2pt,
+    topsep=2pt,
+    parsep=0pt,
+    partopsep=0pt
+}
+\hypersetup{
+    colorlinks=true,
+    urlcolor=black,
+    linkcolor=black
+}
+\titleformat{\section}
+    {\large\bfseries}
+    {}
+    {0pt}
+    {}
+    [\vspace{-4pt}\rule{\textwidth}{0.5pt}]
+\titlespacing*{\section}
+    {0pt}
+    {8pt}
+    {5pt}
 
 \begin{document}
 
 \begin{center}
-{\Large \textbf{{{FULL_NAME}}}} \\[4pt]
+{\LARGE \textbf{{{FULL_NAME}}}} \\[3pt]
 {{TITLE_LINE}}
+\vspace{5pt}
+
 {{CONTACT_LINE}}
 \end{center}
-
-\vspace{6pt}
-\hrule
-\vspace{6pt}
 
 {{SUMMARY_SECTION}}
 {{EXPERIENCE_SECTION}}

@@ -1,10 +1,14 @@
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any
 
 from fastapi import Depends
 from fastapi import FastAPI
+from fastapi import File
 from fastapi import HTTPException
 from fastapi import Query
+from fastapi import Request
+from fastapi import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy.orm import Session
@@ -37,14 +41,38 @@ from app.services.job_service import update_job_status
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    ensure_columns()
-    db = SessionLocal()
-    try:
+    from app.config import DB_BACKEND
+
+    if DB_BACKEND == "firestore":
+        # Firestore crea colecciones al primer write; solo backfill.
+        from app.database.firestore_client import FirestoreDatabase
+
+        db = FirestoreDatabase()
         backfill_fingerprints(db)
-    finally:
-        db.close()
+    else:
+        Base.metadata.create_all(bind=engine)
+        ensure_columns()
+        db = SessionLocal()
+        try:
+            backfill_fingerprints(db)
+        finally:
+            db.close()
+    # Scheduler en proceso (no arranca bajo pytest para no interferir).
+    import os as _os
+    import sys as _sys
+
+    under_test = (
+        "PYTEST_CURRENT_TEST" in _os.environ
+        or "pytest" in (_sys.argv[0] if _sys.argv else "")
+    )
+    if not under_test:
+        from app.scheduler import start_scheduler
+
+        start_scheduler()
     yield
+    from app.scheduler import stop_scheduler
+
+    stop_scheduler()
 
 
 app = FastAPI(title=APP_NAME, version="0.5.0", lifespan=lifespan)
@@ -140,10 +168,81 @@ def write_full_profile(payload: dict[str, Any]):
         raise HTTPException(status_code=400, detail=str(error))
 
 
+@app.post("/profile/import-latex")
+async def import_latex_profile(
+    request: Request,
+    apply: bool = Query(
+        False,
+        description="Si true, persiste lo extraido en base_cv.json. "
+        "Si false (defecto), solo devuelve vista previa para revision.",
+    ),
+    file: UploadFile | None = File(None),
+):
+    """Importa un CV en LaTeX (.tex por multipart o texto en JSON
+    {"latex": "..."}) y lo convierte a perfil estructurado.
+
+    NO inventa nada: todo viene literalmente del .tex. Las secciones no
+    reconocidas se reportan en warnings en vez de adivinarse.
+    """
+    from app.config import BASE_CV_PATH
+    from app.cv.latex_import import parse_latex_profile
+
+    tex_text = ""
+    filename = ""
+    if file is not None:
+        filename = file.filename or ""
+        raw = await file.read()
+        try:
+            tex_text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            tex_text = raw.decode("latin-1")
+    elif request is not None:
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            body = {}
+        if isinstance(body, dict):
+            tex_text = str(body.get("latex") or "")
+    if not tex_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Envia un archivo .tex (multipart 'file') o "
+            "JSON {'latex': '...'} con el contenido.",
+        )
+    try:
+        result = parse_latex_profile(tex_text)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    response: dict = {
+        "filename": filename,
+        "profile": result["profile"],
+        "warnings": result["warnings"],
+        "style": result["style"],
+        "applied": False,
+    }
+    if apply:
+        from app.services.job_service import save_rich_profile
+
+        saved = save_rich_profile(result["profile"])
+        BASE_CV_PATH.parent.mkdir(parents=True, exist_ok=True)
+        (BASE_CV_PATH.parent / "base_cv.tex").write_text(
+            tex_text, encoding="utf-8"
+        )
+        response["applied"] = True
+        response["warnings"] = saved.get("warnings", result["warnings"])
+    return response
+
+
 @app.get("/jobs", response_model=list[JobResponse])
 def list_jobs(
     limit: int = 200,
     status: str | None = None,
+    since: str | None = Query(
+        None,
+        description="Solo ofertas con found_at (o created_at) posterior a "
+        "esta fecha ISO. Ej: 2026-09-30T10:00:00",
+    ),
     db: Session = Depends(get_db),
 ):
     if status and status not in JOB_STATUSES:
@@ -151,7 +250,16 @@ def list_jobs(
             status_code=400,
             detail=f"Estado invalido. Permitidos: {', '.join(JOB_STATUSES)}",
         )
-    return get_all_jobs(db=db, limit=limit, status=status)
+    since_dt = None
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="since debe ser fecha ISO (YYYY-MM-DDTHH:MM:SS).",
+            )
+    return get_all_jobs(db=db, limit=limit, status=status, since=since_dt)
 
 
 @app.get("/sources")
@@ -167,6 +275,106 @@ def list_sources():
             "linkedin": LINKEDIN_ENABLED,
         },
     }
+
+
+@app.get("/search-profiles")
+def list_search_profiles(db: Session = Depends(get_db)):
+    """Perfiles de busqueda automatica del usuario."""
+    from app.services import search_profiles as profiles
+
+    return profiles.list_profiles(db)
+
+
+@app.post("/search-profiles", status_code=201)
+def create_search_profile(
+    payload: dict[str, Any], db: Session = Depends(get_db)
+):
+    from app.services import search_profiles as profiles
+
+    try:
+        return profiles.create_profile(db, payload or {})
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@app.get("/search-profiles/{profile_id}")
+def get_search_profile(profile_id: str, db: Session = Depends(get_db)):
+    from app.services import search_profiles as profiles
+
+    profile = profiles.get_profile(db, profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado.")
+    return profile
+
+
+@app.put("/search-profiles/{profile_id}")
+def update_search_profile(
+    profile_id: str, payload: dict[str, Any], db: Session = Depends(get_db)
+):
+    from app.services import search_profiles as profiles
+
+    try:
+        profile = profiles.update_profile(db, profile_id, payload or {})
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado.")
+    return profile
+
+
+@app.delete("/search-profiles/{profile_id}", status_code=204)
+def delete_search_profile(profile_id: str, db: Session = Depends(get_db)):
+    from app.services import search_profiles as profiles
+
+    if not profiles.delete_profile(db, profile_id):
+        raise HTTPException(status_code=404, detail="Perfil no encontrado.")
+    return None
+
+
+@app.post("/search-profiles/{profile_id}/run")
+def run_search_profile_now(profile_id: str, db: Session = Depends(get_db)):
+    """Ejecuta un perfil manualmente sin esperar su frecuencia."""
+    from app.scheduler import run_profile
+    from app.services import search_profiles as profiles
+
+    if not profiles.get_profile(db, profile_id):
+        raise HTTPException(status_code=404, detail="Perfil no encontrado.")
+    try:
+        return run_profile(profile_id, db=db)
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Run fallo: {error}")
+
+
+@app.get("/scheduler/status")
+def scheduler_status():
+    """Estado del programador interno (ultimo tick, perfiles en curso)."""
+    from app.scheduler import scheduler_status as status
+
+    return status()
+
+
+@app.post("/scheduler/tick")
+def scheduler_tick(
+    request: Request,
+    secret: str | None = Query(None),
+):
+    """Ejecuta perfiles vencidos. Lo llama el scheduler interno y,
+    opcionalmente, un cron externo (cron-job.org) cuando Render duerme.
+    Si SCHEDULER_CRON_SECRET esta configurado, exige ?secret= o
+    header X-Cron-Secret."""
+    from app.config import SCHEDULER_CRON_SECRET
+    from app.scheduler import run_due_profiles
+
+    if SCHEDULER_CRON_SECRET:
+        header_secret = request.headers.get("X-Cron-Secret")
+        if secret != SCHEDULER_CRON_SECRET and (
+            header_secret != SCHEDULER_CRON_SECRET
+        ):
+            raise HTTPException(status_code=401, detail="No autorizado.")
+    try:
+        return run_due_profiles()
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Tick fallo: {error}")
 
 
 @app.get("/discovery/packs")
@@ -229,7 +437,7 @@ def analyze_pending_endpoint(
 
 
 @app.post("/jobs/{job_id}/analyze")
-def analyze_job_endpoint(job_id: int, db: Session = Depends(get_db)):
+def analyze_job_endpoint(job_id: str, db: Session = Depends(get_db)):
     """Analiza una oferta (trae detalle si falta) y persiste el
     resultado: match_score, detected_role, category, evidence,
     matched/missing skills. Ver §14."""
@@ -245,9 +453,11 @@ def analyze_job_endpoint(job_id: int, db: Session = Depends(get_db)):
                 job.url
             )
             if detail.get("description"):
-                job.description = detail["description"]
-                db.add(job)
-                db.commit()
+                from app.services.job_service import update_job_fields
+
+                job = update_job_fields(
+                    db, job.id, {"description": detail["description"]}
+                )
         except Exception as error:  # noqa: BLE001
             raise HTTPException(
                 status_code=502,
@@ -258,6 +468,8 @@ def analyze_job_endpoint(job_id: int, db: Session = Depends(get_db)):
         {"title": job.title or "", "description": job.description or ""},
         get_profile(db),
     )
+    from app.services.job_service import refresh_job
+
     save_analysis(
         db,
         job,
@@ -269,7 +481,7 @@ def analyze_job_endpoint(job_id: int, db: Session = Depends(get_db)):
         evidence=result["evidence"],
         experience=result["experience_required"],
     )
-    db.refresh(job)
+    job = refresh_job(db, job)
     return {
         "job": JobResponse.model_validate(job).model_dump(),
         "analysis": result,
@@ -277,7 +489,7 @@ def analyze_job_endpoint(job_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/jobs/{job_id}/tailor")
-def tailor_job_profile(job_id: int, db: Session = Depends(get_db)):
+def tailor_job_profile(job_id: str, db: Session = Depends(get_db)):
     """Perfil adaptado a la vacante: analiza la oferta, selecciona las
     perspectivas mas relevantes del perfil y combina la informacion
     (solo copia real del perfil; `adapted: true` lo distingue de la
@@ -381,8 +593,9 @@ def search_jobs(
         analyzed = stats["analyzed"]
         relevant = stats["relevant"]
         details_fetched = stats["details_fetched"]
-        for job in saved_jobs:
-            db.refresh(job)
+        from app.services.job_service import refresh_job
+
+        saved_jobs = [refresh_job(db, job) for job in saved_jobs]
 
     return {
         "query": q,
@@ -412,7 +625,7 @@ def search_jobs(
 
 
 @app.get("/jobs/{job_id}", response_model=JobResponse)
-def get_job(job_id: int, db: Session = Depends(get_db)):
+def get_job(job_id: str, db: Session = Depends(get_db)):
     job = get_job_by_id(db=db, job_id=job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
@@ -420,7 +633,7 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/jobs/{job_id}/analysis")
-def get_job_analysis(job_id: int, db: Session = Depends(get_db)):
+def get_job_analysis(job_id: str, db: Session = Depends(get_db)):
     """Analisis estructurado guardado (§5, §14)."""
     job = get_job_by_id(db=db, job_id=job_id)
     if not job:
@@ -441,7 +654,7 @@ def get_job_analysis(job_id: int, db: Session = Depends(get_db)):
 
 @app.post("/jobs/{job_id}/cv")
 def generate_job_cv(
-    job_id: int,
+    job_id: str,
     payload: dict[str, Any] | None = None,
     db: Session = Depends(get_db),
 ):
@@ -530,16 +743,29 @@ def generate_job_cv(
         )
 
     personal = profile.get("personal", {}) or {}
+    from app.services.job_service import is_firestore_handle
+    from app.services.job_service import update_job_fields
+
     result = cvgen.generate_for_job(
         job.id,
         content,
         personal,
         analysis={**analysis, "job_id": job.id, "job_url": job.url},
     )
-    job.cv_generated = 1
-    job.cv_path = result["tex_path"]
-    db.add(job)
-    db.commit()
+    update_job_fields(db, job.id, {
+        "cv_generated": True,
+        "cv_path": result["tex_path"],
+    })
+    if is_firestore_handle(db):
+        from app.services.job_service import register_cv_version
+
+        register_cv_version(db, job.id, {
+            "tex_path": result["tex_path"],
+            "pdf_path": result.get("pdf_path"),
+            "match_score": score,
+            "skills_selected": content.skills
+            if hasattr(content, "skills") else [],
+        })
 
     return {
         "job_id": job.id,
@@ -560,7 +786,7 @@ def generate_job_cv(
 
 
 @app.get("/jobs/{job_id}/cv")
-def get_job_cv(job_id: int, db: Session = Depends(get_db)):
+def get_job_cv(job_id: str, db: Session = Depends(get_db)):
     """Estado del CV asociado a la oferta."""
     from pathlib import Path
 
@@ -588,9 +814,32 @@ def get_job_cv(job_id: int, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/jobs/{job_id}/customized-cv")
+def get_customized_cv(job_id: str, db: Session = Depends(get_db)):
+    """CV personalizado de la oferta sin consumir IA.
+
+    Estados: NOT_GENERATED (nunca se genero) | READY (reutiliza el
+    existente) | ERROR (marcado como generado pero archivos ausentes).
+    Generar = POST /jobs/{job_id}/cv. Regenerar = POST de nuevo.
+    """
+    from app.services.job_service import get_customized_cv as assemble
+
+    job = get_job_by_id(db=db, job_id=job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Oferta no encontrada.")
+    customized = assemble(db, job_id)
+    if customized is None:
+        return {
+            "state": "NOT_GENERATED",
+            "job_id": job.id,
+            "hint": "Genera con POST /jobs/{id}/cv (respeta umbrales).",
+        }
+    return customized
+
+
 @app.get("/jobs/{job_id}/cv/download")
 def download_job_cv(
-    job_id: int,
+    job_id: str,
     format: str = Query("pdf", pattern="^(pdf|tex)$"),
     db: Session = Depends(get_db),
 ):
@@ -616,6 +865,9 @@ def download_job_cv(
                 else ""
             ),
         )
+    from app.services.job_service import log_interaction
+
+    log_interaction(db, "CV_DOWNLOADED", job.id, None, {"format": format})
     return FileResponse(
         path=str(target),
         filename=f"cv_job_{job.id}.{format}",
@@ -624,7 +876,7 @@ def download_job_cv(
 
 @app.patch("/jobs/{job_id}/status", response_model=JobResponse)
 def patch_job_status(
-    job_id: int, payload: JobStatusUpdate, db: Session = Depends(get_db)
+    job_id: str, payload: JobStatusUpdate, db: Session = Depends(get_db)
 ):
     """Conservar / descartar / recuperar / marcar abierta o postulada."""
     job = get_job_by_id(db=db, job_id=job_id)
@@ -643,14 +895,44 @@ def patch_job_status(
         raise HTTPException(status_code=400, detail=str(error))
 
 
+@app.get("/applications")
+def list_applications_endpoint(
+    limit: int = 200, db: Session = Depends(get_db)
+):
+    """Postulaciones con eventos. En sqlite se derivan de ofertas
+    aplicadas (compatibilidad); en Firestore leen la coleccion."""
+    from app.services.job_service import list_applications
+
+    return list_applications(db, limit=limit)
+
+
+@app.get("/applications/{app_id}")
+def get_application_endpoint(app_id: str, db: Session = Depends(get_db)):
+    """Una postulacion con su linea de tiempo (solo Firestore; en
+    sqlite las postulaciones viven en la oferta aplicada)."""
+    from app.services.job_service import get_application
+
+    application = get_application(db, app_id)
+    if not application:
+        raise HTTPException(status_code=404, detail="Postulacion no encontrada.")
+    return application
+
+
 @app.get("/jobs/{job_id}/detail")
-def get_job_detail(job_id: int, db: Session = Depends(get_db)):
+def get_job_detail(job_id: str, db: Session = Depends(get_db)):
     """Trae la descripcion completa de una oferta guardada."""
+    from app.services.job_service import log_interaction
+    from app.services.job_service import update_job_fields
+
     job = get_job_by_id(db=db, job_id=job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
 
     if job.description:
+        from app.services.job_service import register_job_view
+
+        log_interaction(db, "JOB_VIEWED", job.id)
+        register_job_view(db, job)
         return {
             "id": job.id,
             "title": job.title,
@@ -672,12 +954,17 @@ def get_job_detail(job_id: int, db: Session = Depends(get_db)):
     job.description = detail.get("description", "")
     # La pagina de detalle suele traer la fecha exacta (datePosted,
     # publishDate); guardala si la oferta aun no la tiene.
+    detail_fields: dict = {"description": detail.get("description", "")}
     if detail.get("published_at") and not job.published_at:
-        job.published_at = detail["published_at"]
-        job.published_text = detail.get("published_text") or ""
-    db.add(job)
-    db.commit()
-    db.refresh(job)
+        detail_fields["published_at"] = detail["published_at"]
+        detail_fields["published_text"] = detail.get("published_text") or ""
+    from app.services.job_service import log_interaction
+    from app.services.job_service import register_job_view
+    from app.services.job_service import update_job_fields
+
+    job = update_job_fields(db, job.id, detail_fields)
+    log_interaction(db, "JOB_VIEWED", job.id)
+    register_job_view(db, job)
 
     return {
         "id": job.id,

@@ -11,7 +11,7 @@ export type JobStatus =
   | "applied";
 
 export interface Job {
-  id: number;
+  id: string;
   title: string;
   company: string | null;
   location: string | null;
@@ -47,6 +47,10 @@ export interface Job {
   // CV asociado (§10-§13).
   cv_generated?: boolean | null;
   cv_path?: string | null;
+  // Busqueda automatica: perfiles que encontraron la oferta + fechas.
+  search_profile_ids: string[];
+  found_at: string | null;
+  first_seen_at: string | null;
 }
 
 export interface SearchResult {
@@ -56,7 +60,7 @@ export interface SearchResult {
   found: number;
   saved: number;
   jobs: Array<{
-    id: number;
+    id: string;
     title: string;
     company: string | null;
     location: string | null;
@@ -67,7 +71,7 @@ export interface SearchResult {
 }
 
 export interface JobDetailExtra {
-  id: number;
+  id: string;
   title: string;
   company?: string | null;
   location?: string | null;
@@ -95,7 +99,7 @@ export interface StatsSummary {
   top_queries: Array<{ query: string; count: number }>;
   discard_reasons: Array<{ reason: string; count: number }>;
   last_job: {
-    id: number;
+    id: string;
     title: string;
     company: string | null;
     created_at: string | null;

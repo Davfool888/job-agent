@@ -15,14 +15,14 @@ import { updateJobStatus } from "../services/jobs";
 
 export function Applications() {
   const { data, loading, error, reload } = useJobs();
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const applied = useMemo(
     () => (data ?? []).filter((j) => j.status === "applied" || j.status === "opened"),
     [data],
   );
 
-  const setStage = async (id: number, stage: string) => {
+  const setStage = async (id: string, stage: string) => {
     setBusyId(id);
     try {
       await updateJobStatus(id, { status: "applied", application_status: stage });

@@ -17,13 +17,13 @@ export async function fetchJobs(
   return data;
 }
 
-export async function fetchJob(id: number): Promise<Job> {
+export async function fetchJob(id: number | string): Promise<Job> {
   const { data } = await api.get<Job>(`/jobs/${id}`);
   return data;
 }
 
 export async function fetchJobDetailExtra(
-  id: number,
+  id: number | string,
 ): Promise<JobDetailExtra> {
   const { data } = await api.get<JobDetailExtra>(`/jobs/${id}/detail`);
   return data;
@@ -47,7 +47,7 @@ export async function fetchSources(): Promise<string[]> {
 }
 
 export async function updateJobStatus(
-  id: number,
+  id: number | string,
   payload: StatusUpdatePayload,
 ): Promise<Job> {
   const { data } = await api.patch<Job>(`/jobs/${id}/status`, payload);
@@ -72,7 +72,7 @@ export interface AnalysisResult {
 }
 
 export async function analyzeJob(
-  id: number,
+  id: number | string,
 ): Promise<{ job: Job; analysis: AnalysisResult }> {
   const { data } = await api.post(`/jobs/${id}/analyze`);
   return data;

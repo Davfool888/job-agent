@@ -76,7 +76,7 @@ def validate(doc: dict, schema: dict, path: str) -> None:
 
 def main() -> int:
     schemas = {}
-    for name in ("jobs", "applications", "cvs", "profiles", "interactions", "analytics", "application_events"):
+    for name in ("jobs", "applications", "cvs", "profiles", "interactions", "analytics", "application_events", "search_profiles"):
         path = SCHEMA_DIR / f"{name}.json"
         if not path.exists():
             err(f"falta schema/{name}.json")

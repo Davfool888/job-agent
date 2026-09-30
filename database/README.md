@@ -1,7 +1,10 @@
 # database/ — Firebase Firestore para job-agent
 
-Capa independiente de datos. **No toca `backend/` ni `frontend/`** (siguen
-con SQLite hasta la migración). Arquitectura objetivo:
+> **Estado: CONECTADO.** Proyecto `job-agent-davfo`, región
+> `southamerica-east1`. El backend escribe en Firestore con
+> `DB_BACKEND=firestore` (ver `backend/.env`). SQLite queda como respaldo.
+
+Capa independiente de datos. Arquitectura real:
 
 ```text
 React/Vercel → FastAPI/Render → Firebase Admin SDK → Firestore + Storage
@@ -62,25 +65,39 @@ python scripts/seed_database.py
 Con emulador: `firebase emulators:start --only firestore` y
 `FIRESTORE_EMULATOR_HOST=localhost:8080`.
 
-## 5. Migración SQLite → Firestore (conceptual, pendiente)
+## 5. Migración SQLite → Firestore (ejecutada 2026-09-30)
+
+Script: `database/scripts/migrate_sqlite_to_firestore.py` (idempotente:
+omite documentos existentes).
 
 | SQLite (`backend/data/job_agent.db`) | Firestore |
 |---|---|
-| `jobs` (1 tabla) | `jobs/` + `applications/` (separar: `status`→ job status; `applied_at`/`application_status` → `applications/`) |
-| `status`: `new/kept/discarded/opened/applied` | `NEW/VIEWED/SAVED/DISCARDED/APPLIED/...` (+ `interactions` para vistas: `viewed`, `view_count`) |
-| `discard_reason` (texto ES) | `discard_reason` (código `LOW_MATCH`… + `discard_note`); mapa ES→código en `schema/jobs.json` vía seed |
-| `matched/missing_skills`, `evidence`, `discovered_by`, `times_seen`, `fingerprint` | mismos campos en `jobs/` |
-| `profile` (singleton JSON) | `profiles/base` (estructura `schema/profiles.json`) |
-| `data/cvs/job_<ID>/cv.{tex,pdf}` | subir a Storage `cvs/job_<id>/cv_v1.*` + doc en `cvs/` |
-| Sin eventos de postulación | `applications/{id}/events/` (nuevo; reconstruir parcial desde `applied_at`) |
+| `jobs` (1 tabla) | `jobs/` (doc id = id SQLite en zero-padding) + `applications/` para `applied` |
+| `status`: `new/kept/discarded/opened/applied` | `NEW/SAVED/DISCARDED/VIEWED/APPLIED` (mapeo en `firestore_repo.py`) |
+| `discard_reason` (texto ES) | código (`LOW_MATCH`…) + `discard_reason_raw` con el texto original |
+| `modality` (texto libre) | enum (`REMOTE/HYBRID/ONSITE`) + `modality_raw` |
+| `salary` (texto) | objeto `{raw, min, max, currency}` (parseo COP conservador) |
+| `matched/missing_skills`, `evidence`, `discovered_by`, `times_seen`, `fingerprint` | mismos campos (arrays nativos en Firestore) |
+| `profile` (singleton JSON) | `profiles/base` (estructura `schema/profiles.json` + `legacy_skills_flat`) |
+| `data/cvs/job_<ID>/cv.{tex,pdf}` | siguen en disco; metadatos en `cvs/` al generar |
+| Sin eventos de postulación | `applications/{id}/events/` con `APPLICATION_CREATED` |
 
 Orden dedup (igual que hoy): `source+external_id` → `url` → `content_hash` → `title+company+location`.
 
-## 6. Conexión backend (cuando se migre)
+## 6. Conexión backend (implementada)
 
-Nuevo módulo `backend/app/db/firestore_client.py` con Admin SDK
-(credenciales solo en servidor), repositorio por colección con la misma
-firma que `job_service` (crear/actualizar/vista/descarte/evento/CV),
-y endpoints sin cambios de contrato para el frontend. Los agentes ya
-están separados por responsabilidad (`agents/`), solo cambian de
-`Session` a repositorio.
+- `backend/app/database/firestore_client.py`: Admin SDK (solo servidor),
+  soporta ruta al JSON, JSON inline (`FIREBASE_SERVICE_ACCOUNT_JSON`,
+  pensado para Render) y emulador.
+- `backend/app/database/firestore_repo.py`: repositorio completo con la
+  misma firma que `job_service` (crear/actualizar/vista/descarte/evento/
+  CV/interacciones). `job_service` despacha según `DB_BACKEND`.
+- IDs: secuenciales zero-padded (`counters/jobs`), siempre `str` en la API
+  (ambos motores) para no romper el frontend.
+- Endpoints nuevos: `GET /applications`, `GET /applications/{id}`.
+- Variables: `DB_BACKEND`, `FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE`,
+  `GOOGLE_APPLICATION_CREDENTIALS` (ver `backend/.env.example`).
+- En Render: define `DB_BACKEND=firestore`,
+  `FIREBASE_SERVICE_ACCOUNT_JSON=<contenido del JSON>` y redespliega.
+  Los PDF siguen generándose en disco local (Storage queda preparado
+  en el esquema `cvs`).

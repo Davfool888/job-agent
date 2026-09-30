@@ -4,7 +4,9 @@ __pycache__/
 
 .env
 
-# Firebase: jamas subir credenciales
+# Firebase: jamas subir credenciales (ni el JSON ni la carpeta)
+/backend/.secrets/
+.secrets/
 *-key.json
 service-account*.json
 firebase-credentials*.json
@@ -16,6 +18,9 @@ database/.env
 
 data/raw/*
 data/processed/*
+
+# Datos personales del candidato: jamas subir a GitHub
+/HOJADEVIDA/
 
 .vscode/
 .idea/

@@ -16,11 +16,8 @@ casos ambiguos — el hook IA queda documentado en agents/job_analyzer).
 """
 from __future__ import annotations
 
-import json
 import logging
 import time
-
-from sqlalchemy.orm import Session
 
 from app.analysis.scorer import analyze_job
 from app.scraper.base import slugify_query
@@ -100,25 +97,12 @@ def _has_prefilter_signal(job: dict) -> bool:
     return deserves_deep_analysis(job)
 
 
-def _tag_discovered(db: Session, job_ids: list[int], slug: str) -> None:
-    """Agrega el slug de la query a `discovered_by` sin duplicar."""
-    if not job_ids or not slug:
-        return
-    rows = (
-        db.query(jobs.Job)
-        .filter(jobs.Job.id.in_(job_ids))
-        .all()
-    )
-    for row in rows:
-        try:
-            current = json.loads(row.discovered_by or "[]")
-        except ValueError:
-            current = []
-        if slug not in current:
-            current.append(slug)
-            row.discovered_by = json.dumps(current, ensure_ascii=False)
-            db.add(row)
-    db.commit()
+def _tag_discovered(db, job_ids: list, slug: str) -> None:
+    """Compat: delega en job_service.tag_discovered (mismo comportamiento
+    en ambos motores)."""
+    from app.services.job_service import tag_discovered
+
+    tag_discovered(db, job_ids, slug)
 
 
 def enrich_and_analyze(
@@ -150,13 +134,17 @@ def enrich_and_analyze(
         try:
             detail = scraper.get_job_detail(row.url)
             if detail.get("description"):
-                row.description = detail["description"]
-                db.add(row)
+                jobs.update_job_fields(
+                    db, row.id, {"description": detail["description"]}
+                )
                 details_ok += 1
         except Exception as error:  # noqa: BLE001
             logger.warning("Detalle fallo %s: %s", row.url, error)
         time.sleep(delay)
-    db.commit()
+
+    # Releer: las descripciones recien traidas deben entrar al analisis.
+    if details_ok:
+        rows = jobs.get_jobs_by_ids(db, [row.id for row in rows])
 
     analyzed = 0
     relevant = 0
@@ -245,11 +233,7 @@ def discover(
 
     # Capa 4: detalle + analisis via helper compartido (tambien lo
     # usa GET /jobs/search para analizar despues del scraping).
-    rows = (
-        db.query(jobs.Job).filter(jobs.Job.id.in_(list(all_ids))).all()
-        if all_ids
-        else []
-    )
+    rows = jobs.get_jobs_by_ids(db, list(all_ids)) if all_ids else []
     stats = enrich_and_analyze(
         db,
         scraper=scraper,

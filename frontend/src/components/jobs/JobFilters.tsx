@@ -31,6 +31,7 @@ export function JobFilters({ value, onChange, companies, locations, sources }: P
           title="Ordenar"
         >
           <option value="recent">Más recientes</option>
+          <option value="found">Recién encontradas</option>
           <option value="oldest">Más antiguas</option>
           <option value="match">Mayor coincidencia</option>
           <option value="company">Empresa (A–Z)</option>

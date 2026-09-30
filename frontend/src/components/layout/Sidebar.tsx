@@ -7,6 +7,7 @@ import {
   FileText,
   LayoutDashboard,
   Menu,
+  Radar,
   Send,
   Settings,
   User,
@@ -16,6 +17,7 @@ import { API_URL } from "../../services/api";
 const LINKS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/jobs", label: "Ofertas", icon: Briefcase },
+  { to: "/search", label: "Búsqueda", icon: Radar },
   { to: "/discarded", label: "Descartadas", icon: BookmarkX },
   { to: "/applications", label: "Postulaciones", icon: Send },
   { to: "/cv", label: "CV", icon: FileText },

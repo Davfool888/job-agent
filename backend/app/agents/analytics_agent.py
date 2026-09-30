@@ -1,95 +1,73 @@
-"""Analytics Agent (§19): lee historia, NO modifica ofertas."""
+"""Analytics Agent (§19): lee historia, NO modifica ofertas.
+
+Opera sobre Records (agnostico al motor): funciona igual con SQLite
+y Firestore. Para Firestore existe ademas un summarize nativo en
+firestore_repo (misma forma de salida).
+"""
 from __future__ import annotations
 
 import json
 from collections import Counter
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database.models import Job
+from app.services.job_service import iter_all_jobs
+
+
+def _as_list(value) -> list:
+    if isinstance(value, list):
+        return list(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except (ValueError, TypeError):
+            return []
+    return []
 
 
 def summarize(db: Session) -> dict:
-    total = db.query(func.count(Job.id)).scalar() or 0
+    rows = iter_all_jobs(db, limit=5000)
+    total = len(rows)
 
-    by_status = {
-        status: count
-        for status, count in db.query(Job.status, func.count(Job.id))
-        .group_by(Job.status)
-        .all()
-    }
-
-    scored = (
-        db.query(func.count(Job.id), func.avg(Job.match_score))
-        .filter(Job.match_score.isnot(None))
-        .first()
-    )
-
-    top_companies = [
-        {"company": company, "count": count}
-        for company, count in db.query(Job.company, func.count(Job.id))
-        .filter(Job.company != "")
-        .group_by(Job.company)
-        .order_by(func.count(Job.id).desc())
-        .limit(10)
-        .all()
-    ]
-
-    top_queries = [
-        {"query": query, "count": count}
-        for query, count in db.query(Job.search_query, func.count(Job.id))
-        .filter(Job.search_query.isnot(None))
-        .group_by(Job.search_query)
-        .order_by(func.count(Job.id).desc())
-        .limit(10)
-        .all()
-    ]
-
-    discard_reasons = [
-        {"reason": reason, "count": count}
-        for reason, count in db.query(
-            Job.discard_reason, func.count(Job.id))
-        .filter(Job.status == "discarded", Job.discard_reason.isnot(None))
-        .group_by(Job.discard_reason)
-        .order_by(func.count(Job.id).desc())
-        .all()
-    ]
-
-    by_category = {
-        category or "SIN_ANALIZAR": count
-        for category, count in db.query(Job.category, func.count(Job.id))
-        .group_by(Job.category)
-        .all()
-    }
-
-    by_source = {
-        source or "desconocida": count
-        for source, count in db.query(Job.source, func.count(Job.id))
-        .group_by(Job.source)
-        .all()
-    }
-
-    discovery_counter: Counter[str] = Counter()
-    skill_counter: Counter[str] = Counter()
-    missing_counter: Counter[str] = Counter()
+    by_status: Counter = Counter()
+    scored = 0
+    score_sum = 0.0
+    companies: Counter = Counter()
+    queries: Counter = Counter()
+    reasons: Counter = Counter()
+    categories: Counter = Counter()
+    sources: Counter = Counter()
+    discovery_counter: Counter = Counter()
+    skill_counter: Counter = Counter()
+    missing_counter: Counter = Counter()
     hidden_title_relevant = 0
     hidden_title_total = 0
     cv_count = 0
-    recent = db.query(Job).order_by(Job.id.desc()).limit(2000).all()
-    for row in recent:
-        for field, counter in (
-            ("discovered_by", discovery_counter),
-            ("matched_skills", skill_counter),
-            ("missing_skills", missing_counter),
-        ):
-            try:
-                items = json.loads(getattr(row, field) or "[]")
-            except ValueError:
-                items = []
-            for item in items:
-                if isinstance(item, str) and item.strip():
-                    counter[item] += 1
+
+    for row in rows:
+        status = row.status or "new"
+        by_status[status] += 1
+        if row.match_score is not None:
+            scored += 1
+            score_sum += row.match_score
+        if (row.company or "").strip():
+            companies[row.company] += 1
+        if row.search_query:
+            queries[row.search_query] += 1
+        if status == "discarded" and row.discard_reason:
+            reasons[row.discard_reason] += 1
+        categories[row.category or "SIN_ANALIZAR"] += 1
+        sources[row.source or "desconocida"] += 1
+        for item in _as_list(row.discovered_by):
+            if isinstance(item, str) and item.strip():
+                discovery_counter[item] += 1
+        for item in _as_list(row.matched_skills):
+            if isinstance(item, str) and item.strip():
+                skill_counter[item] += 1
+        for item in _as_list(row.missing_skills):
+            if isinstance(item, str) and item.strip():
+                missing_counter[item] += 1
         if (row.match_score or 0) >= 40 or (
             row.category and row.category != "OTHER"
         ):
@@ -103,18 +81,28 @@ def summarize(db: Session) -> dict:
         if row.cv_generated:
             cv_count += 1
 
-    last = db.query(Job).order_by(Job.id.desc()).first()
+    # Orden estable: recientes primero (los Records ya vienen asi).
+    last = rows[0] if rows else None
 
     return {
         "total": total,
-        "by_status": by_status,
-        "scored_count": scored[0] or 0,
-        "avg_match": round(scored[1], 1) if scored[1] is not None else None,
-        "top_companies": top_companies,
-        "top_queries": top_queries,
-        "discard_reasons": discard_reasons,
-        "by_category": by_category,
-        "by_source": by_source,
+        "by_status": dict(by_status),
+        "scored_count": scored,
+        "avg_match": round(score_sum / scored, 1) if scored else None,
+        "top_companies": [
+            {"company": company, "count": count}
+            for company, count in companies.most_common(10)
+        ],
+        "top_queries": [
+            {"query": query, "count": count}
+            for query, count in queries.most_common(10)
+        ],
+        "discard_reasons": [
+            {"reason": reason, "count": count}
+            for reason, count in reasons.most_common()
+        ],
+        "by_category": dict(categories),
+        "by_source": dict(sources),
         "top_discovery_queries": [
             {"query": query, "count": count}
             for query, count in discovery_counter.most_common(15)

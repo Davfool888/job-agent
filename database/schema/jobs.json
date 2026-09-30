@@ -51,6 +51,8 @@
     "experience_required": {"type": ["string", "null"]},
     "published_at": {"type": ["string", "null"], "format": "date-time"},
     "found_at": {"type": ["string", "null"], "format": "date-time"},
+    "first_seen_at": {"type": ["string", "null"], "format": "date-time", "description": "Primera vez que el scheduler/manual vio la oferta"},
+    "search_profile_ids": {"type": "array", "items": {"type": "string"}, "description": "Perfiles de busqueda que encontraron esta oferta (una oferta puede coincidir con varios)"},
     "status": {
       "type": "string",
       "enum": ["NEW", "VIEWED", "SAVED", "DISCARDED", "APPLIED", "IN_PROCESS", "INTERVIEW", "REJECTED", "HIRED", "CLOSED"],
@@ -65,7 +67,15 @@
       "enum": ["LOW_MATCH", "LOW_SALARY", "LOCATION", "MODALITY", "REQUIRED_EXPERIENCE", "MISSING_SKILLS", "NOT_INTERESTED", "DUPLICATE", "OTHER", null]
     },
     "discard_note": {"type": ["string", "null"]},
+    "discard_reason_raw": {"type": ["string", "null"], "description": "Texto original del motivo (el codigo va en discard_reason)"},
     "discarded_at": {"type": ["string", "null"], "format": "date-time"},
+    "decided_at": {"type": ["string", "null"], "format": "date-time"},
+    "applied_at": {"type": ["string", "null"], "format": "date-time"},
+    "application_status": {"type": ["string", "null"], "description": "Etapa libre (ej. 'entrevista'); el estado formal vive en applications/"},
+    "modality_raw": {"type": ["string", "null"], "description": "Texto original de modalidad"},
+    "published_text": {"type": ["string", "null"]},
+    "last_seen_at": {"type": ["string", "null"], "format": "date-time"},
+    "search_query": {"type": ["string", "null"]},
     "cv_generated": {"type": "boolean"},
     "created_at": {"type": ["string", "null"], "format": "date-time"},
     "updated_at": {"type": ["string", "null"], "format": "date-time"}
