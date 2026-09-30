@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Job",
+  "description": "Oferta laboral. Nunca se elimina fisicamente (DISCARDED conserva el documento). Fuente de verdad para agentes: Discovery crea, Analysis actualiza analysis, Matching actualiza match_*, CV Agent crea cvs.",
+  "type": "object",
+  "required": ["title", "url", "source", "status"],
+  "properties": {
+    "title": {"type": "string", "description": "Titulo publicado tal cual aparece en la fuente"},
+    "published_title": {"type": "string", "description": "Alias explicito del titulo publicado (igual a title salvo normalizacion)"},
+    "detected_role": {"type": ["string", "null"], "description": "Rol real detectado por contenido, ej. 'Data Analyst'"},
+    "category": {
+      "type": ["string", "null"],
+      "enum": ["DATA_ANALYST", "DATA_ENGINEER", "BI_ANALYST", "BI_DEVELOPER", "DATA_SCIENTIST", "PYTHON_DEVELOPER", "SOFTWARE_DEVELOPER", "DATABASE_ANALYST", "REPORTING_ANALYST", "OPERATIONS_ANALYST", "BUSINESS_ANALYST", "FINANCIAL_ANALYST", "OTHER", null]
+    },
+    "company": {"type": "string"},
+    "sector": {"type": ["string", "null"]},
+    "location": {"type": "string"},
+    "modality": {
+      "type": ["string", "null"],
+      "enum": ["REMOTE", "HYBRID", "ONSITE", null]
+    },
+    "salary": {
+      "type": ["object", "null"],
+      "properties": {
+        "min": {"type": ["number", "null"]},
+        "max": {"type": ["number", "null"]},
+        "currency": {"type": "string"},
+        "period": {"type": "string"},
+        "raw": {"type": "string", "description": "Texto original, ej. '$6 a $8 millones'"}
+      }
+    },
+    "source": {
+      "type": "string",
+      "enum": ["computrabajo", "magneto", "elempleo", "indeed", "linkedin"]
+    },
+    "external_id": {"type": ["string", "null"], "description": "ID en la plataforma origen. Dedup nivel 1: source + external_id"},
+    "url": {"type": "string", "description": "URL canonica. Dedup nivel 2"},
+    "content_hash": {"type": ["string", "null"], "description": "SHA1 de la descripcion normalizada. Dedup nivel 3"},
+    "fingerprint": {"type": ["string", "null"], "description": "SHA1 de title+company+location normalizados. Dedup nivel 4"},
+    "times_seen": {"type": "integer", "minimum": 1, "description": "Veces que reaparecio la misma oferta (republicaciones)"},
+    "description": {"type": "string"},
+    "requirements": {"type": "array", "items": {"type": "string"}},
+    "responsibilities": {"type": "array", "items": {"type": "string"}},
+    "skills": {"type": "array", "items": {"type": "string"}, "description": "Habilidades detectadas en la oferta"},
+    "technologies": {"type": "array", "items": {"type": "string"}},
+    "match_score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+    "matching_skills": {"type": "array", "items": {"type": "string"}},
+    "missing_skills": {"type": "array", "items": {"type": "string"}},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "discovered_by": {"type": "array", "items": {"type": "string"}, "description": "Slugs de queries que la encontraron, ej. ['power-bi']"},
+    "experience_required": {"type": ["string", "null"]},
+    "published_at": {"type": ["string", "null"], "format": "date-time"},
+    "found_at": {"type": ["string", "null"], "format": "date-time"},
+    "status": {
+      "type": "string",
+      "enum": ["NEW", "VIEWED", "SAVED", "DISCARDED", "APPLIED", "IN_PROCESS", "INTERVIEW", "REJECTED", "HIRED", "CLOSED"],
+      "description": "DISCARDED = el usuario no continua. REJECTED = rechazo en proceso de seleccion. No mezclar."
+    },
+    "viewed": {"type": "boolean"},
+    "first_viewed_at": {"type": ["string", "null"], "format": "date-time"},
+    "last_viewed_at": {"type": ["string", "null"], "format": "date-time"},
+    "view_count": {"type": "integer", "minimum": 0},
+    "discard_reason": {
+      "type": ["string", "null"],
+      "enum": ["LOW_MATCH", "LOW_SALARY", "LOCATION", "MODALITY", "REQUIRED_EXPERIENCE", "MISSING_SKILLS", "NOT_INTERESTED", "DUPLICATE", "OTHER", null]
+    },
+    "discard_note": {"type": ["string", "null"]},
+    "discarded_at": {"type": ["string", "null"], "format": "date-time"},
+    "cv_generated": {"type": "boolean"},
+    "created_at": {"type": ["string", "null"], "format": "date-time"},
+    "updated_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

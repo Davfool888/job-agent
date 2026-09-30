@@ -4,6 +4,12 @@ __pycache__/
 
 .env
 
+# Firebase: jamas subir credenciales
+*-key.json
+service-account*.json
+firebase-credentials*.json
+database/.env
+
 *.db
 *.sqlite
 *.sqlite3

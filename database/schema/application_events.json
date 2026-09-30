@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ApplicationEvent",
+  "description": "Evento de la linea de tiempo. Vive en applications/{application_id}/events/{event_id}.",
+  "type": "object",
+  "required": ["type", "date"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["APPLICATION_CREATED", "STATUS_CHANGED", "CV_SENT", "EMAIL_SENT", "INTERVIEW", "ASSESSMENT", "NOTE_ADDED", "FOLLOW_UP", "REJECTED"]
+    },
+    "from": {"type": ["string", "null"], "description": "Estado anterior (solo STATUS_CHANGED/REJECTED)"},
+    "to": {"type": ["string", "null"], "description": "Estado nuevo"},
+    "date": {"type": "string", "format": "date-time"},
+    "notes": {"type": "string"}
+  }
+}

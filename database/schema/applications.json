@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Application",
+  "description": "Postulacion REAL del usuario. Separada de jobs: una oferta puede existir sin postulacion. Subcoleccion events/ guarda el historial (linea de tiempo).",
+  "type": "object",
+  "required": ["job_id", "status"],
+  "properties": {
+    "job_id": {"type": "string", "description": "ID del documento en jobs/"},
+    "company": {"type": "string"},
+    "role": {"type": "string", "description": "Rol al que se postulo (detected_role o titulo)"},
+    "status": {
+      "type": "string",
+      "enum": ["PLANNED", "APPLIED", "UNDER_REVIEW", "INTERVIEW", "ASSESSMENT", "OFFER", "REJECTED", "WITHDRAWN", "CLOSED"]
+    },
+    "applied_at": {"type": ["string", "null"], "format": "date-time"},
+    "application_url": {"type": "string", "description": "URL donde se realizo/realizara la postulacion"},
+    "cv_id": {"type": ["string", "null"], "description": "ID del documento en cvs/ con la version EXACTA enviada"},
+    "notes": {"type": "string"},
+    "created_at": {"type": ["string", "null"], "format": "date-time"},
+    "updated_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

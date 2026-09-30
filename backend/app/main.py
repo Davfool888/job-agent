@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app.config import APP_NAME
+from app.config import FRONTEND_ORIGINS
 from app.database.connection import Base
 from app.database.connection import SessionLocal
 from app.database.connection import engine
@@ -48,14 +49,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=APP_NAME, version="0.5.0", lifespan=lifespan)
 
-# Necesario para que el frontend Vite (http://localhost:5173)
-# pueda llamar a la API en desarrollo.
+# Necesario para que el frontend (Vite local y Vercel en produccion)
+# pueda llamar a la API. Origenes en config.FRONTEND_ORIGINS.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=FRONTEND_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

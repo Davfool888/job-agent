@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Profile",
+  "description": "Perfil base del usuario (documento profiles/base). Fuente de verdad para matching y CV. Las ofertas NO duplican el perfil; lo referencian via profile_version en cvs.",
+  "type": "object",
+  "required": ["personal"],
+  "properties": {
+    "personal": {
+      "type": "object",
+      "properties": {
+        "full_name": {"type": "string"},
+        "title": {"type": "string"},
+        "location": {"type": "string"},
+        "email": {"type": "string"},
+        "phone": {"type": "string"},
+        "linkedin": {"type": "string"},
+        "github": {"type": "string"},
+        "portfolio": {"type": "string"}
+      }
+    },
+    "summary": {"type": "string"},
+    "education": {"type": "array", "items": {"type": "object"}},
+    "experience": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "company"],
+        "properties": {
+          "id": {"type": "string"},
+          "title": {"type": "string"},
+          "company": {"type": "string"},
+          "period": {"type": "string"},
+          "bullets": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "technologies": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "properties": {
+        "programming": {"type": "array", "items": {"type": "string"}},
+        "data": {"type": "array", "items": {"type": "string"}},
+        "bi": {"type": "array", "items": {"type": "string"}},
+        "databases": {"type": "array", "items": {"type": "string"}},
+        "tools": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "languages": {"type": "array", "items": {"type": "string"}},
+    "certifications": {"type": "array", "items": {"type": "string"}},
+    "target_roles": {"type": "array", "items": {"type": "string"}},
+    "updated_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "found_at", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "match_score", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "source", "order": "ASCENDING"},
+        {"fieldPath": "found_at", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "category", "order": "ASCENDING"},
+        {"fieldPath": "match_score", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "discard_reason", "order": "ASCENDING"},
+        {"fieldPath": "discarded_at", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "applications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "updated_at", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "applications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "job_id", "order": "ASCENDING"},
+        {"fieldPath": "created_at", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "cvs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "job_id", "order": "ASCENDING"},
+        {"fieldPath": "version", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "interactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "job_id", "order": "ASCENDING"},
+        {"fieldPath": "timestamp", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "interactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "type", "order": "ASCENDING"},
+        {"fieldPath": "timestamp", "order": "DESCENDING"}
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

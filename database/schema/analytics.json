@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AnalyticsRollup",
+  "description": "Agregados OPCIONALES (collection analytics/). La regla es calcular metricas con consultas siempre que sea posible; estos documentos solo existen si el dashboard necesita evitar lecturas caras. Documento: analytics/daily_YYYY-MM-DD. Nunca se muestran como dato primario.",
+  "type": "object",
+  "required": ["date", "kind"],
+  "properties": {
+    "date": {"type": "string", "description": "YYYY-MM-DD"},
+    "kind": {"type": "string", "enum": ["daily"]},
+    "found": {"type": "integer", "minimum": 0},
+    "viewed": {"type": "integer", "minimum": 0},
+    "saved": {"type": "integer", "minimum": 0},
+    "discarded": {"type": "integer", "minimum": 0},
+    "applied": {"type": "integer", "minimum": 0},
+    "interviews": {"type": "integer", "minimum": 0},
+    "cvs_generated": {"type": "integer", "minimum": 0},
+    "by_source": {"type": "object"},
+    "by_category": {"type": "object"},
+    "avg_match": {"type": ["number", "null"]},
+    "computed_at": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

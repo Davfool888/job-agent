@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CV",
+  "description": "Metadatos del CV. El PDF/TEX vive en Firebase Storage (cvs/job_<jobId>/cv_v<version>.pdf); aqui solo referencias. Una oferta puede tener N versiones; una postulacion apunta a UNA version exacta via applications.cv_id.",
+  "type": "object",
+  "required": ["job_id", "version", "file_name", "status"],
+  "properties": {
+    "job_id": {"type": "string", "description": "ID del documento en jobs/"},
+    "application_id": {"type": ["string", "null"], "description": "Se llena cuando esa version se envia en una postulacion"},
+    "version": {"type": "integer", "minimum": 1},
+    "file_name": {"type": "string", "description": "Ej. cv_v1.pdf"},
+    "pdf_path": {"type": ["string", "null"], "description": "Ruta en Storage, ej. cvs/job_abc123/cv_v1.pdf"},
+    "tex_path": {"type": ["string", "null"], "description": "Ruta en Storage o disco, ej. cvs/job_abc123/cv_v1.tex"},
+    "generated_at": {"type": ["string", "null"], "format": "date-time"},
+    "skills_selected": {"type": "array", "items": {"type": "string"}},
+    "experience_selected": {"type": "array", "items": {"type": "string"}, "description": "IDs o titulos de experiencias del perfil usadas"},
+    "projects_selected": {"type": "array", "items": {"type": "string"}},
+    "profile_version": {"type": "string", "description": "Hash o updated_at del perfil usado, para trazabilidad"},
+    "match_score": {"type": ["number", "null"], "description": "Score de la oferta al momento de generar"},
+    "status": {
+      "type": "string",
+      "enum": ["GENERATED", "SENT", "ARCHIVED"]
+    }
+  }
+}

@@ -1,0 +1,3 @@
+# Solo para database/scripts (NO del backend). El backend sigue con SQLite
+# hasta la migracion; no instalar esto en el venv del backend.
+firebase-admin>=6.0

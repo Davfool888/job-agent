@@ -51,6 +51,20 @@ USER_AGENT = os.getenv(
     "Chrome/126.0.0.0 Safari/537.36",
 )
 
+# Origenes permitidos por CORS (coma-separados). Incluye el frontend
+# de Vercel en produccion + localhost para desarrollo. Sin "*" permanente:
+# allow_credentials=True es incompatible con "*" y expondria la API.
+FRONTEND_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "FRONTEND_ORIGINS",
+        "http://localhost:5173,"
+        "http://127.0.0.1:5173,"
+        "https://job-agent-puce-eight.vercel.app",
+    ).split(",")
+    if origin.strip()
+]
+
 # --- Fuentes habilitadas (fase inicial: computrabajo + linkedin) ---
 COMPUTRABAJO_ENABLED = os.getenv("COMPUTRABAJO_ENABLED", "true").lower() == "true"
 LINKEDIN_ENABLED = os.getenv("LINKEDIN_ENABLED", "true").lower() == "true"

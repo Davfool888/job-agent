@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Interaction",
+  "description": "Accion del usuario para estadisticas de comportamiento. Se escribe (append-only), nunca se edita.",
+  "type": "object",
+  "required": ["type", "timestamp"],
+  "properties": {
+    "user_id": {"type": "string", "description": "ID logico; hoy 'default' (sin auth)"},
+    "job_id": {"type": ["string", "null"]},
+    "application_id": {"type": ["string", "null"]},
+    "type": {
+      "type": "string",
+      "enum": ["JOB_VIEWED", "JOB_SAVED", "JOB_DISCARDED", "JOB_REOPENED", "APPLICATION_CREATED", "CV_GENERATED", "CV_DOWNLOADED", "APPLICATION_URL_OPENED", "NOTE_ADDED"]
+    },
+    "timestamp": {"type": "string", "format": "date-time"},
+    "metadata": {"type": "object", "description": "Contexto libre, ej. {from,to} en descartes o {cv_id,version} en CVs"}
+  }
+}
