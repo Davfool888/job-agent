@@ -119,6 +119,27 @@ def write_profile(payload: dict[str, Any], db: Session = Depends(get_db)):
     return save_profile(db, payload or {})
 
 
+@app.get("/profile/full")
+def read_full_profile(db: Session = Depends(get_db)):
+    """Perfil modular completo (base bloqueada + secciones con
+    perspectivas) + advertencias de validacion."""
+    from app.services.job_service import get_rich_profile
+
+    return get_rich_profile(db)
+
+
+@app.put("/profile/full")
+def write_full_profile(payload: dict[str, Any]):
+    """Guarda base_cv.json (fuente de verdad modular). No borra claves
+    no enviadas; normaliza perspectivas y devuelve advertencias."""
+    from app.services.job_service import save_rich_profile
+
+    try:
+        return save_rich_profile(payload or {})
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
 @app.get("/jobs", response_model=list[JobResponse])
 def list_jobs(
     limit: int = 200,
@@ -255,6 +276,47 @@ def analyze_job_endpoint(job_id: int, db: Session = Depends(get_db)):
     }
 
 
+@app.post("/jobs/{job_id}/tailor")
+def tailor_job_profile(job_id: int, db: Session = Depends(get_db)):
+    """Perfil adaptado a la vacante: analiza la oferta, selecciona las
+    perspectivas mas relevantes del perfil y combina la informacion
+    (solo copia real del perfil; `adapted: true` lo distingue de la
+    fuente de verdad)."""
+    from app.profile.perspectives import build_tailored_profile
+    from app.profile.perspectives import select_perspectives
+
+    job = get_job_by_id(db=db, job_id=job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Oferta no encontrada.")
+
+    from app.agents.job_analyzer import JobAnalyzer
+
+    profile = get_profile(db)
+    job_dict = {
+        "title": job.title or "",
+        "description": job.description or "",
+        "requirements": job.requirements or "",
+        "responsibilities": job.responsibilities or "",
+        "sector": job.sector or "",
+    }
+    result = JobAnalyzer().analyze(job_dict, profile)
+    selection = select_perspectives(profile, job_dict, result)
+    tailored = build_tailored_profile(profile, selection, job_dict, result)
+    return {
+        "job_id": job.id,
+        "analysis": {
+            "match_score": result["match_score"],
+            "detected_role": result["detected_role"],
+            "category": result["category"],
+            "evidence": result["evidence"],
+            "perspective_bonus": result.get("perspective_bonus", 0.0),
+        },
+        "selection": selection["selection"],
+        "combined_skills": selection["combined_skills"],
+        "tailored_profile": tailored,
+    }
+
+
 
 # IMPORTANTE: /jobs/search debe ir ANTES de /jobs/{job_id},
 # si no FastAPI interpreta "search" como un job_id.
@@ -265,6 +327,14 @@ def search_jobs(
     details: bool = Query(False, description="Traer descripcion completa"),
     source: str = Query(
         "computrabajo", description="Fuente: computrabajo | magneto | ..."
+    ),
+    analyze: bool = Query(
+        True,
+        description="Analizar ofertas tras el scraping (match_score, "
+        "detected_role, evidence). Poner false para solo guardar.",
+    ),
+    max_details: int = Query(
+        10, ge=0, le=30, description="Detalles a traer para ofertas sin descripcion"
     ),
     db: Session = Depends(get_db),
 ):
@@ -290,12 +360,39 @@ def search_jobs(
 
     saved_jobs = save_jobs(db=db, jobs=jobs, search_query=q)
 
+    # Analisis despues del scraping (no solo mostrar resultados):
+    # trae detalle donde falta, clasifica rol por contenido y persiste
+    # match_score/matching/missing/evidence (mismo pipeline que discover).
+    analyzed = 0
+    relevant = 0
+    details_fetched = 0
+    if analyze and saved_jobs:
+        from app.analysis.discovery import enrich_and_analyze
+        from app.services.job_service import get_profile
+
+        stats = enrich_and_analyze(
+            db,
+            scraper=scraper,
+            profile=get_profile(db),
+            rows=saved_jobs,
+            max_details=max_details,
+            delay=0,
+        )
+        analyzed = stats["analyzed"]
+        relevant = stats["relevant"]
+        details_fetched = stats["details_fetched"]
+        for job in saved_jobs:
+            db.refresh(job)
+
     return {
         "query": q,
         "pages": pages,
         "source": scraper.source,
         "found": len(jobs),
         "saved": len(saved_jobs),
+        "analyzed": analyzed,
+        "relevant": relevant,
+        "details_fetched": details_fetched,
         "jobs": [
             {
                 "id": job.id,
@@ -305,6 +402,9 @@ def search_jobs(
                 "url": job.url,
                 "source": job.source,
                 "description": job.description,
+                "match_score": job.match_score,
+                "detected_role": job.detected_role,
+                "category": job.category,
             }
             for job in saved_jobs
         ],

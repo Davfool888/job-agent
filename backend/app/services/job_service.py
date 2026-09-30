@@ -274,7 +274,100 @@ def get_profile(db: Session) -> dict:
     except ValueError:
         data = {}
     merged = {**DEFAULT_PROFILE, **data}
+    _merge_rich_profile(merged)
     return merged
+
+
+def _merge_rich_profile(merged: dict) -> None:
+    """Une base_cv.json (fuente rica modular) al perfil plano, de forma
+    aditiva: union de skills/target_roles + passthrough de secciones
+    (experience, education, projects, certifications) con perspectivas.
+    Consumidores viejos siguen funcionando."""
+    try:
+        from app.agents.cv_agent import CVAgent
+
+        rich = CVAgent().base_profile() or {}
+    except Exception:
+        return
+    if not isinstance(rich, dict):
+        return
+    try:
+        from app.profile.perspectives import flatten_profile_skills
+    except Exception:
+        return
+    flat = [s for s in (merged.get("skills") or []) if str(s).strip()]
+    for skill in flatten_profile_skills(rich):
+        if skill not in flat:
+            flat.append(skill)
+    merged["skills"] = flat[:60]
+    targets = [t for t in (merged.get("target_roles") or []) if str(t).strip()]
+    for target in rich.get("target_roles") or []:
+        if target and target not in targets:
+            targets.append(target)
+    merged["target_roles"] = targets[:20]
+    for section in ("experience", "education", "projects", "certifications",
+                    "personal", "professional_summary", "languages"):
+        if section not in merged and section in rich:
+            merged[section] = rich[section]
+    merged["_rich_source"] = "base_cv.json"
+
+
+def get_rich_profile(db: Session) -> dict:
+    """Perfil modular completo para administracion (base bloqueada +
+    secciones con perspectivas)."""
+    from app.agents.cv_agent import CVAgent
+    from app.profile.perspectives import normalize_entry
+    from app.profile.perspectives import SECTIONS
+    from app.profile.perspectives import validate_profile
+
+    agent = CVAgent()
+    rich = agent.base_profile() or {}
+    flat = get_profile(db)
+    for section in SECTIONS:
+        items = rich.get(section)
+        if isinstance(items, list):
+            rich[section] = [normalize_entry(i) for i in items if isinstance(i, dict)]
+        else:
+            rich[section] = []
+    rich["_flat"] = {k: flat.get(k) for k in (
+        "full_name", "title", "location", "linkedin", "github", "portfolio",
+        "skills", "target_roles", "sectors", "modality",
+        "preferred_location", "min_salary", "experience_level",
+    )}
+    rich["_warnings"] = validate_profile(rich)
+    return rich
+
+
+def save_rich_profile(data: dict) -> dict:
+    """Persiste base_cv.json (fuente de verdad modular). Valida y
+    devuelve advertencias sin borrar nada."""
+    import json as _json
+
+    from app.agents.cv_agent import CVAgent
+    from app.config import BASE_CV_PATH
+    from app.profile.perspectives import normalize_entry
+    from app.profile.perspectives import SECTIONS
+    from app.profile.perspectives import validate_profile
+
+    if not isinstance(data, dict):
+        raise ValueError("Perfil invalido: se esperaba un objeto")
+    current = CVAgent().base_profile() or {}
+    merged = dict(current)
+    for key in ("personal", "professional_summary", "skills", "languages",
+                "certifications", "target_roles"):
+        if key in data:
+            merged[key] = data[key]
+    for section in SECTIONS:
+        if section in data and isinstance(data[section], list):
+            merged[section] = [
+                normalize_entry(i) for i in data[section]
+                if isinstance(i, dict)
+            ]
+    BASE_CV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    BASE_CV_PATH.write_text(
+        _json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return {"profile": merged, "warnings": validate_profile(merged)}
 
 
 def save_profile(db: Session, data: dict) -> dict:

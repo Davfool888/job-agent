@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/layout/Layout";
+import { SearchSessionProvider } from "./context/SearchSessionContext";
 import { Applications } from "./pages/Applications";
 import { CV } from "./pages/CV";
 import { Dashboard } from "./pages/Dashboard";
@@ -18,7 +19,8 @@ const Analytics = lazy(() =>
 
 export default function App() {
   return (
-    <Routes>
+    <SearchSessionProvider>
+      <Routes>
       <Route element={<Layout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
@@ -39,6 +41,7 @@ export default function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />
       </Route>
-    </Routes>
+      </Routes>
+    </SearchSessionProvider>
   );
 }

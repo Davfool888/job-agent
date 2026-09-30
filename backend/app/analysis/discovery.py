@@ -121,6 +121,79 @@ def _tag_discovered(db: Session, job_ids: list[int], slug: str) -> None:
     db.commit()
 
 
+def enrich_and_analyze(
+    db: Session,
+    *,
+    scraper,
+    profile: dict,
+    rows: list,
+    max_details: int = 10,
+    delay: float = 1.0,
+) -> dict:
+    """Capa 4 reutilizable: trae detalle donde falta (priorizando
+    señales baratas), analiza titulo+descripcion+requisitos contra el
+    perfil y persiste match_score/detected_role/evidence. Lo usan
+    `discover()` y `GET /jobs/search` para no duplicar logica."""
+    candidates = [r for r in rows if not (r.description or "").strip()]
+    with_signal = [
+        j
+        for j in candidates
+        if _has_prefilter_signal(
+            {"title": j.title, "description": j.description or ""}
+        )
+    ]
+    without = [j for j in candidates if j not in with_signal]
+    ordered = (with_signal + without)[: max(0, max_details)]
+
+    details_ok = 0
+    for row in ordered:
+        try:
+            detail = scraper.get_job_detail(row.url)
+            if detail.get("description"):
+                row.description = detail["description"]
+                db.add(row)
+                details_ok += 1
+        except Exception as error:  # noqa: BLE001
+            logger.warning("Detalle fallo %s: %s", row.url, error)
+        time.sleep(delay)
+    db.commit()
+
+    analyzed = 0
+    relevant = 0
+    for row in rows:
+        if not (row.title or row.description):
+            continue
+        result = analyze_job(
+            {
+                "title": row.title or "",
+                "description": row.description or "",
+                "requirements": row.requirements or "",
+                "responsibilities": row.responsibilities or "",
+            },
+            profile,
+        )
+        jobs.save_analysis(
+            db,
+            row,
+            match_score=result["match_score"],
+            matched=result["matched_skills"],
+            missing=result["missing_skills"],
+            detected_role=result["detected_role"],
+            category=result["category"],
+            evidence=result["evidence"],
+            experience=result["experience_required"],
+        )
+        analyzed += 1
+        if result["match_score"] >= 40 or result["category"] != "OTHER":
+            relevant += 1
+
+    return {
+        "details_fetched": details_ok,
+        "analyzed": analyzed,
+        "relevant": relevant,
+    }
+
+
 def discover(
     db: Session,
     source: str = "computrabajo",
@@ -170,61 +243,24 @@ def discover(
         )
         time.sleep(delay)
 
-    # Capa 4: traer detalle donde falta, priorizando señales baratas.
-    candidates = (
-        db.query(jobs.Job)
-        .filter(jobs.Job.id.in_(list(all_ids)))
-        .filter((jobs.Job.description.is_(None)) | (jobs.Job.description == ""))
-        .all()
-    ) if all_ids else []
-    with_signal = [j for j in candidates if _has_prefilter_signal(
-        {"title": j.title, "description": j.description or ""})]
-    without = [j for j in candidates if j not in with_signal]
-    ordered = (with_signal + without)[:max(0, max_details)]
-
-    details_ok = 0
-    for row in ordered:
-        try:
-            detail = scraper.get_job_detail(row.url)
-            if detail.get("description"):
-                row.description = detail["description"]
-                db.add(row)
-                details_ok += 1
-        except Exception as error:  # noqa: BLE001
-            logger.warning("Detalle fallo %s: %s", row.url, error)
-        time.sleep(delay)
-    db.commit()
-
-    # Analisis deterministico de todo lo tocado que tenga contenido.
-    analyzed = 0
-    relevant = 0
+    # Capa 4: detalle + analisis via helper compartido (tambien lo
+    # usa GET /jobs/search para analizar despues del scraping).
     rows = (
         db.query(jobs.Job).filter(jobs.Job.id.in_(list(all_ids))).all()
         if all_ids
         else []
     )
-    for row in rows:
-        if not (row.title or row.description):
-            continue
-        result = analyze_job(
-            {"title": row.title or "",
-             "description": row.description or ""},
-            profile,
-        )
-        jobs.save_analysis(
-            db,
-            row,
-            match_score=result["match_score"],
-            matched=result["matched_skills"],
-            missing=result["missing_skills"],
-            detected_role=result["detected_role"],
-            category=result["category"],
-            evidence=result["evidence"],
-            experience=result["experience_required"],
-        )
-        analyzed += 1
-        if result["match_score"] >= 40 or result["category"] != "OTHER":
-            relevant += 1
+    stats = enrich_and_analyze(
+        db,
+        scraper=scraper,
+        profile=profile,
+        rows=rows,
+        max_details=max_details,
+        delay=delay,
+    )
+    analyzed = stats["analyzed"]
+    relevant = stats["relevant"]
+    details_ok = stats["details_fetched"]
 
     return {
         "source": scraper.source,

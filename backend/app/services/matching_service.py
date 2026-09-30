@@ -60,9 +60,13 @@ def combine(
     category: str,
     profile: dict,
     content_norm: str,
+    job: dict | None = None,
+    analysis: dict | None = None,
 ) -> dict:
-    """Reescala componentes por pesos configurables (0-100) y suma el
-    bonus de rol objetivo."""
+    """Reescala componentes por pesos configurables (0-100), suma el
+    bonus de rol objetivo y el bonus de perspectivas (acotado): si alguna
+    perspectiva del perfil es muy relevante para la vacante, suma hasta
+    +8. Adjunta top_perspectives para trazabilidad."""
     weights = MATCH_WEIGHTS
     total_weight = sum(weights.values()) or 100
     weighted = 0.0
@@ -74,11 +78,42 @@ def combine(
     fit = profile_fit(content_norm, profile)
     bonus = role_goal_bonus(category, fit["targets"])
     fit["role_matches_goal"] = bonus > 0
-    final = min(100.0, round(content_total + bonus, 1))
+
+    perspective_bonus = 0.0
+    top_perspectives: list[dict] = []
+    if job is not None:
+        try:
+            from app.profile.perspectives import (
+                MAX_PERSPECTIVE_BONUS,
+                select_perspectives,
+            )
+
+            selection = select_perspectives(
+                profile, job, analysis or {}, max_total=3, min_score=0.0
+            )
+            for block in selection["selection"]:
+                top_perspectives.append({
+                    "section": block["section"],
+                    "item": block["item_title"],
+                    "perspective": block["perspective"],
+                    "relevance_score": block["relevance_score"],
+                })
+            if top_perspectives:
+                best = max(b["relevance_score"] for b in top_perspectives)
+                perspective_bonus = round(
+                    min(MAX_PERSPECTIVE_BONUS, best * 0.08), 1
+                )
+        except Exception:
+            perspective_bonus = 0.0
+            top_perspectives = []
+
+    final = min(100.0, round(content_total + bonus + perspective_bonus, 1))
     return {
         "match_score": final,
         "content_score": round(content_total, 1),
         "goal_bonus": bonus,
+        "perspective_bonus": perspective_bonus,
+        "top_perspectives": top_perspectives,
         "weights": dict(weights),
         **fit,
     }

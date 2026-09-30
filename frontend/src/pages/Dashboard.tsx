@@ -15,7 +15,8 @@ import {
 import { Header } from "../components/layout/Header";
 import { ErrorState, LoadingState } from "../components/jobs/States";
 import { useJobs, useJobSearch, useSources, useStats } from "../hooks/useApi";
-import { discoverJobs, type DiscoverSummary } from "../services/jobs";
+import { useSearchSession } from "../context/SearchSessionContext";
+import { discoverJobs } from "../services/jobs";
 import { timeAgo } from "../utils/format";
 import { STATUS_LABELS, sourceLabel } from "../utils/constants";
 
@@ -32,13 +33,22 @@ export function Dashboard() {
   const stats = useStats(refreshKey);
   const search = useJobSearch();
   const { sources } = useSources();
-  const [query, setQuery] = useState("desarrollador python");
-  const [source, setSource] = useState("all");
-  // Páginas por fuente (~20 ofertas/pág en computrabajo, magneto y
-  // elempleo; ~10 en LinkedIn). 5 páginas ≈ hasta 100 ofertas.
-  const [pages, setPages] = useState(1);
-  const [multi, setMulti] = useState<SourceSummary[] | null>(null);
-  const [discovery, setDiscovery] = useState<DiscoverSummary | null>(null);
+  // Sesion de busqueda compartida: persiste al navegar entre secciones,
+  // no re-ejecuta scraping al volver y no resetea la consulta.
+  const {
+    query,
+    source,
+    pages,
+    setQuery,
+    setSource,
+    setPages,
+    result,
+    setResult,
+    multi,
+    setMulti,
+    discovery,
+    setDiscovery,
+  } = useSearchSession();
   const [discovering, setDiscovering] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
 
@@ -51,6 +61,7 @@ export function Dashboard() {
     if (!query.trim() || search.searching) return;
     setMulti(null);
     setDiscovery(null);
+    setResult(null);
     try {
       if (source === "all" && sources.length > 0) {
         // Todas las fuentes, una por una (cada scraper tarda segundos).
@@ -70,7 +81,8 @@ export function Dashboard() {
         }
         setMulti(summaries);
       } else {
-        await search.run(query.trim(), pages, false, source);
+        const r = await search.run(query.trim(), pages, false, source);
+        setResult(r);
       }
       jobs.reload();
       setRefreshKey((k) => k + 1);
@@ -201,12 +213,12 @@ export function Dashboard() {
             )}
           </div>
         )}
-        {search.result && !multi && (
+        {result && !multi && (
           <div className="card" style={{ marginBottom: 16 }}>
             <p style={{ margin: 0, fontSize: 13 }}>
-              Búsqueda <strong>“{search.result.query}”</strong> en{" "}
-              <strong>{sourceLabel(search.result.source)}</strong>:{" "}
-              {search.result.found} encontradas, {search.result.saved}{" "}
+              Búsqueda <strong>“{result.query}”</strong> en{" "}
+              <strong>{sourceLabel(result.source)}</strong>:{" "}
+              {result.found} encontradas, {result.saved}{" "}
               guardadas/actualizadas.{" "}
               <Link to="/jobs">Ver ofertas</Link>
             </p>

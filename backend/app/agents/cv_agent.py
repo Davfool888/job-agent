@@ -47,15 +47,54 @@ class CVAgent:
             f"{' '.join(analysis.get('evidence', []) or [])}"
         )
 
-        def pick(items, limit: int) -> list[dict]:
-            scored = [
-                (_score_item(item, job_keywords), idx, item)
-                for idx, item in enumerate(items or [])
-                if isinstance(item, dict)
-            ]
+        # Relevancia por perspectiva (si el perfil es modular): mapea
+        # item -> mejor perspectiva para esta vacante.
+        perspective_rank: dict[tuple[str, int], tuple[float, dict]] = {}
+        try:
+            from app.profile.perspectives import SECTIONS
+            from app.profile.perspectives import select_perspectives
+
+            selection = select_perspectives(
+                profile, job, analysis or {}, max_total=12, min_score=0.0
+            )
+            for block in selection["selection"]:
+                key = (block["section"], block["item_index"])
+                data = block.get("perspective_data") or {}
+                current = perspective_rank.get(key)
+                if current is None or block["relevance_score"] > current[0]:
+                    perspective_rank[key] = (
+                        block["relevance_score"], data
+                    )
+        except Exception:
+            logger.debug("seleccion por perspectivas no disponible")
+
+        def pick(items, limit: int, section: str) -> list[dict]:
+            scored = []
+            for idx, item in enumerate(items or []):
+                if not isinstance(item, dict):
+                    continue
+                rank = perspective_rank.get((section, idx))
+                if rank is not None:
+                    score = 1000 + rank[0]  # perspectivas mandan
+                else:
+                    score = _score_item(item, job_keywords)
+                scored.append((score, idx, item))
             # Estables: a igual score, conserva el orden del perfil.
             scored.sort(key=lambda row: (-row[0], row[1]))
-            return [item for _s, _i, item in scored[:limit]]
+            picked = []
+            for _s, _i, item in scored[:limit]:
+                item = dict(item)
+                rank = perspective_rank.get((section, _i))
+                if rank is not None and rank[1].get("description"):
+                    # La perspectiva aporta el enfoque como primer bullet;
+                    # los originales se conservan debajo (nada se inventa).
+                    item["perspective"] = rank[1].get("label", "")
+                    original = list(item.get("bullets") or [])
+                    item["bullets"] = (
+                        [rank[1]["description"]] + original
+                    )
+                picked.append(item)
+            return picked
 
         skills = profile.get("skills", {})
         flat_skills: list[str] = []
@@ -78,8 +117,10 @@ class CVAgent:
 
         return CVContent(
             professional_summary=summary,
-            selected_experience=pick(profile.get("experience"), MAX_EXPERIENCE),
-            selected_projects=pick(profile.get("projects"), MAX_PROJECTS),
+            selected_experience=pick(
+                profile.get("experience"), MAX_EXPERIENCE, "experience"),
+            selected_projects=pick(
+                profile.get("projects"), MAX_PROJECTS, "projects"),
             skills=ranked_skills[:MAX_SKILLS],
             education=[
                 e for e in (profile.get("education") or [])

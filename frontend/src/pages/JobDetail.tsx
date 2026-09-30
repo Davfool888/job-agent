@@ -8,6 +8,7 @@ import {
   ExternalLink,
   MapPin,
   Send,
+  Sparkles,
   Target,
 } from "lucide-react";
 import { Header } from "../components/layout/Header";
@@ -21,7 +22,9 @@ import {
 } from "../components/jobs/States";
 import { useJob, useJobExtra } from "../hooks/useApi";
 import { analyzeJob, updateJobStatus } from "../services/jobs";
+import { tailorJob } from "../services/profile";
 import type { Job } from "../types/job";
+import type { TailorResult } from "../types/profile";
 import { formatDate, formatDateTime, timeAgo } from "../utils/format";
 
 export function JobDetail() {
@@ -67,6 +70,21 @@ export function JobDetail() {
     }
   };
 
+  const [tailored, setTailored] = useState<TailorResult | null>(null);
+  const [tailoring, setTailoring] = useState(false);
+
+  const tailor = async () => {
+    setTailoring(true);
+    setError(null);
+    try {
+      setTailored(await tailorJob(jobId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      setTailoring(false);
+    }
+  };
+
   return (
     <>
       <Header
@@ -97,6 +115,9 @@ export function JobDetail() {
             onDiscard={() => setDiscarding(job.data)}
             onApply={() => job.data && apply(job.data)}
             onAnalyze={analyze}
+            onTailor={tailor}
+            tailoring={tailoring}
+            tailored={tailored}
           />
         )}
       </div>
@@ -128,6 +149,9 @@ function DetailBody({
   onDiscard,
   onApply,
   onAnalyze,
+  onTailor,
+  tailoring,
+  tailored,
 }: {
   job: Job;
   extraDesc: string | null;
@@ -139,6 +163,9 @@ function DetailBody({
   onDiscard: () => void;
   onApply: () => void;
   onAnalyze: () => void;
+  onTailor: () => void;
+  tailoring: boolean;
+  tailored: TailorResult | null;
 }) {
   const description = extraDesc || job.description;
 
@@ -191,6 +218,14 @@ function DetailBody({
               <Target /> Analizar
             </button>
           )}
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={tailoring}
+            onClick={onTailor}
+            title="Selecciona las perspectivas del perfil relevantes para esta vacante (POST /jobs/{id}/tailor)"
+          >
+            <Sparkles size={15} /> {tailoring ? "Adaptando…" : "Adaptar perfil"}
+          </button>
           <a className="btn btn-ghost btn-sm" href={job.url} target="_blank" rel="noreferrer">
             <ExternalLink /> Ir a oferta laboral
           </a>
@@ -335,6 +370,63 @@ function DetailBody({
           )}
         </div>
       </div>
+
+      {tailored && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 className="card-title">Perfil adaptado a esta vacante</h3>
+          <p className="card-sub">
+            Perspectivas del perfil seleccionadas automáticamente (solo
+            información real, con procedencia).
+          </p>
+          {tailored.selection.length === 0 && (
+            <p className="card-sub">
+              Ninguna perspectiva supera el umbral para esta vacante.
+            </p>
+          )}
+          {tailored.selection.map((b, i) => (
+            <div
+              key={`${b.section}-${b.item_index}-${i}`}
+              style={{
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: 10,
+                marginBottom: 8,
+              }}
+            >
+              <strong>
+                {b.item_title}
+                {b.item_org ? ` — ${b.item_org}` : ""}
+              </strong>{" "}
+              <span className="chip chip-neutral">{b.perspective}</span>{" "}
+              <span className="chip">{b.relevance_score}% relevante</span>
+              <div className="skill-chips" style={{ marginTop: 6 }}>
+                {b.matched_skills.map((s) => (
+                  <span key={s} className="chip">
+                    {s} ✓
+                  </span>
+                ))}
+                {b.matched_domain.map((d) => (
+                  <span key={d} className="chip chip-neutral">
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+          {tailored.combined_skills.length > 0 && (
+            <>
+              <p className="card-sub">Skills combinadas para el CV</p>
+              <div className="skill-chips">
+                {tailored.combined_skills.map((s) => (
+                  <span key={s} className="chip">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <h3 className="section-title">Descripción original</h3>
       {description ? (

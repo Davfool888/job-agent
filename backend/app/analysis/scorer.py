@@ -182,10 +182,6 @@ def analyze_job(job: dict, profile: dict | None = None) -> dict:
 
     role, _role_pts, role_ev = _detect_role(title, content)
 
-    matched_result = matching_service.combine(
-        breakdown, role, profile, content
-    )
-
     # Evidencia ordenada y sin duplicados (insensible a mayusculas):
     # titulo > rol strong > skills > responsabilidades.
     evidence: list[str] = []
@@ -197,11 +193,24 @@ def analyze_job(job: dict, profile: dict | None = None) -> dict:
             evidence.append(item)
     evidence = evidence[:8]
 
+    detected = role.replace("_", " ").title() if role != "OTHER" else None
+    matched_result = matching_service.combine(
+        breakdown,
+        role,
+        profile,
+        content,
+        job={"title": job.get("title", ""),
+             "description": job.get("description", ""),
+             "requirements": job.get("requirements", ""),
+             "responsibilities": job.get("responsibilities", ""),
+             "sector": job.get("sector", "")},
+        analysis={"evidence": evidence, "category": role,
+                  "detected_role": detected},
+    )
+
     return {
         "match_score": matched_result["match_score"],
-        "detected_role": role.replace("_", " ").title()
-        if role != "OTHER"
-        else None,
+        "detected_role": detected,
         "category": role,
         "evidence": evidence,
         "matched_skills": matched_result["matched_skills"],
@@ -211,4 +220,6 @@ def analyze_job(job: dict, profile: dict | None = None) -> dict:
         "score_breakdown": breakdown,
         "content_score": matched_result["content_score"],
         "goal_bonus": matched_result["goal_bonus"],
+        "perspective_bonus": matched_result.get("perspective_bonus", 0.0),
+        "top_perspectives": matched_result.get("top_perspectives", []),
     }
