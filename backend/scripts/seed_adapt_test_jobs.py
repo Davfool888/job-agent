@@ -3,6 +3,11 @@
 Uso: ..\\.venv\\Scripts\\python.exe scripts/seed_adapt_test_jobs.py
 Idempotente: por URL no duplica (usa el dedup normal).
 """
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.adapt.test_jobs import ensure_adapt_test_jobs
 from app.database.connection import SessionLocal
 

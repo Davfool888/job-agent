@@ -26,6 +26,11 @@ class PdfError(RuntimeError):
 _install_lock = threading.Lock()
 _installing = False
 
+# Serializa generaciones: dos Chromium a la vez tumban instancias
+# chicas (OOM en plan gratuito). El segundo espera su turno.
+_pdf_lock = threading.Lock()
+PDF_LOCK_TIMEOUT = 180
+
 
 def _executable_missing(message: str) -> bool:
     return "Executable doesn't exist" in (message or "")
@@ -81,7 +86,8 @@ def chromium_available() -> bool:
         # (hace crashear Chromium con poca RAM si falta).
         with sync_playwright() as runner:
             browser = runner.chromium.launch(args=[
-                "--no-sandbox", "--disable-dev-shm-usage"])
+                "--no-sandbox", "--disable-dev-shm-usage",
+                "--disable-gpu", "--no-zygote", "--single-process"])
             browser.close()
         return True
     except Exception:  # noqa: BLE001
@@ -98,6 +104,18 @@ def html_to_pdf(
     if not str(html_text or "").strip():
         raise PdfError("PDF_EMPTY_HTML", "HTML vacio, nada que convertir.")
     timeout = int(timeout_ms or ADAPT_PDF_TIMEOUT_MS)
+    if not _pdf_lock.acquire(timeout=PDF_LOCK_TIMEOUT):
+        raise PdfError(
+            "PDF_BUSY",
+            "Servidor ocupado generando otro PDF, reintenta en 1 minuto.",
+        )
+    try:
+        return _render_locked(html_text, out, timeout)
+    finally:
+        _pdf_lock.release()
+
+
+def _render_locked(html_text: str, out: Path, timeout: int) -> Path:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as error:
@@ -107,8 +125,11 @@ def html_to_pdf(
         ) from error
     try:
         with sync_playwright() as runner:
+            # Flags de bajo consumo: contenedores sin privilegios,
+            # /dev/shm diminuto y poca RAM (plan gratuito).
             browser = runner.chromium.launch(args=[
-                "--no-sandbox", "--disable-dev-shm-usage"])
+                "--no-sandbox", "--disable-dev-shm-usage",
+                "--disable-gpu", "--no-zygote", "--single-process"])
             try:
                 page = browser.new_page(java_script_enabled=False)
                 page.set_content(html_text, wait_until="load",

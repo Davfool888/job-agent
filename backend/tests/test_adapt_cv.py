@@ -120,6 +120,32 @@ def test_pdf_generates_valid_file(tmp_path):
         assert handler.read(5) == b"%PDF-"
 
 
+def test_pdf_generations_are_serialized(tmp_path):
+    """Dos generaciones concurrentes no se solapan (anti-OOM)."""
+    import threading
+
+    from app.adapt import pdf as pdf_module
+
+    order: list[str] = []
+
+    def generate(name: str) -> None:
+        out = tmp_path / f"{name}.pdf"
+        pdf_module.html_to_pdf(f"<h1>{name}</h1>", out, timeout_ms=60000)
+        order.append(name)
+
+    threads = [threading.Thread(target=generate, args=(f"cv{i}",))
+               for i in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=120)
+    assert not any(thread.is_alive() for thread in threads)
+    assert sorted(order) == ["cv0", "cv1"]
+    for name in order:
+        with open(tmp_path / f"{name}.pdf", "rb") as handler:
+            assert handler.read(5) == b"%PDF-"
+
+
 def test_pdf_rejects_empty_html(tmp_path):
     from app.adapt import pdf as pdf_module
 
