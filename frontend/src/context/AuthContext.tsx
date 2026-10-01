@@ -29,6 +29,7 @@ interface AuthState {
   needsProfile: boolean;
   authError: string | null;
   loginWithGoogle: () => Promise<void>;
+  switchAccount: () => Promise<void>;
   completeProfile: (nombre: string, telefono: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
   logout: () => Promise<void>;
@@ -102,6 +103,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await syncProfile(cred.user);
   }, [syncProfile]);
 
+  // Cambiar de cuenta sin cerrar primero: el popup muestra el selector
+  // de cuentas de Google (prompt=select_account); si cancela, la sesion
+  // actual se conserva.
+  const switchAccount = useCallback(async () => {
+    await loginWithGoogle();
+  }, [loginWithGoogle]);
+
   const completeProfile = useCallback(
     async (nombre: string, telefono: string) => {
       if (!firebaseUser) throw new Error("Sin sesion.");
@@ -153,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     needsProfile,
     authError,
     loginWithGoogle,
+    switchAccount,
     completeProfile,
     refreshProfile,
     logout,
