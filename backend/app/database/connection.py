@@ -96,6 +96,16 @@ def ensure_columns():
                     text("ALTER TABLE search_profiles "
                          "ADD COLUMN max_age_days INTEGER NOT NULL DEFAULT 0")
                 )
+            if "owner_uid" not in existing_sp:
+                conn.execute(
+                    text("ALTER TABLE search_profiles "
+                         "ADD COLUMN owner_uid VARCHAR(128)")
+                )
+            if "is_demo" not in existing_sp:
+                conn.execute(
+                    text("ALTER TABLE search_profiles "
+                         "ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0")
+                )
 
 
 def get_db():

@@ -16,8 +16,9 @@ export interface Profile {
   min_salary: string;
   experience_level: string;
   // Origen de los datos (backend): admin = perfil base global,
-  // own = perfil personal del usuario, shared = modo sin sesion.
-  scope?: "admin" | "own" | "shared";
+  // own = perfil personal del usuario, demo = datos de prueba de
+  // invitado, shared = modo sin sesion.
+  scope?: "admin" | "own" | "demo" | "shared";
 }
 
 // Ciudad normalizada (GET /catalogs). Guardar siempre el id.

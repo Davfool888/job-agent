@@ -175,3 +175,112 @@ def test_endpoints_route_by_session(monkeypatch):
         assert _read_global()["full_name"] == original.get("full_name")
     _clean_users()
     _write_global(original)
+
+
+GUEST_UID = "anon-test-uid"
+GUEST_EMAIL = ""  # anonimo: sin email
+OTHER2 = "tercero@example.com"
+
+
+def _clean_search_tests():
+    from app.database.connection import SessionLocal
+    from app.database.models import SearchProfile
+
+    db = SessionLocal()
+    try:
+        db.query(SearchProfile).filter(
+            SearchProfile.name.like("SP-Test-%")).delete(
+                synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_guest_gets_demo_profile_not_global():
+    from app.services import job_service as jobs
+
+    original = _read_global()
+    db = _db()
+    try:
+        jobs.save_profile(db, {"full_name": "Perfil Base Global"})
+        guest = jobs.get_profile_for(db, GUEST_UID, GUEST_EMAIL)
+        assert guest["scope"] == "demo"
+        assert guest["full_name"] == "Invitado Demo"
+        assert "Python" in guest["skills"]
+        # El otro Google sigue en blanco.
+        other = jobs.get_profile_for(db, "uid-other-test", OTHER)
+        assert other["scope"] == "own"
+        assert other["full_name"] == ""
+    finally:
+        db.close()
+        _write_global(original)
+
+
+def test_guest_demo_rich_seeded():
+    from app.services import job_service as jobs
+
+    db = _db()
+    try:
+        rich = jobs.get_rich_profile_for(db, GUEST_UID, GUEST_EMAIL)
+        assert rich["scope"] == "demo"
+        assert rich["personal"].get("full_name") == "Invitado Demo"
+        assert len(rich["experience"]) >= 1
+    finally:
+        db.close()
+
+
+def test_search_profiles_scoping():
+    from app.services import search_profiles as profiles
+
+    _clean_search_tests()
+    created = []
+    db = _db()
+    try:
+        mine = profiles.create_profile_for(
+            db, {"title": "SP-Test-Analista", "name": "SP-Test-Mio"},
+            "uid-other-test", OTHER)
+        created.append(mine["id"])
+        assert mine["owner_uid"] == "uid-other-test"
+
+        # Invitado: solo demos (sembra 2).
+        guest_list = profiles.list_profiles_for(db, GUEST_UID, GUEST_EMAIL)
+        assert len(guest_list) >= 2
+        assert all(p.get("is_demo") for p in guest_list)
+        assert all("Demo" in (p.get("name") or "") for p in guest_list)
+        assert mine["id"] not in {p["id"] for p in guest_list}
+
+        # Otro Google: solo lo suyo (sin demos, sin lo ajeno).
+        other_list = profiles.list_profiles_for(
+            db, "uid-other-test", OTHER)
+        assert {p["id"] for p in other_list} == {mine["id"]}
+
+        # Tercero: no ve lo ajeno.
+        assert profiles.get_profile_for(
+            db, mine["id"], "uid-third-test", OTHER2) is None
+
+        # Invitado no toca lo ajeno.
+        assert profiles.update_profile_for(
+            db, mine["id"], {"title": "X"}, GUEST_UID, GUEST_EMAIL) is None
+        assert profiles.delete_profile_for(
+            db, mine["id"], GUEST_UID, GUEST_EMAIL) is False
+    finally:
+        db.close()
+        _clean_search_tests()
+
+
+def test_bad_token_is_401_not_global(monkeypatch):
+    """Token presente pero invalido -> 401, jamas el global."""
+    import app.auth as auth_module
+    from fastapi import HTTPException
+
+    def fake_verify(authorization):
+        raise HTTPException(status_code=401, detail="Sesion invalida.")
+
+    monkeypatch.setattr(auth_module, "verify_bearer_token", fake_verify)
+    with TestClient(app) as client:
+        assert client.get(
+            "/profile", headers={"Authorization": "Bearer malo"}
+        ).status_code == 401
+        assert client.get(
+            "/search-profiles", headers={"Authorization": "Bearer malo"}
+        ).status_code == 401

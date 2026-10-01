@@ -560,7 +560,17 @@ export function Search() {
                   <div key={p.id} className="job-card">
                     <div className="job-card-top">
                       <div className="job-card-main">
-                        <h3 className="job-title">{p.name}</h3>
+                        <h3 className="job-title">
+                          {p.name}{" "}
+                          {p.is_demo && (
+                            <span
+                              className="badge badge-match-mid"
+                              title="Perfil de prueba del modo invitado"
+                            >
+                              DEMO
+                            </span>
+                          )}
+                        </h3>
                         <div className="job-meta">
                           <span>{p.title}</span>
                           {p.location && <span>{p.location}</span>}

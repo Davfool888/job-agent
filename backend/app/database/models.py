@@ -320,6 +320,21 @@ class SearchProfile(Base):
         default=0,
     )
 
+    # Dueño del perfil (uid Firebase). None = legado/global. Los
+    # invitados (anonimos) comparten el dueño especial GUEST_OWNER.
+    owner_uid = Column(
+        String(128),
+        nullable=True,
+        index=True,
+    )
+
+    # Perfil de demostracion (datos de prueba para invitados).
+    is_demo = Column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
     last_run_at = Column(
         DateTime,
         nullable=True,

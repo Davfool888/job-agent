@@ -208,15 +208,21 @@ def ai_status():
 def _profile_identity(request: Request) -> tuple:
     """(uid, email) de la sesion Firebase, o (None, None) sin token.
 
-    Token invalido o Admin sin configurar -> (None, None): se conserva
-    el comportamiento historico (perfil base global, modo local)."""
+    Token presente pero invalido -> 401 (no se regala acceso legado).
+    Admin sin configurar (503) -> (None, None): modo local historico."""
+
+    raw = request.headers.get("authorization")
+    if not raw:
+        return None, None
     try:
         from app.auth import verify_bearer_token
 
-        claims = verify_bearer_token(request.headers.get("authorization"))
+        claims = verify_bearer_token(raw)
         return claims.get("uid"), claims.get("email")
-    except HTTPException:
-        return None, None
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            return None, None
+        raise
 
 
 @app.get("/profile")
@@ -390,30 +396,37 @@ def list_sources():
 
 
 @app.get("/search-profiles")
-def list_search_profiles(db: Session = Depends(get_db)):
-    """Perfiles de busqueda automatica del usuario."""
+def list_search_profiles(request: Request, db: Session = Depends(get_db)):
+    """Perfiles de busqueda visibles para la sesion (admin: todos;
+    invitado: demos; otros: solo los suyos)."""
     from app.services import search_profiles as profiles
 
-    return profiles.list_profiles(db)
+    return profiles.list_profiles_for(db, *_profile_identity(request))
 
 
 @app.post("/search-profiles", status_code=201)
 def create_search_profile(
-    payload: dict[str, Any], db: Session = Depends(get_db)
+    payload: dict[str, Any],
+    request: Request,
+    db: Session = Depends(get_db),
 ):
     from app.services import search_profiles as profiles
 
     try:
-        return profiles.create_profile(db, payload or {})
+        return profiles.create_profile_for(
+            db, payload or {}, *_profile_identity(request))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
 
 @app.get("/search-profiles/{profile_id}")
-def get_search_profile(profile_id: str, db: Session = Depends(get_db)):
+def get_search_profile(
+    profile_id: str, request: Request, db: Session = Depends(get_db)
+):
     from app.services import search_profiles as profiles
 
-    profile = profiles.get_profile(db, profile_id)
+    profile = profiles.get_profile_for(
+        db, profile_id, *_profile_identity(request))
     if not profile:
         raise HTTPException(status_code=404, detail="Perfil no encontrado.")
     return profile
@@ -421,12 +434,16 @@ def get_search_profile(profile_id: str, db: Session = Depends(get_db)):
 
 @app.put("/search-profiles/{profile_id}")
 def update_search_profile(
-    profile_id: str, payload: dict[str, Any], db: Session = Depends(get_db)
+    profile_id: str,
+    payload: dict[str, Any],
+    request: Request,
+    db: Session = Depends(get_db),
 ):
     from app.services import search_profiles as profiles
 
     try:
-        profile = profiles.update_profile(db, profile_id, payload or {})
+        profile = profiles.update_profile_for(
+            db, profile_id, payload or {}, *_profile_identity(request))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
     if not profile:
@@ -435,24 +452,29 @@ def update_search_profile(
 
 
 @app.delete("/search-profiles/{profile_id}", status_code=204)
-def delete_search_profile(profile_id: str, db: Session = Depends(get_db)):
-    from app.services import profile_cvs as pcvs
+def delete_search_profile(
+    profile_id: str, request: Request, db: Session = Depends(get_db)
+):
     from app.services import search_profiles as profiles
 
-    if not profiles.delete_profile(db, profile_id):
+    if not profiles.delete_profile_for(
+        db, profile_id, *_profile_identity(request)
+    ):
         raise HTTPException(status_code=404, detail="Perfil no encontrado.")
-    # Sin perfil no hay CV que lo referencie: borra su PDF + metadatos.
-    pcvs.delete_profile_cv(db, profile_id)
     return None
 
 
 @app.post("/search-profiles/{profile_id}/run")
-def run_search_profile_now(profile_id: str, db: Session = Depends(get_db)):
+def run_search_profile_now(
+    profile_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Ejecuta un perfil manualmente sin esperar su frecuencia."""
     from app.scheduler import run_profile
     from app.services import search_profiles as profiles
 
-    if not profiles.get_profile(db, profile_id):
+    if not profiles.get_profile_for(
+        db, profile_id, *_profile_identity(request)
+    ):
         raise HTTPException(status_code=404, detail="Perfil no encontrado.")
     try:
         return run_profile(profile_id, db=db)
@@ -463,6 +485,7 @@ def run_search_profile_now(profile_id: str, db: Session = Depends(get_db)):
 @app.post("/search-profiles/{profile_id}/cv", status_code=201)
 async def upload_search_profile_cv(
     profile_id: str,
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
@@ -473,7 +496,9 @@ async def upload_search_profile_cv(
     from app.services import profile_cvs as pcvs
     from app.services import search_profiles as profiles
 
-    if not profiles.get_profile(db, profile_id):
+    if not profiles.get_profile_for(
+        db, profile_id, *_profile_identity(request)
+    ):
         raise HTTPException(status_code=404, detail="Perfil no encontrado.")
     filename = (file.filename if file else "") or "cv.pdf"
     if not filename.lower().endswith(".pdf"):
@@ -491,12 +516,16 @@ async def upload_search_profile_cv(
 
 
 @app.get("/search-profiles/{profile_id}/cv")
-def get_search_profile_cv(profile_id: str, db: Session = Depends(get_db)):
+def get_search_profile_cv(
+    profile_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Estado del CV de referencia del perfil."""
     from app.services import profile_cvs as pcvs
     from app.services import search_profiles as profiles
 
-    if not profiles.get_profile(db, profile_id):
+    if not profiles.get_profile_for(
+        db, profile_id, *_profile_identity(request)
+    ):
         raise HTTPException(status_code=404, detail="Perfil no encontrado.")
     meta = pcvs.get_profile_cv(db, profile_id)
     if not meta:
@@ -506,7 +535,7 @@ def get_search_profile_cv(profile_id: str, db: Session = Depends(get_db)):
 
 @app.get("/search-profiles/{profile_id}/cv/download")
 def download_search_profile_cv(
-    profile_id: str, db: Session = Depends(get_db)
+    profile_id: str, request: Request, db: Session = Depends(get_db)
 ):
     """Descarga el PDF de referencia del perfil."""
     from pathlib import Path
@@ -516,7 +545,9 @@ def download_search_profile_cv(
     from app.services import profile_cvs as pcvs
     from app.services import search_profiles as profiles
 
-    if not profiles.get_profile(db, profile_id):
+    if not profiles.get_profile_for(
+        db, profile_id, *_profile_identity(request)
+    ):
         raise HTTPException(status_code=404, detail="Perfil no encontrado.")
     meta = pcvs.get_profile_cv(db, profile_id)
     target = pcvs.pdf_path(profile_id)
@@ -532,13 +563,15 @@ def download_search_profile_cv(
 
 @app.delete("/search-profiles/{profile_id}/cv", status_code=204)
 def delete_search_profile_cv(
-    profile_id: str, db: Session = Depends(get_db)
+    profile_id: str, request: Request, db: Session = Depends(get_db)
 ):
     """Elimina el CV de referencia del perfil (archivo + metadatos)."""
     from app.services import profile_cvs as pcvs
     from app.services import search_profiles as profiles
 
-    if not profiles.get_profile(db, profile_id):
+    if not profiles.get_profile_for(
+        db, profile_id, *_profile_identity(request)
+    ):
         raise HTTPException(status_code=404, detail="Perfil no encontrado.")
     if not pcvs.delete_profile_cv(db, profile_id):
         raise HTTPException(

@@ -108,6 +108,15 @@ export function ProfilePage() {
             </p>
           </div>
         )}
+        {data.scope === "demo" && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <p style={{ margin: 0, fontSize: 13 }}>
+              🧪 Estás viendo <strong>datos de prueba</strong> del modo
+              invitado. Puedes editarlos libremente para testear; no
+              afectan al perfil real.
+            </p>
+          </div>
+        )}
         <form className="card" onSubmit={submit}>
           {saveError && <div className="alert-error">{saveError}</div>}
           {saved && (

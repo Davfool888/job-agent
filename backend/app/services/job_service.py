@@ -898,10 +898,21 @@ def get_profile_for(
     db: Session, uid: str | None, email: str | None
 ) -> dict:
     """Perfil plano segun quien llama. Admin/sin sesion -> base global;
+    invitado -> demo compartida (siempre con datos de prueba);
     otro usuario -> solo lo suyo (en blanco si nunca guardo)."""
     if not uid or _is_admin(email):
         out = get_profile(db)
         out["scope"] = "admin" if uid else "shared"
+        return out
+    from app.services.search_profiles import GUEST_OWNER
+    from app.services.search_profiles import _is_guest
+
+    if _is_guest(uid, email):
+        _ensure_guest_demo_flat(db)
+        stored = _stored_user_flat(db, GUEST_OWNER)
+        out = {key: stored.get(key, DEFAULT_PROFILE[key])
+               for key in DEFAULT_PROFILE}
+        out["scope"] = "demo"
         return out
     stored = _stored_user_flat(db, uid)
     # Solo claves conocidas; jamas se mezcla el perfil base global.
@@ -919,22 +930,131 @@ def save_profile_for(
         out = save_profile(db, data or {})
         out["scope"] = "admin" if uid else "shared"
         return out
+    from app.services.search_profiles import GUEST_OWNER
+    from app.services.search_profiles import _is_guest
+
+    store_uid = GUEST_OWNER if _is_guest(uid, email) else uid
     allowed = {key: (data or {}).get(key, DEFAULT_PROFILE[key])
                for key in DEFAULT_PROFILE}
     if is_firestore(db):
         from app.database import firestore_repo as fs
 
-        fs.save_user_profile(db, uid, allowed)
+        fs.save_user_profile(db, store_uid, allowed)
     else:
-        row = db.query(UserProfile).filter(UserProfile.uid == uid).first()
+        row = db.query(UserProfile).filter(
+            UserProfile.uid == store_uid).first()
         if not row:
-            row = UserProfile(uid=uid, data="{}")
+            row = UserProfile(uid=store_uid, data="{}")
             db.add(row)
         row.data = json.dumps(allowed, ensure_ascii=False)
         row.updated_at = datetime.utcnow()
         db.add(row)
         db.commit()
     return get_profile_for(db, uid, email)
+
+
+GUEST_DEMO_FLAT: dict = {
+    "full_name": "Invitado Demo",
+    "title": "Analista de Datos Junior",
+    "location": "Bogotá, Colombia",
+    "linkedin": "https://linkedin.com/in/invitado-demo",
+    "github": "https://github.com/invitado-demo",
+    "portfolio": "",
+    "skills": ["Python", "SQL", "Excel", "Power BI", "Comunicación"],
+    "target_roles": ["Analista de Datos", "Soporte de Datos"],
+    "sectors": ["Tecnología"],
+    "modality": "Remoto",
+    "preferred_location": "Bogotá",
+    "min_salary": "2000000",
+    "experience_level": "Junior",
+}
+
+GUEST_DEMO_RICH: dict = {
+    "personal": {
+        "full_name": "Invitado Demo",
+        "email": "invitado@demo.test",
+        "phone": "+57 300 000 0000",
+        "location": "Bogotá, Colombia",
+        "linkedin": "https://linkedin.com/in/invitado-demo",
+        "github": "https://github.com/invitado-demo",
+    },
+    "professional_summary": (
+        "Perfil de prueba para testear la plataforma "
+        "(datos ficticios de invitado)."),
+    "years_experience": 1,
+    "technical_skills": ["Python", "SQL", "Excel"],
+    "soft_skills": ["Comunicación", "Trabajo en equipo"],
+    "target_roles": ["Analista de Datos"],
+    "languages": [],
+    "certifications": [],
+    "experience": [
+        {
+            "title": "Practicante de Datos (prueba)",
+            "company": "Empresa Demo S.A.S.",
+            "period": "2024 - 2025",
+            "bullets": [
+                "Reportes de prueba en Excel y Power BI.",
+                "Limpieza de datos de prueba con Python.",
+            ],
+            "technical_skills": ["Python", "Excel"],
+        },
+    ],
+    "education": [
+        {
+            "degree": "Tecnología en Análisis de Datos (prueba)",
+            "institution": "Instituto Demo",
+            "period": "2022 - 2024",
+        },
+    ],
+    "projects": [],
+}
+
+
+def _ensure_guest_demo_flat(db) -> None:
+    """Siembra el perfil demo del invitado una sola vez (idempotente)."""
+    from app.services.search_profiles import GUEST_OWNER
+
+    if _stored_user_flat(db, GUEST_OWNER):
+        return
+    allowed = {key: GUEST_DEMO_FLAT.get(key, DEFAULT_PROFILE[key])
+               for key in DEFAULT_PROFILE}
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        fs.save_user_profile(db, GUEST_OWNER, allowed)
+    else:
+        db.add(UserProfile(
+            uid=GUEST_OWNER, data=json.dumps(allowed, ensure_ascii=False)))
+        db.commit()
+
+
+def _store_user_rich(db, uid: str, normalized: dict) -> None:
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        fs.save_user_rich_profile(db, uid, normalized)
+    else:
+        row = db.query(UserRichProfile).filter(
+            UserRichProfile.uid == uid).first()
+        if not row:
+            row = UserRichProfile(uid=uid, data="{}")
+            db.add(row)
+        row.data = json.dumps(normalized, ensure_ascii=False)
+        row.updated_at = datetime.utcnow()
+        db.add(row)
+        db.commit()
+
+
+def _ensure_guest_demo_rich(db) -> None:
+    """Siembra el perfil estructurado demo una sola vez (idempotente)."""
+    from app.profile import schema as profile_schema
+    from app.services.search_profiles import GUEST_OWNER
+
+    if _stored_user_rich(db, GUEST_OWNER):
+        return
+    normalized, _warnings = profile_schema.normalize_rich_profile(
+        dict(GUEST_DEMO_RICH))
+    _store_user_rich(db, GUEST_OWNER, normalized)
 
 
 def _assemble_rich(base_rich: dict, flat: dict) -> dict:
@@ -961,11 +1081,20 @@ def _assemble_rich(base_rich: dict, flat: dict) -> dict:
 def get_rich_profile_for(
     db: Session, uid: str | None, email: str | None
 ) -> dict:
-    """Perfil estructurado segun quien llama. No-admin: en blanco hasta
-    que guarda; jamas lee base_cv.json."""
+    """Perfil estructurado segun quien llama. Invitado: demo compartida.
+    No-admin con Google: en blanco hasta que guarda; jamas base_cv.json."""
     if not uid or _is_admin(email):
         out = get_rich_profile(db)
         out["scope"] = "admin" if uid else "shared"
+        return out
+    from app.services.search_profiles import GUEST_OWNER
+    from app.services.search_profiles import _is_guest
+
+    if _is_guest(uid, email):
+        _ensure_guest_demo_rich(db)
+        flat = get_profile_for(db, uid, email)
+        out = _assemble_rich(_stored_user_rich(db, GUEST_OWNER), flat)
+        out["scope"] = "demo"
         return out
     flat = get_profile_for(db, uid, email)
     out = _assemble_rich(_stored_user_rich(db, uid), flat)
@@ -987,8 +1116,11 @@ def save_rich_profile_for(
     from app.profile.perspectives import SECTIONS
     from app.profile import schema as profile_schema
     from app.profile.perspectives import validate_profile
+    from app.services.search_profiles import GUEST_OWNER
+    from app.services.search_profiles import _is_guest
 
-    current = _stored_user_rich(db, uid)
+    store_uid = GUEST_OWNER if _is_guest(uid, email) else uid
+    current = _stored_user_rich(db, store_uid)
     merged = dict(current)
     for key in ("personal", "professional_summary", "skills", "languages",
                 "certifications", "target_roles", "technical_skills",
@@ -1000,22 +1132,12 @@ def save_rich_profile_for(
             merged[section] = data[section]
     normalized, schema_warnings = profile_schema.normalize_rich_profile(
         merged)
-    if is_firestore(db):
-        from app.database import firestore_repo as fs
-
-        fs.save_user_rich_profile(db, uid, normalized)
-    else:
-        row = db.query(UserRichProfile).filter(
-            UserRichProfile.uid == uid).first()
-        if not row:
-            row = UserRichProfile(uid=uid, data="{}")
-            db.add(row)
-        row.data = json.dumps(normalized, ensure_ascii=False)
-        row.updated_at = datetime.utcnow()
-        db.add(row)
-        db.commit()
+    _store_user_rich(db, store_uid, normalized)
     warnings = validate_profile(normalized) + schema_warnings
-    return {"profile": normalized, "warnings": warnings, "scope": "own"}
+    from app.services.search_profiles import _is_guest as _guest_check
+
+    scope = "demo" if _guest_check(uid, email) else "own"
+    return {"profile": normalized, "warnings": warnings, "scope": scope}
 
 
 def backfill_fingerprints(db: Session) -> int:

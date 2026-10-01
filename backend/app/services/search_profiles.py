@@ -20,8 +20,11 @@ DEFAULT_SOURCES = ["computrabajo", "magneto", "linkedin"]
 
 PROFILE_FIELDS = (
     "name", "title", "location", "modality", "keywords", "sources",
-    "active", "frequency_minutes", "max_age_days",
+    "active", "frequency_minutes", "max_age_days", "owner_uid", "is_demo",
 )
+
+# Dueño compartido de todo lo demo/test de invitados (anonimos).
+GUEST_OWNER = "__guest__"
 
 # Antigüedad maxima permitida en perfiles (dias). 0 = sin limite.
 MAX_AGE_DAYS_LIMIT = 60
@@ -70,6 +73,8 @@ def validate_profile_data(data: dict) -> dict:
     except (TypeError, ValueError):
         raise ValueError("max_age_days debe ser un entero (0 = sin limite).")
     max_age = max(0, min(max_age, MAX_AGE_DAYS_LIMIT))
+    owner = data.get("owner_uid")
+    owner = str(owner).strip()[:128] or None if owner else None
     return {
         "name": _clean_str(data.get("name") or title, 200),
         "title": title,
@@ -80,6 +85,8 @@ def validate_profile_data(data: dict) -> dict:
         "active": bool(data.get("active", True)),
         "frequency_minutes": frequency,
         "max_age_days": max_age,
+        "owner_uid": owner,
+        "is_demo": 1 if data.get("is_demo") else 0,
     }
 
 
@@ -107,6 +114,8 @@ def _record_to_dict(record_id, data: dict) -> dict:
         "active": bool(data.get("active", True)),
         "frequency_minutes": int(data.get("frequency_minutes") or 10),
         "max_age_days": int(data.get("max_age_days") or 0),
+        "owner_uid": data.get("owner_uid"),
+        "is_demo": bool(data.get("is_demo")),
         "last_run_at": _iso(data.get("last_run_at")),
         "next_run_at": _iso(data.get("next_run_at")),
         "last_run_status": data.get("last_run_status"),
@@ -133,6 +142,8 @@ def _orm_to_dict(row: SearchProfile) -> dict:
         "sources": row.sources, "active": row.active,
         "frequency_minutes": row.frequency_minutes,
         "max_age_days": getattr(row, "max_age_days", 0) or 0,
+        "owner_uid": getattr(row, "owner_uid", None),
+        "is_demo": bool(getattr(row, "is_demo", 0)),
         "last_run_at": row.last_run_at, "next_run_at": row.next_run_at,
         "last_run_status": row.last_run_status,
         "last_found": row.last_found, "last_new": row.last_new,
@@ -165,8 +176,14 @@ def get_profile(db: Session, profile_id) -> dict | None:
     return _orm_to_dict(row) if row else None
 
 
-def create_profile(db: Session, data: dict) -> dict:
+def create_profile(
+    db: Session, data: dict, owner_uid: str | None = None,
+    is_demo: bool = False,
+) -> dict:
     cleaned = validate_profile_data(data)
+    # El dueño lo decide el servidor (sesion), nunca el payload.
+    cleaned["owner_uid"] = owner_uid
+    cleaned["is_demo"] = 1 if is_demo else 0
     now = datetime.utcnow()
     if is_firestore(db):
         payload = {**cleaned, "created_at": now, "updated_at": now,
@@ -236,6 +253,131 @@ def delete_profile(db: Session, profile_id) -> bool:
     db.delete(row)
     db.commit()
     return True
+
+
+# ---------------------------------------------------------------------------
+# Visibilidad por usuario. Admin/sin sesion -> todo (historico). Invitado
+# (anonimo) -> solo demos (+ lo que cree, que queda como demo compartido).
+# Otro usuario -> solo lo suyo (empieza en blanco).
+# ---------------------------------------------------------------------------
+
+def _is_admin(email: str | None) -> bool:
+    from app.config import is_admin_email
+
+    return is_admin_email(email)
+
+
+def _is_guest(uid: str | None, email: str | None) -> bool:
+    return bool(uid) and not (email or "").strip()
+
+
+def _guest_owner_uid(uid: str | None, email: str | None) -> str | None:
+    """Dueño a asignar al crear: invitados comparten GUEST_OWNER."""
+    if not uid:
+        return None
+    if _is_admin(email):
+        return None
+    if _is_guest(uid, email):
+        return GUEST_OWNER
+    return uid
+
+
+def _visible(profile: dict, uid: str | None, email: str | None) -> bool:
+    if not uid or _is_admin(email):
+        return True
+    if _is_guest(uid, email):
+        return bool(profile.get("is_demo")) or (
+            profile.get("owner_uid") == GUEST_OWNER)
+    return profile.get("owner_uid") == uid
+
+
+def get_profile_for(
+    db: Session, profile_id, uid: str | None, email: str | None
+) -> dict | None:
+    profile = get_profile(db, profile_id)
+    if not profile or not _visible(profile, uid, email):
+        return None
+    return profile
+
+
+def list_profiles_for(
+    db: Session, uid: str | None, email: str | None
+) -> list[dict]:
+    if uid and _is_guest(uid, email):
+        ensure_guest_demo(db)
+    return [p for p in list_profiles(db) if _visible(p, uid, email)]
+
+
+def create_profile_for(
+    db: Session, data: dict, uid: str | None, email: str | None
+) -> dict:
+    data = {k: v for k, v in (data or {}).items()
+            if k not in ("owner_uid", "is_demo")}
+    return create_profile(
+        db, data, owner_uid=_guest_owner_uid(uid, email))
+
+
+def update_profile_for(
+    db: Session, profile_id, data: dict, uid: str | None, email: str | None
+) -> dict | None:
+    if not get_profile_for(db, profile_id, uid, email):
+        return None
+    data = {k: v for k, v in (data or {}).items()
+            if k not in ("owner_uid", "is_demo")}
+    return update_profile(db, profile_id, data)
+
+
+def delete_profile_for(
+    db: Session, profile_id, uid: str | None, email: str | None
+) -> bool:
+    if not get_profile_for(db, profile_id, uid, email):
+        return False
+    # Los CVs de referencia huerfanos se limpian aqui mismo.
+    try:
+        from app.services import profile_cvs as pcvs
+
+        pcvs.delete_profile_cv(db, profile_id)
+    except Exception:  # noqa: BLE001
+        pass
+    return delete_profile(db, profile_id)
+
+
+DEMO_PROFILES: tuple[dict, ...] = (
+    {
+        "name": "Demo – Analista de Datos",
+        "title": "Analista de Datos",
+        "location": "Bogotá",
+        "modality": "Híbrido",
+        "keywords": ["Python", "SQL", "Power BI"],
+        "frequency_minutes": 60,
+        "max_age_days": 30,
+        "active": True,
+    },
+    {
+        "name": "Demo – Desarrollador Python",
+        "title": "Desarrollador Python",
+        "location": "Medellín",
+        "modality": "Remoto",
+        "keywords": ["Python", "Django", "PostgreSQL"],
+        "frequency_minutes": 120,
+        "max_age_days": 30,
+        "active": True,
+    },
+)
+
+
+def ensure_guest_demo(db: Session) -> None:
+    """Crea los perfiles demo si no existe ninguno (idempotente)."""
+    try:
+        if any(p.get("is_demo") for p in list_profiles(db)):
+            return
+    except Exception:  # noqa: BLE001
+        return
+    for demo in DEMO_PROFILES:
+        try:
+            create_profile(db, demo, owner_uid=GUEST_OWNER, is_demo=True)
+        except Exception:  # noqa: BLE001
+            continue
 
 
 def touch_run(
