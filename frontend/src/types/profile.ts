@@ -129,6 +129,7 @@ export interface RichProfile {
   languages: LanguageEntry[];
   target_roles: string[];
   _warnings?: string[];
+  scope?: "admin" | "own" | "demo" | "shared";
 }
 
 export interface TailoredBlock {

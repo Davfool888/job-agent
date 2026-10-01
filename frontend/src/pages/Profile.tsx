@@ -10,7 +10,9 @@ import {
   EntryCard,
   TagInput,
 } from "../components/profile/fields";
+import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useApi";
+import { ADMIN_EMAIL } from "../lib/firebase";
 import { SuggestInput } from "../components/forms/SuggestInput";
 import {
   fetchCatalogs,
@@ -27,6 +29,16 @@ import type {
   ProfileEntry,
   RichProfile,
 } from "../types/profile";
+import { EMPTY_PROFILE } from "../types/profile";
+
+// True si la sesion actual es la cuenta administradora (unica que ve
+// el perfil base global). Cualquier otra sesion solo puede ver scope
+// own/demo; con scope compartido el frontend no muestra nada.
+function useIsAdminSession(): boolean {
+  const { firebaseUser, isGuest } = useAuth();
+  if (!firebaseUser || isGuest) return false;
+  return (firebaseUser.email ?? "").trim().toLowerCase() === ADMIN_EMAIL;
+}
 
 function splitList(v: string): string[] {
   return v
@@ -38,6 +50,8 @@ function splitList(v: string): string[] {
 export function ProfilePage() {
   const { data, loading, error, reload, save, saving } = useProfile();
   const { catalogs } = useCatalogs();
+  const { firebaseUser } = useAuth();
+  const isAdmin = useIsAdminSession();
   const [form, setForm] = useState<Profile | null>(null);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -64,19 +78,32 @@ export function ProfilePage() {
     );
   }
 
-  const current = form ?? data;
+  // Blindaje: con sesion no-admin, si el backend devolvio perfil
+  // compartido (sin verificacion) no se muestra ni se edita nada.
+  const locked =
+    !!data &&
+    !!firebaseUser &&
+    !isAdmin &&
+    data.scope !== "own" &&
+    data.scope !== "demo";
+  const current = locked ? { ...EMPTY_PROFILE } : (form ?? data);
 
   const titleOptions =
     catalogs?.professional_titles.map((t) => t.label) ?? TITLES;
   const cityOptions = catalogs?.cities.map((c) => c.label) ?? COLOMBIAN_CITIES;
 
   const set = (patch: Partial<Profile>) => {
+    if (locked) return;
     setForm({ ...current, ...patch });
     setSaved(false);
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (locked) {
+      setSaveError("Sesión sin acceso a este perfil.");
+      return;
+    }
     setSaveError(null);
     try {
       const updated = await save(current);
@@ -99,6 +126,15 @@ export function ProfilePage() {
         subtitle="Fuente estructurada para matching, CV y análisis (PUT /profile y /profile/full)"
       />
       <div className="content">
+        {locked && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <p style={{ margin: 0, fontSize: 13 }}>
+              🔒 Esta sesión no tiene acceso al perfil mostrado por el
+              servidor. No se muestra ni se puede editar nada hasta
+              verificar la sesión.
+            </p>
+          </div>
+        )}
         {data.scope === "own" && (
           <div className="card" style={{ marginBottom: 16 }}>
             <p style={{ margin: 0, fontSize: 13 }}>
@@ -124,6 +160,10 @@ export function ProfilePage() {
               Perfil guardado en el backend.
             </div>
           )}
+          <fieldset
+            disabled={locked}
+            style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+          >
           <h3 className="card-title">Información personal</h3>
           <div className="form-grid">
             <div className="field">
@@ -193,11 +233,12 @@ export function ProfilePage() {
             </div>
           </div>
 
-          <button className="btn btn-primary" disabled={saving}>
+          <button className="btn btn-primary" disabled={saving || locked}>
             {saving ? "Guardando…" : "Guardar perfil"}
           </button>
+          </fieldset>
         </form>
-        <StructuredProfileManager />
+        <StructuredProfileManager locked={locked} />
       </div>
     </>
   );
@@ -233,11 +274,14 @@ const SECTIONS: Array<{ key: SectionKey; label: string }> = [
   { key: "certifications", label: "Certificaciones" },
 ];
 
-function StructuredProfileManager() {
+function StructuredProfileManager({ locked }: { locked: boolean }) {
   const { catalogs, error: catalogError } = useCatalogs();
+  const { firebaseUser } = useAuth();
+  const isAdmin = useIsAdminSession();
   const [rich, setRich] = useState<RichProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lockedRich, setLockedRich] = useState(false);
   const [section, setSection] = useState<SectionKey>("experience");
   const [saving, setSaving] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -247,8 +291,19 @@ function StructuredProfileManager() {
   const load = async () => {
     setLoading(true);
     setLoadError(null);
+    setLockedRich(false);
     try {
       const data = await fetchFullProfile();
+      if (
+        firebaseUser &&
+        !isAdmin &&
+        data.scope !== "own" &&
+        data.scope !== "demo"
+      ) {
+        setLockedRich(true);
+        setRich(null);
+        return;
+      }
       setRich({
         ...data,
         technical_skills: data.technical_skills ?? [],
@@ -282,7 +337,7 @@ function StructuredProfileManager() {
     setEntries(entries.map((e, j) => (j === i ? { ...e, ...patch } : e)));
 
   const submit = async () => {
-    if (!rich) return;
+    if (!rich || locked || lockedRich) return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -307,7 +362,12 @@ function StructuredProfileManager() {
         valores normalizados (listas, fechas, catálogos). Lo que guardes aquí
         alimenta matching, perspectivas y CV.
       </p>
-      {!rich && !loading && (
+      {(locked || lockedRich) && (
+        <div className="alert-error">
+          🔒 Esta sesión no tiene acceso a este perfil estructurado.
+        </div>
+      )}
+      {!locked && !lockedRich && !rich && !loading && (
         <button className="btn btn-ghost btn-sm" onClick={load}>
           Cargar perfil estructurado
         </button>
