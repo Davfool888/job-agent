@@ -1,0 +1,2 @@
+# Scripts shell siempre con LF para que Render (Linux) los ejecute bien.
+backend/build.sh text eol=lf
