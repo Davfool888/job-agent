@@ -793,7 +793,10 @@ def download_adapt_cv(
     format: str = Query("pdf", pattern="^(pdf|html)$"),
     db: Session = Depends(get_db),
 ):
-    """Descarga el CV adaptado (pdf o html). 404 honesto si no existe."""
+    """Descarga el CV adaptado (pdf o html). 404 honesto si no existe.
+
+    Si la oferta existe pero el archivo se perdio (reinicio con disco
+    efimero), se regenera al vuelo antes de servir."""
     from pathlib import Path
 
     from fastapi.responses import FileResponse
@@ -816,10 +819,26 @@ def download_adapt_cv(
     except ValueError:
         raise HTTPException(status_code=404, detail="Archivo no disponible.")
     if not Path(target).exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Aún no hay CV adaptado. Usa «Adaptar perfil».",
-        )
+        # Disco efimero: la oferta existe pero el archivo se perdio.
+        # Regenerar es mas util que un 404.
+        from fastapi.responses import JSONResponse
+
+        from app.adapt.service import adapt_profile_for_job, AdaptError
+
+        try:
+            adapt_profile_for_job(db, job.id)
+        except AdaptError as error:
+            return JSONResponse(
+                status_code=error.http,
+                content={"success": False,
+                         "error": {"code": error.code,
+                                   "message": str(error)}},
+            )
+        if not Path(target).exists():
+            raise HTTPException(
+                status_code=404,
+                detail="Aún no hay CV adaptado. Usa «Adaptar perfil».",
+            )
     return FileResponse(
         path=str(target),
         filename=f"cv_adaptado_job_{job.id}.{format}",

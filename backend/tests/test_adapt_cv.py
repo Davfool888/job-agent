@@ -239,3 +239,44 @@ def test_seed_offers_idempotent():
                 synchronize_session=False)
         db.commit()
         db.close()
+
+
+def test_download_regenerates_missing_pdf():
+    """Disco efimero: si el PDF se pierde pero la oferta existe, la
+    descarga lo regenera en vez de 404."""
+    from app.database.models import Job
+
+    db = _db()
+    try:
+        saved = ensure_adapt_test_jobs(db)
+        job_id = saved[0].id
+    finally:
+        db.close()
+    try:
+        with TestClient(app) as client:
+            assert client.post(f"/jobs/{job_id}/adapt-cv").status_code == 200
+            from app.adapt.service import adapt_dir
+
+            pdf = adapt_dir(job_id) / "cv.pdf"
+            assert pdf.exists()
+            pdf.unlink()  # simula reinicio con disco efimero
+            dl = client.get(f"/jobs/{job_id}/adapt-cv/download",
+                            params={"format": "pdf"})
+            assert dl.status_code == 200, dl.text[:200]
+            assert dl.content.startswith(b"%PDF-")
+            assert pdf.exists()  # regenerado en disco
+    finally:
+        db = _db()
+        db.query(Job).filter(
+            Job.url.like("https://example.com/adapt-test-%")).delete(
+                synchronize_session=False)
+        db.commit()
+        db.close()
+        import shutil
+
+        from app.config import ADAPT_CVS_DIR
+
+        if ADAPT_CVS_DIR.exists():
+            for child in ADAPT_CVS_DIR.iterdir():
+                if child.is_dir():
+                    shutil.rmtree(child, ignore_errors=True)
