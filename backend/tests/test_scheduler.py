@@ -16,7 +16,7 @@ COMPANY = "Empresa Scheduler Test"
 class FakeScraper:
     source = "computrabajo"
 
-    def search(self, query, max_pages=1, include_details=False):
+    def search(self, query, max_pages=1, include_details=False, location=None):
         base = "https://example.com/scheduler"
         return [
             {

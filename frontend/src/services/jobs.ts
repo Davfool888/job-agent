@@ -34,9 +34,16 @@ export async function searchJobs(
   pages = 1,
   details = false,
   source = "computrabajo",
+  location?: string,
 ): Promise<SearchResult> {
   const { data } = await api.get<SearchResult>("/jobs/search", {
-    params: { q, pages, details, source },
+    params: {
+      q,
+      pages,
+      details,
+      source,
+      ...(location?.trim() ? { location: location.trim() } : {}),
+    },
   });
   return data;
 }

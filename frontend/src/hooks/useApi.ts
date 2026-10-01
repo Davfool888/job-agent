@@ -128,6 +128,7 @@ export function useJobSearch(): {
     pages: number,
     details: boolean,
     source?: string,
+    location?: string,
   ) => Promise<SearchResult>;
 } {
   const [result, setResult] = useState<SearchResult | null>(null);
@@ -135,11 +136,17 @@ export function useJobSearch(): {
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const run = useCallback(
-    async (q: string, pages: number, details: boolean, source = "computrabajo") => {
+    async (
+      q: string,
+      pages: number,
+      details: boolean,
+      source = "computrabajo",
+      location?: string,
+    ) => {
       setSearching(true);
       setSearchError(null);
       try {
-        const r = await searchJobs(q, pages, details, source);
+        const r = await searchJobs(q, pages, details, source, location);
         setResult(r);
         return r;
       } catch (e: unknown) {

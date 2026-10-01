@@ -57,6 +57,7 @@ export interface SearchResult {
   query: string;
   pages: number;
   source: string;
+  location?: string | null;
   found: number;
   saved: number;
   jobs: Array<{

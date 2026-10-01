@@ -23,8 +23,10 @@ BODEGA_DESC = (
 class FakeScraper:
     source = "falsa"
 
-    def search(self, query, max_pages=1, include_details=False):
-        return [
+    def search(self, query, max_pages=1, include_details=False, location=None):
+        from app.scraper.base import filter_by_location
+
+        jobs = [
             {
                 "title": "Auxiliar de información",
                 "company": "Empresa Datos XYZ",
@@ -42,6 +44,7 @@ class FakeScraper:
                 "source": "falsa",
             },
         ]
+        return filter_by_location(jobs, location)
 
     def get_job_detail(self, url):
         raise AssertionError("no deberia pedir detalles: ya hay descripcion")

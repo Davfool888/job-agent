@@ -1,5 +1,10 @@
 import { api } from "./api";
-import type { Profile, RichProfile, TailorResult } from "../types/profile";
+import type {
+  Catalogs,
+  Profile,
+  RichProfile,
+  TailorResult,
+} from "../types/profile";
 
 export async function fetchProfile(): Promise<Profile> {
   const { data } = await api.get<Profile>("/profile");
@@ -25,5 +30,14 @@ export async function saveFullProfile(
 
 export async function tailorJob(jobId: number | string): Promise<TailorResult> {
   const { data } = await api.post<TailorResult>(`/jobs/${jobId}/tailor`);
+  return data;
+}
+
+let _catalogsCache: Catalogs | null = null;
+
+export async function fetchCatalogs(): Promise<Catalogs> {
+  if (_catalogsCache) return _catalogsCache;
+  const { data } = await api.get<Catalogs>("/catalogs");
+  _catalogsCache = data;
   return data;
 }

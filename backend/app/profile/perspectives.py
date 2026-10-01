@@ -74,8 +74,9 @@ def normalize_entry(entry: dict) -> dict:
 
 
 def flatten_profile_skills(profile: dict) -> list[str]:
-    """Une skills planas + grupos + TODAS las perspectivas (orden, sin
-    duplicados). Compatible con perfiles viejos sin perspectivas."""
+    """Une skills planas + grupos + globales tecnicas/blandas + TODAS
+    las perspectivas (orden, sin duplicados). Compatible con perfiles
+    viejos sin perspectivas."""
     profile = profile or {}
     ordered: list[str] = []
 
@@ -90,6 +91,8 @@ def flatten_profile_skills(profile: dict) -> list[str]:
     if isinstance(skills, dict):
         for group in skills.values():
             add(group)
+    add(profile.get("technical_skills"))
+    add(profile.get("soft_skills"))
     for section in SECTIONS:
         items = profile.get(section) or []
         if not isinstance(items, list):
@@ -97,6 +100,8 @@ def flatten_profile_skills(profile: dict) -> list[str]:
         for item in items:
             if not isinstance(item, dict):
                 continue
+            add(item.get("technical_skills"))
+            add(item.get("soft_skills"))
             for perspective in normalize_entry(item)["perspectives"]:
                 add(perspective["skills"])
                 add(perspective["tools"])
@@ -135,6 +140,13 @@ def validate_profile(profile: dict) -> list[str]:
                             f"{section}/{title}/{perspective['label']}: "
                             f"'{skill}' no esta en skills base"
                         )
+            for skill in _as_list(item.get("technical_skills")) + _as_list(
+                item.get("soft_skills")
+            ):
+                if norm(skill) not in base:
+                    warnings.append(
+                        f"{section}/{title}: '{skill}' no esta en skills base"
+                    )
     return warnings
 
 

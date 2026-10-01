@@ -373,19 +373,30 @@ def parse_latex_profile(tex_text: str) -> dict:
         if len(line) >= 4 and "@" not in line and "http" not in line:
             name = line.split("\n")[0][:120]
             break
+    name_parts = name.split()
+    first_name = name_parts[0] if name_parts else ""
+    last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
 
     profile: dict = {
         "personal": {
+            "first_name": first_name,
+            "last_name": last_name,
             "full_name": name,
             "title": "",
             "location": "",
             "email": contact["email"],
+            "secondary_email": "",
             "phone": contact["phone"],
+            "secondary_phone": "",
             "linkedin": contact["linkedin"],
             "github": contact["github"],
             "portfolio": contact["portfolio"],
+            "address": "",
         },
         "professional_summary": "",
+        "years_experience": None,
+        "technical_skills": [],
+        "soft_skills": [],
         "education": [],
         "experience": [],
         "projects": [],
@@ -424,9 +435,56 @@ def parse_latex_profile(tex_text: str) -> dict:
                     i for i in items if i not in profile["skills"][key]
                 )
         elif kind == "languages":
-            profile["languages"] = _split_items(content)
+            from app.profile import catalogs as _catalogs
+
+            for item in _split_items(content):
+                # "Inglés (B1)" / "Inglés - B1" -> estructurado.
+                match = re.match(
+                    r"(.+?)\s*[(–—\-]\s*([A-Za-z0-9+]+)\s*[)\]]?\s*$",
+                    item.strip(),
+                )
+                if match:
+                    lang = _catalogs.norm_language(match.group(1))
+                    profile["languages"].append({
+                        "id": (lang["id"] if lang else
+                               _catalogs.norm_text(match.group(1))[:30]),
+                        "language": lang["id"] if lang else None,
+                        "language_label": (lang["label"] if lang
+                                           else match.group(1).strip()),
+                        "academy": "",
+                        "level": None,
+                        "listening": None,
+                        "reading": None,
+                        "writing": None,
+                        "speaking": (
+                            _catalogs.norm_language_level(match.group(2))
+                        ),
+                    })
+                else:
+                    lang = _catalogs.norm_language(item)
+                    profile["languages"].append({
+                        "id": (lang["id"] if lang else
+                               _catalogs.norm_text(item)[:30]),
+                        "language": lang["id"] if lang else None,
+                        "language_label": (lang["label"] if lang else item),
+                        "academy": "",
+                        "level": None,
+                        "listening": None,
+                        "reading": None,
+                        "writing": None,
+                        "speaking": None,
+                    })
         elif kind == "certifications":
-            profile["certifications"] = _split_items(content)
+            for item in _split_items(content):
+                profile["certifications"].append({
+                    "name": item,
+                    "institution": "",
+                    "issued_date": None,
+                    "expiry_date": None,
+                    "credential_id": "",
+                    "credential_url": "",
+                    "description": "",
+                })
         elif kind in ("experience", "education", "projects"):
             # Subsecciones = entradas; si no hay, cada \textbf{...}
             # destacado inicia una entrada.
@@ -455,4 +513,10 @@ def parse_latex_profile(tex_text: str) -> dict:
         warnings.append("No se detecto el nombre del candidato en el encabezado.")
     if not profile["experience"] and not profile["projects"]:
         warnings.append("No se detectaron experiencias ni proyectos.")
-    return {"profile": profile, "warnings": warnings, "style": style}
+    # Normaliza contra catalogos (fechas ISO, ids normalizados).
+    from app.profile import schema as profile_schema
+
+    normalized, schema_warnings = profile_schema.normalize_rich_profile(
+        profile)
+    warnings.extend(schema_warnings)
+    return {"profile": normalized, "warnings": warnings, "style": style}

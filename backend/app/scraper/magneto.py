@@ -24,6 +24,7 @@ from app.config import MAGNETO_BASE_URL
 from app.config import USER_AGENT
 from app.scraper.base import BaseScraper
 from app.scraper.base import clean_text
+from app.scraper.base import filter_by_location
 from app.scraper.base import parse_posted_datetime
 from app.scraper.base import slugify_query
 
@@ -241,6 +242,7 @@ class MagnetoScraper(BaseScraper):
         query: str,
         max_pages: int = 1,
         include_details: bool = False,
+        location: str | None = None,
     ) -> list[dict]:
         max_pages = max(1, min(max_pages, 10))
         all_jobs: list[dict] = []
@@ -288,7 +290,8 @@ class MagnetoScraper(BaseScraper):
                         error,
                     )
 
-        return all_jobs
+        # Magneto lista a nivel nacional: filtra por ciudad aqui.
+        return filter_by_location(all_jobs, location)
 
     def get_job_detail(self, url: str) -> dict:
         html = self._get(url)

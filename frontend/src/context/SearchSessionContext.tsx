@@ -14,9 +14,11 @@ interface SearchSession {
   query: string;
   source: string;
   pages: number;
+  city: string;
   setQuery: (q: string) => void;
   setSource: (s: string) => void;
   setPages: (p: number) => void;
+  setCity: (c: string) => void;
   // Ultimo resultado: sobrevive a la navegacion entre secciones, asi no
   // se re-ejecuta scraping al volver al Dashboard ni se pierde lo hallado.
   result: SearchResult | null;
@@ -33,6 +35,7 @@ export function SearchSessionProvider({ children }: { children: ReactNode }) {
   const [query, setQuery] = useState("desarrollador python");
   const [source, setSource] = useState("all");
   const [pages, setPages] = useState(1);
+  const [city, setCity] = useState("Bogotá");
   const [result, setResult] = useState<SearchResult | null>(null);
   const [multi, setMulti] = useState<SourceSummary[] | null>(null);
   const [discovery, setDiscovery] = useState<DiscoverSummary | null>(null);
@@ -42,9 +45,11 @@ export function SearchSessionProvider({ children }: { children: ReactNode }) {
       query,
       source,
       pages,
+      city,
       setQuery,
       setSource,
       setPages,
+      setCity,
       result,
       setResult,
       multi,
@@ -52,7 +57,7 @@ export function SearchSessionProvider({ children }: { children: ReactNode }) {
       discovery,
       setDiscovery,
     }),
-    [query, source, pages, result, multi, discovery],
+    [query, source, pages, city, result, multi, discovery],
   );
 
   return (

@@ -25,6 +25,7 @@ from app.config import LINKEDIN_BASE_URL
 from app.config import USER_AGENT
 from app.scraper.base import BaseScraper
 from app.scraper.base import clean_text
+from app.scraper.base import filter_by_location
 from app.scraper.base import parse_posted_datetime
 
 logger = logging.getLogger(__name__)
@@ -129,13 +130,15 @@ class LinkedinScraper(BaseScraper):
     def __init__(self, delay: float = 1.5, max_retries: int = 3):
         super().__init__(LINKEDIN_BASE_URL, USER_AGENT, delay, max_retries)
 
-    def _build_search_url(self, query: str, page: int = 1) -> str:
+    def _build_search_url(
+        self, query: str, page: int = 1, location: str | None = None
+    ) -> str:
         if not query.strip():
             raise ValueError("La consulta de busqueda esta vacia.")
         params = urllib.parse.urlencode(
             {
                 "keywords": query.strip(),
-                "location": "Colombia",
+                "location": (location or "Colombia").strip() or "Colombia",
                 "start": (page - 1) * 10,
             }
         )
@@ -149,13 +152,14 @@ class LinkedinScraper(BaseScraper):
         query: str,
         max_pages: int = 1,
         include_details: bool = False,
+        location: str | None = None,
     ) -> list[dict]:
         max_pages = max(1, min(max_pages, 10))
         all_jobs: list[dict] = []
         seen: set[str] = set()
 
         for page in range(1, max_pages + 1):
-            url = self._build_search_url(query, page)
+            url = self._build_search_url(query, page, location)
             logger.info("Consultando %s", url.split("?")[0])
             html = self._get(url)
             jobs = parse_linkedin_cards(html, self.base_url)
@@ -184,7 +188,7 @@ class LinkedinScraper(BaseScraper):
                         error,
                     )
 
-        return all_jobs
+        return filter_by_location(all_jobs, location)
 
     def get_job_detail(self, url: str) -> dict:
         match = re.search(r"(\d{6,})", url)

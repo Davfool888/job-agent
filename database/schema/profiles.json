@@ -1,36 +1,55 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Profile",
-  "description": "Perfil base del usuario (documento profiles/base). Fuente de verdad para matching y CV. Las ofertas NO duplican el perfil; lo referencian via profile_version en cvs.",
+  "description": "Perfil base del usuario (documento profiles/base). Fuente de verdad para matching y CV. Las ofertas NO duplican el perfil; lo referencian via profile_version en cvs. Fechas siempre ISO (YYYY-MM-DD), nunca texto libre.",
   "type": "object",
   "required": ["personal"],
   "properties": {
     "personal": {
       "type": "object",
       "properties": {
+        "first_name": {"type": "string"},
+        "last_name": {"type": "string"},
         "full_name": {"type": "string"},
-        "title": {"type": "string"},
+        "title_id": {"type": ["string", "null"], "description": "Id del catalogo de titulos profesionales"},
+        "title_label": {"type": "string"},
+        "title": {"type": "string", "description": "Compat: igual a title_label"},
         "location": {"type": "string"},
         "email": {"type": "string"},
+        "secondary_email": {"type": "string"},
         "phone": {"type": "string"},
+        "secondary_phone": {"type": "string"},
         "linkedin": {"type": "string"},
         "github": {"type": "string"},
-        "portfolio": {"type": "string"}
+        "portfolio": {"type": "string"},
+        "address": {"type": "string"}
       }
     },
+    "professional_summary": {"type": "string"},
     "summary": {"type": "string"},
+    "years_experience": {"type": ["number", "null"], "description": "Numerico, ej. 2 o 2.5. Nunca '2 años'."},
+    "technical_skills": {"type": "array", "items": {"type": "string"}},
+    "soft_skills": {"type": "array", "items": {"type": "string"}},
     "education": {"type": "array", "items": {"type": "object"}},
     "experience": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "title", "company"],
         "properties": {
           "id": {"type": "string"},
           "title": {"type": "string"},
           "company": {"type": "string"},
           "period": {"type": "string"},
-          "bullets": {"type": "array", "items": {"type": "string"}}
+          "start_date": {"type": ["string", "null"], "format": "date"},
+          "end_date": {"type": ["string", "null"], "format": "date", "description": "null si is_current"},
+          "is_current": {"type": "boolean"},
+          "modality": {"type": ["string", "null"], "enum": ["ONSITE", "HYBRID", "REMOTE", null]},
+          "city": {"type": ["object", "null"]},
+          "description": {"type": "string"},
+          "bullets": {"type": "array", "items": {"type": "string"}},
+          "technical_skills": {"type": "array", "items": {"type": "string"}},
+          "soft_skills": {"type": "array", "items": {"type": "string"}},
+          "contract_type": {"type": ["string", "null"]}
         }
       }
     },
@@ -38,12 +57,17 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "name"],
         "properties": {
           "id": {"type": "string"},
           "name": {"type": "string"},
           "description": {"type": "string"},
-          "technologies": {"type": "array", "items": {"type": "string"}}
+          "start_date": {"type": ["string", "null"], "format": "date"},
+          "end_date": {"type": ["string", "null"], "format": "date"},
+          "url": {"type": "string"},
+          "repo": {"type": "string"},
+          "technologies": {"type": "array", "items": {"type": "string"}},
+          "technical_skills": {"type": "array", "items": {"type": "string"}},
+          "soft_skills": {"type": "array", "items": {"type": "string"}}
         }
       }
     },
@@ -57,8 +81,39 @@
         "tools": {"type": "array", "items": {"type": "string"}}
       }
     },
-    "languages": {"type": "array", "items": {"type": "string"}},
-    "certifications": {"type": "array", "items": {"type": "string"}},
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "language": {"type": ["string", "null"], "description": "Id normalizado: es, en, pt, fr, de, it"},
+          "language_label": {"type": "string"},
+          "academy": {"type": "string"},
+          "level": {"type": ["string", "null"], "enum": ["A1", "A2", "B1", "B2", "C1", "C2", "native", null]},
+          "listening": {"type": ["string", "null"], "enum": ["A1", "A2", "B1", "B2", "C1", "C2", "native", null]},
+          "reading": {"type": ["string", "null"], "enum": ["A1", "A2", "B1", "B2", "C1", "C2", "native", null]},
+          "writing": {"type": ["string", "null"], "enum": ["A1", "A2", "B1", "B2", "C1", "C2", "native", null]},
+          "speaking": {"type": ["string", "null"], "enum": ["A1", "A2", "B1", "B2", "C1", "C2", "native", null]}
+        }
+      }
+    },
+    "certifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "institution": {"type": "string"},
+          "issued_date": {"type": ["string", "null"], "format": "date"},
+          "expiry_date": {"type": ["string", "null"], "format": "date"},
+          "credential_id": {"type": "string"},
+          "credential_url": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      }
+    },
     "target_roles": {"type": "array", "items": {"type": "string"}},
     "updated_at": {"type": ["string", "null"], "format": "date-time"}
   }

@@ -771,25 +771,25 @@ def get_rich_profile(db: Session) -> dict:
     """Perfil modular completo para administracion (base bloqueada +
     secciones con perspectivas)."""
     from app.agents.cv_agent import CVAgent
-    from app.profile.perspectives import normalize_entry
     from app.profile.perspectives import SECTIONS
     from app.profile.perspectives import validate_profile
 
     agent = CVAgent()
     rich = agent.base_profile() or {}
     flat = get_profile(db)
+    from app.profile import schema as profile_schema
+
+    normalized, schema_warnings = profile_schema.normalize_rich_profile(rich)
+    rich = normalized
     for section in SECTIONS:
-        items = rich.get(section)
-        if isinstance(items, list):
-            rich[section] = [normalize_entry(i) for i in items if isinstance(i, dict)]
-        else:
+        if not isinstance(rich.get(section), list):
             rich[section] = []
     rich["_flat"] = {k: flat.get(k) for k in (
         "full_name", "title", "location", "linkedin", "github", "portfolio",
         "skills", "target_roles", "sectors", "modality",
         "preferred_location", "min_salary", "experience_level",
     )}
-    rich["_warnings"] = validate_profile(rich)
+    rich["_warnings"] = validate_profile(rich) + schema_warnings
     return rich
 
 
@@ -800,29 +800,31 @@ def save_rich_profile(data: dict) -> dict:
 
     from app.agents.cv_agent import CVAgent
     from app.config import BASE_CV_PATH
-    from app.profile.perspectives import normalize_entry
+    from app.profile import schema as profile_schema
     from app.profile.perspectives import SECTIONS
     from app.profile.perspectives import validate_profile
 
     if not isinstance(data, dict):
         raise ValueError("Perfil invalido: se esperaba un objeto")
+
     current = CVAgent().base_profile() or {}
     merged = dict(current)
     for key in ("personal", "professional_summary", "skills", "languages",
-                "certifications", "target_roles"):
+                "certifications", "target_roles", "technical_skills",
+                "soft_skills", "years_experience"):
         if key in data:
             merged[key] = data[key]
     for section in SECTIONS:
         if section in data and isinstance(data[section], list):
-            merged[section] = [
-                normalize_entry(i) for i in data[section]
-                if isinstance(i, dict)
-            ]
+            merged[section] = data[section]
+    normalized, schema_warnings = profile_schema.normalize_rich_profile(
+        merged)
     BASE_CV_PATH.parent.mkdir(parents=True, exist_ok=True)
     BASE_CV_PATH.write_text(
-        _json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8"
+        _json.dumps(normalized, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    return {"profile": merged, "warnings": validate_profile(merged)}
+    warnings = validate_profile(normalized) + schema_warnings
+    return {"profile": normalized, "warnings": warnings}
 
 
 def save_profile(db: Session, data: dict) -> dict:

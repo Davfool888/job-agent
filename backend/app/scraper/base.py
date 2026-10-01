@@ -57,6 +57,36 @@ def norm_location(text: str | None) -> str:
     return norm_key((text or "").split(",")[0])
 
 
+def normalize_location_text(text: str | None) -> str:
+    """Normaliza texto de ubicacion para comparar: minusculas, sin
+    tildes, espacios simples ('Bogotá, D.C.' -> 'bogota, d.c.')."""
+    value = unicodedata.normalize("NFKD", (text or "").strip().lower())
+    value = "".join(c for c in value if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", value).strip(" ,")
+
+
+def matches_location(job_location: str | None, query: str | None) -> bool:
+    """True si la oferta es de la ciudad buscada (subcadena
+    insensible a tildes/mayusculas). Sin query o sin ubicacion en la
+    oferta -> True (no se puede descartar)."""
+    if not query or not query.strip():
+        return True
+    if not job_location or not job_location.strip():
+        return True
+    return normalize_location_text(query) in normalize_location_text(
+        job_location
+    )
+
+
+def filter_by_location(
+    jobs: list[dict], location: str | None
+) -> list[dict]:
+    """Filtra ofertas por ciudad. Sin location devuelve todo intacto."""
+    if not location or not location.strip():
+        return jobs
+    return [j for j in jobs if matches_location(j.get("location"), location)]
+
+
 def fingerprint_of(title: str | None, company: str | None,
                    location: str | None = None) -> str:
     """Huella de 'la misma oferta': titulo+empresa+ubicacion
@@ -213,7 +243,10 @@ class BaseScraper:
         query: str,
         max_pages: int = 1,
         include_details: bool = False,
+        location: str | None = None,
     ) -> list[dict]:
+        """Busca ofertas. `location` filtra por ciudad (algunas fuentes
+        lo aplican en el sitio; el resto filtra por texto)."""
         raise NotImplementedError
 
     def get_job_detail(self, url: str) -> dict:

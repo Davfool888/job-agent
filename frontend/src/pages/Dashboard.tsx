@@ -18,6 +18,7 @@ import { useJobs, useJobSearch, useSources, useStats } from "../hooks/useApi";
 import { useSearchSession } from "../context/SearchSessionContext";
 import { discoverJobs } from "../services/jobs";
 import { timeAgo } from "../utils/format";
+import { COLOMBIAN_CITIES } from "../utils/cities";
 import { STATUS_LABELS, sourceLabel } from "../utils/constants";
 
 interface SourceSummary {
@@ -39,9 +40,11 @@ export function Dashboard() {
     query,
     source,
     pages,
+    city,
     setQuery,
     setSource,
     setPages,
+    setCity,
     result,
     setResult,
     multi,
@@ -68,7 +71,7 @@ export function Dashboard() {
         const summaries: SourceSummary[] = [];
         for (const src of sources) {
           try {
-            const r = await search.run(query.trim(), pages, false, src);
+            const r = await search.run(query.trim(), pages, false, src, city);
             summaries.push({ source: src, found: r.found, saved: r.saved });
           } catch {
             summaries.push({
@@ -81,7 +84,7 @@ export function Dashboard() {
         }
         setMulti(summaries);
       } else {
-        const r = await search.run(query.trim(), pages, false, source);
+        const r = await search.run(query.trim(), pages, false, source, city);
         setResult(r);
       }
       jobs.reload();
@@ -128,6 +131,21 @@ export function Dashboard() {
               placeholder="Ej: desarrollador python"
               onKeyDown={(e) => e.key === "Enter" && runSearch()}
             />
+            <input
+              className="input"
+              style={{ width: 150 }}
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="Ciudad (ej: Bogotá)"
+              title="Filtra por ciudad antes de guardar. Vacío = todo el país."
+              list="colombian-cities"
+              onKeyDown={(e) => e.key === "Enter" && runSearch()}
+            />
+            <datalist id="colombian-cities">
+              {COLOMBIAN_CITIES.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
             <select
               className="select"
               value={source}
@@ -217,8 +235,13 @@ export function Dashboard() {
           <div className="card" style={{ marginBottom: 16 }}>
             <p style={{ margin: 0, fontSize: 13 }}>
               Búsqueda <strong>“{result.query}”</strong> en{" "}
-              <strong>{sourceLabel(result.source)}</strong>:{" "}
-              {result.found} encontradas, {result.saved}{" "}
+              <strong>{sourceLabel(result.source)}</strong>
+              {result.location ? (
+                <>
+                  {" "}· <strong>{result.location}</strong>
+                </>
+              ) : null}
+              : {result.found} encontradas, {result.saved}{" "}
               guardadas/actualizadas.{" "}
               <Link to="/jobs">Ver ofertas</Link>
             </p>

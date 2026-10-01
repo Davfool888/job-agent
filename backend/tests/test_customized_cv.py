@@ -27,8 +27,9 @@ def test_importer_extracts_profile():
     assert len(profile["projects"]) == 2
     assert "Python" in (profile["skills"]["programming"]
                         + profile["skills"]["data"])
-    assert "Español (nativo)" in profile["languages"]
-    assert any("PL-300" in c for c in profile["certifications"])
+    by_lang = {lang["language"]: lang for lang in profile["languages"]}
+    assert by_lang["es"]["language_label"] == "Español"
+    assert any("PL-300" in c["name"] for c in profile["certifications"])
 
 
 def test_importer_warns_unknown_sections():

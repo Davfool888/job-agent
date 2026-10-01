@@ -147,6 +147,15 @@ def write_profile(payload: dict[str, Any], db: Session = Depends(get_db)):
     return save_profile(db, payload or {})
 
 
+@app.get("/catalogs")
+def read_catalogs():
+    """Catalogos normalizados (titulos, modalidades, niveles, idiomas,
+    ciudades...). Fuente unica para la UI; evita duplicarlos."""
+    from app.profile import catalogs
+
+    return catalogs.get_catalogs()
+
+
 @app.get("/profile/full")
 def read_full_profile(db: Session = Depends(get_db)):
     """Perfil modular completo (base bloqueada + secciones con
@@ -548,6 +557,12 @@ def search_jobs(
     max_details: int = Query(
         10, ge=0, le=30, description="Detalles a traer para ofertas sin descripcion"
     ),
+    location: str | None = Query(
+        None,
+        description="Filtrar por ciudad antes de guardar "
+        "(ej: Bogotá, Medellín). LinkedIn e Indeed lo aplican en el "
+        "sitio; el resto filtra por texto de ubicación.",
+    ),
     db: Session = Depends(get_db),
 ):
     if not q.strip():
@@ -561,7 +576,9 @@ def search_jobs(
         raise HTTPException(status_code=400, detail=str(error))
 
     try:
-        jobs = scraper.search(q, max_pages=pages, include_details=details)
+        jobs = scraper.search(
+            q, max_pages=pages, include_details=details, location=location
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
     except Exception as error:  # noqa: BLE001
@@ -601,6 +618,7 @@ def search_jobs(
         "query": q,
         "pages": pages,
         "source": scraper.source,
+        "location": location,
         "found": len(jobs),
         "saved": len(saved_jobs),
         "analyzed": analyzed,

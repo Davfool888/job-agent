@@ -6,6 +6,7 @@ import time
 from app.config import COMPUTRABAJO_BASE_URL
 from app.config import USER_AGENT
 from app.scraper.base import BaseScraper
+from app.scraper.base import filter_by_location
 from app.scraper.base import slugify_query
 from app.scraper.parser import parse_job_cards
 from app.scraper.parser import parse_job_detail
@@ -37,6 +38,7 @@ class ComputrabajoScraper(BaseScraper):
         query: str,
         max_pages: int = 1,
         include_details: bool = False,
+        location: str | None = None,
     ) -> list[dict]:
         """Busca ofertas. Pagina con ?p=2, ?p=3... hasta max_pages."""
         max_pages = max(1, min(max_pages, 10))
@@ -83,7 +85,8 @@ class ComputrabajoScraper(BaseScraper):
                         error,
                     )
 
-        return all_jobs
+        # Computrabajo lista a nivel nacional: filtra por ciudad aqui.
+        return filter_by_location(all_jobs, location)
 
     def get_job_detail(self, url: str) -> dict:
         html = self._get(url)

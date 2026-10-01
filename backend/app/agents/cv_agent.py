@@ -104,6 +104,11 @@ class CVAgent:
                     flat_skills.extend(str(s) for s in group)
         elif isinstance(skills, list):
             flat_skills = [str(s) for s in skills]
+        # Skills globales tecnicas/blandas (perfil estructurado).
+        for key in ("technical_skills", "soft_skills"):
+            values = profile.get(key)
+            if isinstance(values, list):
+                flat_skills.extend(str(s) for s in values)
         # Prioriza skills con overlap, sin inventar ninguna.
         ranked_skills = sorted(
             dict.fromkeys(flat_skills),

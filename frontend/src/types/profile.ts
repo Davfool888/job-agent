@@ -17,6 +17,26 @@ export interface Profile {
   experience_level: string;
 }
 
+// Ciudad normalizada (GET /catalogs). Guardar siempre el id.
+export interface CityOption {
+  id: string;
+  label: string;
+  country: string;
+}
+
+// Entrada de idioma con niveles por habilidad (A1-C2/Nativo).
+export interface LanguageEntry {
+  id: string;
+  language: string | null;
+  language_label: string;
+  academy: string;
+  level: string | null;
+  listening: string | null;
+  reading: string | null;
+  writing: string | null;
+  speaking: string | null;
+}
+
 // Perfil modular con perspectivas (GET/PUT /profile/full).
 // Cada entrada (experiencia, educacion, proyecto, certificacion)
 // puede tener N perspectivas: distintas formas de presentar los
@@ -31,6 +51,34 @@ export interface Perspective {
   roles: string[];
 }
 
+export interface CityRef {
+  id: string;
+  label: string;
+  country: string | null;
+}
+
+export interface CatalogItem {
+  id: string;
+  label: string;
+  hint?: string;
+}
+
+export interface CityOption extends CatalogItem {
+  country: string;
+}
+
+export interface Catalogs {
+  professional_titles: CatalogItem[];
+  modalities: CatalogItem[];
+  education_levels: CatalogItem[];
+  entry_status: CatalogItem[];
+  languages: CatalogItem[];
+  language_levels: CatalogItem[];
+  contract_types: CatalogItem[];
+  countries: CatalogItem[];
+  cities: CityOption[];
+}
+
 export interface ProfileEntry {
   id?: string;
   title?: string;
@@ -39,20 +87,42 @@ export interface ProfileEntry {
   company?: string;
   institution?: string;
   period?: string;
-  facts?: string;
+  // Estructurados (fechas ISO YYYY-MM-DD, null si no aplica).
+  start_date?: string | null;
+  end_date?: string | null;
+  is_current?: boolean;
+  modality?: string | null;
+  city?: CityRef | null;
   description?: string;
+  contract_type?: string | null;
+  level?: string | null;
+  status?: string | null;
+  url?: string | null;
+  repo?: string | null;
+  technologies?: string[];
+  technical_skills?: string[];
+  soft_skills?: string[];
+  // Certificaciones.
+  issued_date?: string | null;
+  expiry_date?: string | null;
+  credential_id?: string;
+  credential_url?: string;
+  facts?: string;
   perspectives: Perspective[];
 }
 
 export interface RichProfile {
   personal: Record<string, string>;
   professional_summary: string;
+  years_experience: number | null;
+  technical_skills: string[];
+  soft_skills: string[];
   experience: ProfileEntry[];
   education: ProfileEntry[];
   projects: ProfileEntry[];
   certifications: ProfileEntry[];
   skills: Record<string, string[]>;
-  languages: string[];
+  languages: LanguageEntry[];
   target_roles: string[];
   _warnings?: string[];
 }

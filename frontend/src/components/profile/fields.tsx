@@ -1,0 +1,258 @@
+import { useMemo, useState } from "react";
+
+// Autocomplete sobre catalogo: escribe para filtrar, elige opcion.
+// Guarda el id; si no coincide nada, permite "Otro"/texto segun props.
+export function Autocomplete({
+  value,
+  onChange,
+  options,
+  placeholder,
+  allowCustom = false,
+  customLabel = "Otro",
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  options: Array<{ id: string; label: string; hint?: string }>;
+  placeholder?: string;
+  allowCustom?: boolean;
+  customLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const selected = options.find((o) => o.id === value);
+
+  const filtered = useMemo(() => {
+    const q = text.trim().toLowerCase();
+    const list = q
+      ? options.filter((o) => o.label.toLowerCase().includes(q))
+      : options;
+    return list.slice(0, 12);
+  }, [options, text]);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        className="input"
+        style={{ width: "100%" }}
+        value={open ? text : (selected?.label ?? value)}
+        placeholder={placeholder}
+        onFocus={() => {
+          setText("");
+          setOpen(true);
+        }}
+        onChange={(e) => {
+          setText(e.target.value);
+          setOpen(true);
+          if (e.target.value === "") onChange("");
+        }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            zIndex: 20,
+            left: 0,
+            right: 0,
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            marginTop: 4,
+            maxHeight: 220,
+            overflowY: "auto",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+          }}
+        >
+          {filtered.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                border: "none",
+                borderRadius: 0,
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange(o.id);
+                setOpen(false);
+              }}
+            >
+              {o.label}
+              {o.hint && (
+                <span style={{ color: "var(--text-muted)" }}> — {o.hint}</span>
+              )}
+            </button>
+          ))}
+          {allowCustom && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ display: "block", width: "100%", textAlign: "left" }}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange("other");
+                setOpen(false);
+              }}
+            >
+              {customLabel}
+            </button>
+          )}
+          {filtered.length === 0 && !allowCustom && (
+            <p style={{ padding: "8px 12px", fontSize: 12.5, margin: 0 }}>
+              Sin coincidencias.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Fecha como date picker nativo (YYYY-MM-DD). month=true -> solo mes.
+export function DateInput({
+  value,
+  onChange,
+  month = false,
+}: {
+  value: string | null | undefined;
+  onChange: (iso: string | null) => void;
+  month?: boolean;
+}) {
+  const shown = (value ?? "").slice(0, month ? 7 : 10);
+  return (
+    <input
+      className="input"
+      type={month ? "month" : "date"}
+      value={shown}
+      onChange={(e) => {
+        const raw = e.target.value;
+        if (!raw) {
+          onChange(null);
+          return;
+        }
+        onChange(month ? `${raw}-01` : raw);
+      }}
+    />
+  );
+}
+
+// Lista de tags con agregar/eliminar (skills, dominios, etc.).
+export function TagInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  const [text, setText] = useState("");
+  const add = () => {
+    const item = text.trim();
+    if (item && !value.includes(item)) onChange([...value, item]);
+    setText("");
+  };
+  return (
+    <div>
+      <div className="skill-chips" style={{ marginBottom: 6 }}>
+        {value.map((item) => (
+          <span key={item} className="chip">
+            {item}{" "}
+            <button
+              type="button"
+              aria-label={`Quitar ${item}`}
+              onClick={() => onChange(value.filter((v) => v !== item))}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "inherit",
+                padding: 0,
+              }}
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+        {value.length === 0 && (
+          <span className="chip chip-neutral">—</span>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input
+          className="input"
+          style={{ flex: 1 }}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder={placeholder ?? "Agregar y Enter"}
+        />
+        <button type="button" className="btn btn-ghost btn-sm" onClick={add}>
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Tarjeta colapsable reutilizable para entradas (experiencia, estudios...).
+export function EntryCard({
+  title,
+  subtitle,
+  badge,
+  onRemove,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  onRemove?: () => void;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 10,
+      }}
+    >
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <strong
+          style={{ flex: 1, cursor: "pointer" }}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {title || "Nueva entrada"}
+          {subtitle ? ` — ${subtitle}` : ""}
+        </strong>
+        {badge && <span className="card-sub">{badge}</span>}
+        {onRemove && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+          >
+            Eliminar
+          </button>
+        )}
+      </div>
+      {open && <div style={{ marginTop: 10 }}>{children}</div>}
+    </div>
+  );
+}

@@ -25,6 +25,7 @@ from app.config import INDEED_BASE_URL
 from app.config import USER_AGENT
 from app.scraper.base import BaseScraper
 from app.scraper.base import clean_text
+from app.scraper.base import filter_by_location
 from app.scraper.base import parse_posted_datetime
 
 logger = logging.getLogger(__name__)
@@ -173,11 +174,14 @@ class IndeedScraper(BaseScraper):
         except Exception as error:  # noqa: BLE001
             logger.warning("Warmup de Indeed fallo: %s", error)
 
-    def _build_search_url(self, query: str, page: int = 1) -> str:
+    def _build_search_url(
+        self, query: str, page: int = 1, location: str | None = None
+    ) -> str:
         if not query.strip():
             raise ValueError("La consulta de busqueda esta vacia.")
+        place = (location or "Colombia").strip() or "Colombia"
         params = urllib.parse.urlencode(
-            {"q": query.strip(), "l": "Colombia", "start": (page - 1) * 10}
+            {"q": query.strip(), "l": place, "start": (page - 1) * 10}
         )
         return f"{self.base_url}/jobs?{params}"
 
@@ -186,6 +190,7 @@ class IndeedScraper(BaseScraper):
         query: str,
         max_pages: int = 1,
         include_details: bool = False,
+        location: str | None = None,
     ) -> list[dict]:
         max_pages = max(1, min(max_pages, 5))
         self._warmup()
@@ -193,7 +198,7 @@ class IndeedScraper(BaseScraper):
         seen: set[str] = set()
 
         for page in range(1, max_pages + 1):
-            url = self._build_search_url(query, page)
+            url = self._build_search_url(query, page, location)
             logger.info("Consultando %s", url)
             headers = {"Referer": f"{self.base_url}/"}
             html = self._get_with_headers(url, headers)
@@ -223,7 +228,7 @@ class IndeedScraper(BaseScraper):
                         error,
                     )
 
-        return all_jobs
+        return filter_by_location(all_jobs, location)
 
     def _get_with_headers(self, url: str, extra: dict) -> str:
         blocks: list[str] = []

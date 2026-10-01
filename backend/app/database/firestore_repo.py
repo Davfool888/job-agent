@@ -532,10 +532,39 @@ def get_profile_doc(db) -> dict:
                 "experience_level"):
         if data.get(key) is not None:
             flat[key] = data[key]
+    # Secciones ricas + globales (fechas timestamp -> ISO).
+    flat["technical_skills"] = list(data.get("technical_skills") or [])
+    flat["soft_skills"] = list(data.get("soft_skills") or [])
+    flat["years_experience"] = data.get("years_experience")
+    flat["personal"] = personal
+    flat["professional_summary"] = data.get("summary", "")
+    for section in ("experience", "education", "projects", "certifications"):
+        flat[section] = _iso_dates(data.get(section) or [])
+    flat["languages"] = list(data.get("languages") or [])
     return flat
 
 
+def _iso_dates(items: list) -> list:
+    """datetime (Firestore) -> ISO para consumo JSON/python."""
+    out = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        item = dict(item)
+        for key in ("start_date", "end_date", "issued_date", "expiry_date"):
+            value = item.get(key)
+            if hasattr(value, "isoformat"):
+                try:
+                    item[key] = value.isoformat()[:10]
+                except (ValueError, TypeError):
+                    item[key] = None
+        out.append(item)
+    return out
+
+
 def save_profile_doc(db, data: dict, default_profile: dict) -> dict:
+    from app.profile import schema as profile_schema
+
     allowed = {
         key: data.get(key, default_profile[key]) for key in default_profile
     }
@@ -544,16 +573,30 @@ def save_profile_doc(db, data: dict, default_profile: dict) -> dict:
         for key in ("full_name", "title", "location", "linkedin",
                     "github", "portfolio")
     }
+    # Secciones ricas: se normalizan y las fechas van como timestamp.
+    rich, _warnings = profile_schema.normalize_rich_profile(
+        {k: data.get(k) for k in (
+            "personal", "professional_summary", "years_experience",
+            "technical_skills", "soft_skills", "languages", "experience",
+            "education", "projects", "certifications", "skills",
+            "target_roles",
+        ) if k in data}
+    )
     doc = {
-        "personal": personal,
-        "summary": "",
-        "education": [],
-        "experience": [],
-        "projects": [],
+        "personal": {**personal, **{
+            k: v for k, v in (rich.get("personal") or {}).items() if v
+        }},
+        "summary": rich.get("professional_summary", ""),
+        "years_experience": rich.get("years_experience"),
+        "technical_skills": rich.get("technical_skills", []),
+        "soft_skills": rich.get("soft_skills", []),
+        "education": _with_timestamps(rich.get("education", [])),
+        "experience": _with_timestamps(rich.get("experience", [])),
+        "projects": _with_timestamps(rich.get("projects", [])),
+        "certifications": _with_timestamps(rich.get("certifications", [])),
+        "languages": rich.get("languages", []),
         "skills": {"programming": [], "data": [], "bi": [],
                    "databases": [], "tools": []},
-        "languages": [],
-        "certifications": [],
         "target_roles": list(allowed.get("target_roles") or []),
         "legacy_skills_flat": list(allowed.get("skills") or []),
         "sectors": allowed.get("sectors") or [],
@@ -563,8 +606,33 @@ def save_profile_doc(db, data: dict, default_profile: dict) -> dict:
         "experience_level": allowed.get("experience_level") or "",
         "updated_at": utcnow_naive(),
     }
+    # Une grupos de skills legacy si vienen en data["skills"] dict.
+    if isinstance(data.get("skills"), dict):
+        for group, items in data["skills"].items():
+            if group in doc["skills"] and isinstance(items, list):
+                doc["skills"][group] = items
     _col(db, "profiles").document("base").set(doc)
     return get_profile_doc(db)
+
+
+def _with_timestamps(items: list) -> list:
+    """Convierte *_date (ISO) a datetime para Firestore (timestamp)."""
+    from datetime import datetime as _datetime
+
+    out = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        item = dict(item)
+        for key in ("start_date", "end_date", "issued_date", "expiry_date"):
+            value = item.get(key)
+            if isinstance(value, str) and value:
+                try:
+                    item[key] = _datetime.fromisoformat(value)
+                except ValueError:
+                    item[key] = None
+        out.append(item)
+    return out
 
 
 # ---------------------------------------------------------------------------
