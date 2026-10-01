@@ -32,6 +32,18 @@ export interface SearchProfileRun {
   errors: string[];
 }
 
+// CV de referencia subido al perfil (PDF). has_cv=false si no hay.
+export interface ProfileCvStatus {
+  profile_id: string;
+  has_cv: boolean;
+  filename?: string;
+  size_bytes?: number;
+  pages?: number;
+  chars?: number;
+  uploaded_at?: string | null;
+  download_url?: string | null;
+}
+
 export interface SchedulerStatus {
   enabled: boolean;
   configured: boolean;

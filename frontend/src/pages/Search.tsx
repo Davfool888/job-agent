@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Pause, Play, PlayCircle, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  Download,
+  FileText,
+  Pause,
+  Play,
+  PlayCircle,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { Header } from "../components/layout/Header";
 import {
   EmptyState,
@@ -9,14 +19,19 @@ import {
 } from "../components/jobs/States";
 import {
   createSearchProfile,
+  deleteProfileCv,
   deleteSearchProfile,
+  fetchProfileCv,
   fetchSchedulerStatus,
   fetchSearchProfiles,
+  profileCvDownloadUrl,
   runSearchProfile,
   updateSearchProfile,
+  uploadProfileCv,
 } from "../services/searchProfiles";
 import { fetchSources } from "../services/jobs";
 import type {
+  ProfileCvStatus,
   SchedulerStatus,
   SearchProfile,
 } from "../types/searchProfile";
@@ -59,6 +74,13 @@ function formatDateTime(iso: string | null): string {
   });
 }
 
+function formatBytes(n: number | null | undefined): string {
+  const bytes = n ?? 0;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export function Search() {
   const [profiles, setProfiles] = useState<SearchProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,6 +93,8 @@ export function Search() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [cvMap, setCvMap] = useState<Record<string, ProfileCvStatus>>({});
+  const [cvBusy, setCvBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,6 +106,16 @@ export function Search() {
       ]);
       setProfiles(list);
       setScheduler(status);
+      // CVs de referencia (uno por perfil): un fallo individual no
+      // rompe la lista.
+      const cvs = await Promise.all(
+        list.map((p) =>
+          fetchProfileCv(p.id).catch(
+            () => ({ profile_id: p.id, has_cv: false }) as ProfileCvStatus,
+          ),
+        ),
+      );
+      setCvMap(Object.fromEntries(cvs.map((c) => [c.profile_id, c])));
       try {
         setAllSources(await fetchSources());
       } catch {
@@ -188,8 +222,42 @@ export function Search() {
     }
   };
 
-  const runNow = async (p: SearchProfile) => {
-    setBusyId(p.id);
+  const uploadCv = async (p: SearchProfile, file: File | undefined) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setNotice("Solo se aceptan archivos PDF.");
+      return;
+    }
+    setCvBusy(p.id);
+    setNotice(null);
+    try {
+      const st = await uploadProfileCv(p.id, file);
+      setCvMap((m) => ({ ...m, [p.id]: st }));
+      setNotice(
+        `CV de referencia guardado en "${p.name}" (${st.pages ?? 0} pág.).`,
+      );
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Error subiendo el CV");
+    } finally {
+      setCvBusy(null);
+    }
+  };
+
+  const removeCv = async (p: SearchProfile) => {
+    setCvBusy(p.id);
+    setNotice(null);
+    try {
+      await deleteProfileCv(p.id);
+      setCvMap((m) => ({ ...m, [p.id]: { profile_id: p.id, has_cv: false } }));
+      setNotice(`CV de referencia eliminado de "${p.name}".`);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Error eliminando el CV");
+    } finally {
+      setCvBusy(null);
+    }
+  };
+
+  const runNow = async (p: SearchProfile) => {    setBusyId(p.id);
     setNotice(null);
     try {
       const r = await runSearchProfile(p.id);
@@ -440,6 +508,107 @@ export function Search() {
                             Error: {p.last_error}
                           </p>
                         )}
+                        <div className="cv-ref">
+                          <FileText size={14} />
+                          {(() => {
+                            const cv = cvMap[p.id];
+                            const busy = cvBusy === p.id;
+                            if (!cv) {
+                              return (
+                                <span className="cv-ref-muted">
+                                  Cargando CV…
+                                </span>
+                              );
+                            }
+                            if (!cv.has_cv) {
+                              return (
+                                <>
+                                  <span className="cv-ref-muted">
+                                    Sin CV de referencia (será el ejemplo
+                                    para sus ofertas)
+                                  </span>
+                                  <span className="spacer" />
+                                  <label
+                                    className="btn btn-ghost btn-sm"
+                                    style={{
+                                      opacity: busy ? 0.55 : 1,
+                                      pointerEvents: busy ? "none" : "auto",
+                                    }}
+                                  >
+                                    <Upload size={14} />{" "}
+                                    {busy ? "Subiendo…" : "Subir PDF"}
+                                    <input
+                                      type="file"
+                                      accept="application/pdf,.pdf"
+                                      hidden
+                                      disabled={busy}
+                                      onChange={(e) => {
+                                        void uploadCv(
+                                          p,
+                                          e.target.files?.[0],
+                                        );
+                                        e.target.value = "";
+                                      }}
+                                    />
+                                  </label>
+                                </>
+                              );
+                            }
+                            return (
+                              <>
+                                <span>
+                                  <strong>{cv.filename}</strong> ·{" "}
+                                  {cv.pages ?? 0} pág. ·{" "}
+                                  {formatBytes(cv.size_bytes)} ·{" "}
+                                  {formatDateTime(cv.uploaded_at ?? null)}
+                                </span>
+                                {(cv.chars ?? 0) === 0 && (
+                                  <span
+                                    className="cv-ref-warn"
+                                    title="El PDF no trae texto extraíble (escaneado?): solo sirve como archivo, no como ejemplo de generación."
+                                  >
+                                    sin texto
+                                  </span>
+                                )}
+                                <span className="spacer" />
+                                <a
+                                  className="btn btn-ghost btn-sm"
+                                  href={profileCvDownloadUrl(p.id)}
+                                >
+                                  <Download size={14} /> Descargar
+                                </a>
+                                <label
+                                  className="btn btn-ghost btn-sm"
+                                  style={{
+                                    opacity: busy ? 0.55 : 1,
+                                    pointerEvents: busy ? "none" : "auto",
+                                  }}
+                                  title="Reemplazar el PDF actual"
+                                >
+                                  <Upload size={14} />{" "}
+                                  {busy ? "Subiendo…" : "Reemplazar"}
+                                  <input
+                                    type="file"
+                                    accept="application/pdf,.pdf"
+                                    hidden
+                                    disabled={busy}
+                                    onChange={(e) => {
+                                      void uploadCv(p, e.target.files?.[0]);
+                                      e.target.value = "";
+                                    }}
+                                  />
+                                </label>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  disabled={busy}
+                                  onClick={() => removeCv(p)}
+                                >
+                                  <Trash2 size={14} /> Eliminar
+                                </button>
+                              </>
+                            );
+                          })()}
+                        </div>
                       </div>
                     </div>
                     <div className="job-card-foot">

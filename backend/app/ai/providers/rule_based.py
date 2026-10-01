@@ -34,8 +34,10 @@ class RuleBasedProvider(AIProvider):
         }
 
     def generate_cv_content(
-        self, job: dict, analysis: dict, profile: dict
+        self, job: dict, analysis: dict, profile: dict,
+        reference_cvs: list | None = None,
     ) -> dict:
+        """Deterministico: ignora ejemplos (sin IA que los interprete)."""
         from app.agents.cv_agent import CVAgent
 
         return CVAgent().select_content(job, analysis, profile).model_dump()

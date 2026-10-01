@@ -124,3 +124,12 @@ SCHEDULER_CRON_SECRET = os.getenv("SCHEDULER_CRON_SECRET", "")
 CVS_DIR = BASE_DIR / "data" / "cvs"
 PROFILES_DIR = BASE_DIR / "data" / "profiles"
 BASE_CV_PATH = PROFILES_DIR / "base_cv.json"
+
+# --- CVs de referencia por perfil de busqueda (PDFs subidos en /search).
+# Un PDF por perfil: sirve de ejemplo de estilo para generar CVs
+# personalizados de las ofertas que ese perfil encuentre.
+PROFILE_CVS_DIR = BASE_DIR / "data" / "profile_cvs"
+MAX_CV_BYTES = int(os.getenv("MAX_CV_BYTES", str(10 * 1024 * 1024)))
+# Cuantos CVs de referencia entran al prompt y con cuantos caracteres c/u.
+REFERENCE_CV_MAX_PROFILES = 2
+REFERENCE_CV_MAX_CHARS = 3000

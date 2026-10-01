@@ -954,3 +954,37 @@ def save_user_rich_profile(db, uid: str, profile: dict) -> dict:
     ref.set({"profile": dict(profile or {}), "updated_at": utcnow_naive()},
             merge=True)
     return get_user_rich_profile(db, uid)
+
+
+# ---------------------------------------------------------------------------
+# CVs de referencia por perfil de busqueda (solo metadatos; el PDF y el
+# texto viven en disco: data/profile_cvs/profile_<id>/{cv.pdf,cv.txt}).
+# ---------------------------------------------------------------------------
+
+def get_profile_cv(db, profile_id) -> dict | None:
+    snap = _col(db, "profile_cvs").document(str(profile_id)).get()
+    if not snap.exists:
+        return None
+    data = dict(snap.to_dict() or {})
+    return {
+        "filename": data.get("filename") or "cv.pdf",
+        "size_bytes": int(data.get("size_bytes") or 0),
+        "pages": int(data.get("pages") or 0),
+        "chars": int(data.get("chars") or 0),
+        "uploaded_at": data.get("uploaded_at"),
+    }
+
+
+def save_profile_cv(db, profile_id, meta: dict) -> dict:
+    ref = _col(db, "profile_cvs").document(str(profile_id))
+    ref.set({**dict(meta or {}), "updated_at": meta.get("uploaded_at")},
+            merge=True)
+    return get_profile_cv(db, profile_id)
+
+
+def delete_profile_cv(db, profile_id) -> bool:
+    ref = _col(db, "profile_cvs").document(str(profile_id))
+    if not ref.get().exists:
+        return False
+    ref.delete()
+    return True

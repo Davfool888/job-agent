@@ -23,6 +23,7 @@ from app.database.connection import get_db
 from app.database.models import JOB_STATUSES
 from app.database.models import Job  # noqa: F401  (registra el modelo)
 from app.database.models import Profile  # noqa: F401
+from app.database.models import ProfileCV  # noqa: F401
 from app.database.models import User  # noqa: F401
 from app.database.models import UserProfile  # noqa: F401
 from app.database.models import UserRichProfile  # noqa: F401
@@ -456,6 +457,92 @@ def run_search_profile_now(profile_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail=f"Run fallo: {error}")
 
 
+@app.post("/search-profiles/{profile_id}/cv", status_code=201)
+async def upload_search_profile_cv(
+    profile_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Sube el CV de referencia del perfil (PDF, max 10 MB).
+
+    Uno por perfil: reemplazar sube de nuevo. El texto extraido queda
+    como ejemplo para generar CVs personalizados de sus ofertas."""
+    from app.services import profile_cvs as pcvs
+    from app.services import search_profiles as profiles
+
+    if not profiles.get_profile(db, profile_id):
+        raise HTTPException(status_code=404, detail="Perfil no encontrado.")
+    filename = (file.filename if file else "") or "cv.pdf"
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400, detail="Solo se aceptan archivos PDF.")
+    try:
+        content = await file.read()
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(
+            status_code=400, detail=f"No se pudo leer el archivo: {error}")
+    try:
+        return pcvs.save_profile_cv(db, profile_id, filename, content)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@app.get("/search-profiles/{profile_id}/cv")
+def get_search_profile_cv(profile_id: str, db: Session = Depends(get_db)):
+    """Estado del CV de referencia del perfil."""
+    from app.services import profile_cvs as pcvs
+    from app.services import search_profiles as profiles
+
+    if not profiles.get_profile(db, profile_id):
+        raise HTTPException(status_code=404, detail="Perfil no encontrado.")
+    meta = pcvs.get_profile_cv(db, profile_id)
+    if not meta:
+        return {"profile_id": str(profile_id), "has_cv": False}
+    return {**meta, "has_cv": True}
+
+
+@app.get("/search-profiles/{profile_id}/cv/download")
+def download_search_profile_cv(
+    profile_id: str, db: Session = Depends(get_db)
+):
+    """Descarga el PDF de referencia del perfil."""
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+
+    from app.services import profile_cvs as pcvs
+    from app.services import search_profiles as profiles
+
+    if not profiles.get_profile(db, profile_id):
+        raise HTTPException(status_code=404, detail="Perfil no encontrado.")
+    meta = pcvs.get_profile_cv(db, profile_id)
+    target = pcvs.pdf_path(profile_id)
+    if not meta or not Path(target).exists():
+        raise HTTPException(
+            status_code=404, detail="Este perfil no tiene CV de referencia.")
+    return FileResponse(
+        path=str(target),
+        filename=meta["filename"],
+        media_type="application/pdf",
+    )
+
+
+@app.delete("/search-profiles/{profile_id}/cv", status_code=204)
+def delete_search_profile_cv(
+    profile_id: str, db: Session = Depends(get_db)
+):
+    """Elimina el CV de referencia del perfil (archivo + metadatos)."""
+    from app.services import profile_cvs as pcvs
+    from app.services import search_profiles as profiles
+
+    if not profiles.get_profile(db, profile_id):
+        raise HTTPException(status_code=404, detail="Perfil no encontrado.")
+    if not pcvs.delete_profile_cv(db, profile_id):
+        raise HTTPException(
+            status_code=404, detail="Este perfil no tiene CV de referencia.")
+    return None
+
+
 @app.get("/scheduler/status")
 def scheduler_status():
     """Estado del programador interno (ultimo tick, perfiles en curso)."""
@@ -866,9 +953,14 @@ def generate_job_cv(
         "match_score": job.match_score,
     }
     job_dict = {"title": job.title or "", "description": job.description or ""}
+    # CVs de referencia de los perfiles que encontraron esta oferta:
+    # entran al prompt como ejemplos de estilo (nunca como hechos).
+    from app.services import profile_cvs as pcvs
+
+    references = pcvs.reference_texts_for_job(db, job)
     try:
         generated = get_router().generate_cv_content(
-            job_dict, analysis, profile
+            job_dict, analysis, profile, reference_cvs=references or None
         )
         content = CVContent.model_validate(generated)
     except Exception as error:  # noqa: BLE001
@@ -906,6 +998,7 @@ def generate_job_cv(
         "match_score": score,
         "decision": decision,
         "provider": generated.get("provider"),
+        "reference_cvs_used": [r["profile_id"] for r in references],
         "cv_generated": True,
         "tex_path": result["tex_path"],
         "pdf_path": result["pdf_path"],

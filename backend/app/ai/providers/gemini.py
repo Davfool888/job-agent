@@ -29,6 +29,25 @@ def _extract_json(text: str) -> dict:
     return json.loads(cleaned[start : end + 1])
 
 
+def _reference_section(reference_cvs: list | None) -> str:
+    """Bloque de CVs ejemplo para el prompt. Vacio si no hay.
+
+    Son SOLO estilo/estructura: prohibe copiar sus datos como hechos."""
+    refs = [r for r in (reference_cvs or []) if (r.get("text") or "").strip()]
+    if not refs:
+        return ""
+    blocks = []
+    for i, ref in enumerate(refs, 1):
+        label = ref.get("label") or f"perfil {ref.get('profile_id', i)}"
+        blocks.append(f"--- Ejemplo {i} ({label}) ---\n{ref['text'].strip()}")
+    return (
+        "CVS DE REFERENCIA (solo estilo y estructura: IGNORA sus datos, "
+        "no copies nombres, empresas, fechas, logros ni tecnologias de "
+        "estos ejemplos como si fueran del candidato):\n"
+        + "\n\n".join(blocks)
+    )
+
+
 class GeminiProvider(AIProvider):
     name = "gemini"
 
@@ -75,7 +94,8 @@ class GeminiProvider(AIProvider):
         return _extract_json(self._generate(prompt, AI_TIMEOUT_SECONDS))
 
     def generate_cv_content(
-        self, job: dict, analysis: dict, profile: dict
+        self, job: dict, analysis: dict, profile: dict,
+        reference_cvs: list | None = None,
     ) -> dict:
         from app.config import AI_TIMEOUT_SECONDS
 
@@ -86,5 +106,6 @@ class GeminiProvider(AIProvider):
             evidence=", ".join((analysis.get("evidence") or [])[:10]),
             detected_role=analysis.get("detected_role") or "N/A",
             profile_json=json.dumps(profile, ensure_ascii=False)[:8000],
+            reference_section=_reference_section(reference_cvs),
         )
         return _extract_json(self._generate(prompt, AI_TIMEOUT_SECONDS))

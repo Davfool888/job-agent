@@ -79,11 +79,13 @@ class AIRouter:
         return self._attempt("analyze_job", {"job": job, "profile": profile})
 
     def generate_cv_content(
-        self, job: dict, analysis: dict, profile: dict
+        self, job: dict, analysis: dict, profile: dict,
+        reference_cvs: list | None = None,
     ) -> dict:
         return self._attempt(
             "generate_cv_content",
-            {"job": job, "analysis": analysis, "profile": profile},
+            {"job": job, "analysis": analysis, "profile": profile,
+             "reference_cvs": reference_cvs},
         )
 
 

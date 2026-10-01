@@ -12,6 +12,6 @@ Descripcion:
 
 PERFIL (fuente unica de verdad):
 {profile_json}
-
+{reference_section}
 Responde con este esquema exacto:
 {{"professional_summary": "2-3 lineas adaptadas a la oferta, solo con datos del perfil", "selected_experience": [{{"title": "", "company": "", "period": "", "bullets": []}}], "selected_projects": [{{"name": "", "description": "", "technologies": []}}], "skills": ["max 12, solo del perfil"], "education": [{{"degree": "", "institution": "", "year": ""}}]}}

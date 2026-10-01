@@ -18,6 +18,7 @@ class AIProvider(ABC):
 
     @abstractmethod
     def generate_cv_content(
-        self, job: dict, analysis: dict, profile: dict
+        self, job: dict, analysis: dict, profile: dict,
+        reference_cvs: list | None = None,
     ) -> dict:
         """Devuelve dict validable como CVContent."""

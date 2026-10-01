@@ -439,3 +439,25 @@ class UserRichProfile(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+
+class ProfileCV(Base):
+    """CV de referencia (PDF) subido a un perfil de busqueda.
+
+    Un PDF por perfil: el archivo vive en disco
+    (data/profile_cvs/profile_<id>/cv.pdf + cv.txt); aqui solo
+    metadatos. Sirve de ejemplo para generar CVs personalizados."""
+
+    __tablename__ = "profile_cvs"
+
+    profile_id = Column(String(64), primary_key=True, index=True)
+
+    filename = Column(String(300), nullable=False, default="cv.pdf")
+
+    size_bytes = Column(Integer, nullable=False, default=0)
+
+    pages = Column(Integer, nullable=False, default=0)
+
+    chars = Column(Integer, nullable=False, default=0)
+
+    uploaded_at = Column(DateTime, default=datetime.utcnow)

@@ -12,6 +12,7 @@ import httpx
 from app.ai.providers.base import AIProvider
 from app.ai.providers.gemini import _extract_json
 from app.ai.providers.gemini import _load_prompt
+from app.ai.providers.gemini import _reference_section
 from app.config import OPENAI_COMPAT_API_KEY
 from app.config import OPENAI_COMPAT_BASE_URL
 from app.config import OPENAI_COMPAT_MODEL
@@ -70,7 +71,8 @@ class OpenAICompatProvider(AIProvider):
         )
 
     def generate_cv_content(
-        self, job: dict, analysis: dict, profile: dict
+        self, job: dict, analysis: dict, profile: dict,
+        reference_cvs: list | None = None,
     ) -> dict:
         from app.config import AI_TIMEOUT_SECONDS
 
@@ -81,6 +83,7 @@ class OpenAICompatProvider(AIProvider):
             evidence=", ".join((analysis.get("evidence") or [])[:10]),
             detected_role=analysis.get("detected_role") or "N/A",
             profile_json=json.dumps(profile, ensure_ascii=False)[:8000],
+            reference_section=_reference_section(reference_cvs),
         )
         return _extract_json(
             self._chat("Responde exclusivamente con JSON valido.",

@@ -424,6 +424,45 @@ a {
   padding-left: 30px;
 }
 
+/* ---------- CV de referencia por perfil ---------- */
+.cv-ref {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+
+.cv-ref svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.cv-ref .spacer {
+  flex: 1;
+}
+
+.cv-ref-muted {
+  color: var(--text-muted);
+}
+
+.cv-ref-warn {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  white-space: nowrap;
+}
+
 .main {
   flex: 1;
   min-width: 0;

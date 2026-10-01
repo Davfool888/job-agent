@@ -1,5 +1,6 @@
-import { api } from "./api";
+import { api, API_URL } from "./api";
 import type {
+  ProfileCvStatus,
   SchedulerStatus,
   SearchProfile,
   SearchProfileRun,
@@ -38,6 +39,34 @@ export async function runSearchProfile(id: string): Promise<SearchProfileRun> {
     `/search-profiles/${id}/run`,
   );
   return data;
+}
+
+export async function fetchProfileCv(id: string): Promise<ProfileCvStatus> {
+  const { data } = await api.get<ProfileCvStatus>(
+    `/search-profiles/${id}/cv`,
+  );
+  return data;
+}
+
+export async function uploadProfileCv(
+  id: string,
+  file: File,
+): Promise<ProfileCvStatus> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const { data } = await api.post<ProfileCvStatus>(
+    `/search-profiles/${id}/cv`,
+    form,
+  );
+  return data;
+}
+
+export async function deleteProfileCv(id: string): Promise<void> {
+  await api.delete(`/search-profiles/${id}/cv`);
+}
+
+export function profileCvDownloadUrl(id: string): string {
+  return `${API_URL}/search-profiles/${id}/cv/download`;
 }
 
 export async function fetchSchedulerStatus(): Promise<SchedulerStatus> {
