@@ -76,8 +76,12 @@ def chromium_available() -> bool:
     try:
         from playwright.sync_api import sync_playwright
 
+        # --no-sandbox: contenedores sin privilegios.
+        # --disable-dev-shm-usage: /dev/shm tiny en Render/Docker
+        # (hace crashear Chromium con poca RAM si falta).
         with sync_playwright() as runner:
-            browser = runner.chromium.launch(args=["--no-sandbox"])
+            browser = runner.chromium.launch(args=[
+                "--no-sandbox", "--disable-dev-shm-usage"])
             browser.close()
         return True
     except Exception:  # noqa: BLE001
@@ -103,7 +107,8 @@ def html_to_pdf(
         ) from error
     try:
         with sync_playwright() as runner:
-            browser = runner.chromium.launch(args=["--no-sandbox"])
+            browser = runner.chromium.launch(args=[
+                "--no-sandbox", "--disable-dev-shm-usage"])
             try:
                 page = browser.new_page(java_script_enabled=False)
                 page.set_content(html_text, wait_until="load",

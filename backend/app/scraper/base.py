@@ -249,6 +249,13 @@ class BaseScraper:
         for attempt in range(1, self.max_retries + 1):
             try:
                 response = self.session.get(url, timeout=25)
+                if response.status_code == 404:
+                    # Permanente (oferta eliminada/expirada): sin reintentos.
+                    raise RuntimeError(
+                        f"{self.source}: la URL ya no existe (404, "
+                        "probablemente expiró): "
+                        f"{url[:120]}"
+                    )
                 if response.status_code in (403, 429):
                     wait = self.delay * attempt * 2
                     logger.warning(
@@ -264,6 +271,8 @@ class BaseScraper:
                     continue
                 response.raise_for_status()
                 return response.text
+            except RuntimeError:
+                raise
             except requests.RequestException as error:
                 last_error = error
                 logger.warning(

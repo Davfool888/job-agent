@@ -1282,6 +1282,13 @@ def get_job_detail(job_id: str, db: Session = Depends(get_db)):
             job.url
         )
     except Exception as error:  # noqa: BLE001
+        message = str(error)
+        if "404" in message or "expir" in message.lower():
+            raise HTTPException(
+                status_code=404,
+                detail="La oferta original ya no está disponible "
+                "(expiró o fue eliminada en la fuente).",
+            )
         raise HTTPException(
             status_code=502,
             detail=f"Error consultando el detalle: {error}",

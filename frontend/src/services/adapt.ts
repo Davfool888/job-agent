@@ -28,11 +28,28 @@ export const ADAPT_STAGES = [
 export async function adaptCv(
   jobId: number | string,
 ): Promise<AdaptCvResult> {
-  const { data } = await api.post<AdaptCvResult>(`/jobs/${jobId}/adapt-cv`);
-  if (!data.success) {
-    throw new Error(data.error?.message ?? "No fue posible generar el CV.");
+  try {
+    const { data } = await api.post<AdaptCvResult>(`/jobs/${jobId}/adapt-cv`);
+    if (!data.success) {
+      throw new Error(data.error?.message ?? "No fue posible generar el CV.");
+    }
+    return data;
+  } catch (e) {
+    // Sin respuesta del servidor (timeout, instancia dormida o caida):
+    // el navegador lo muestra como fallo de red/CORS.
+    if (
+      typeof e === "object" &&
+      e !== null &&
+      "request" in e &&
+      !("response" in e && (e as { response?: unknown }).response)
+    ) {
+      throw new Error(
+        "El servidor no respondió a tiempo (instancia gratuita dormida o " +
+          "saturada generando el PDF). Espera 1 minuto y reintenta.",
+      );
+    }
+    throw e;
   }
-  return data;
 }
 
 export function adaptDownloadUrl(
