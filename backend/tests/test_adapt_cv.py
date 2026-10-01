@@ -128,6 +128,50 @@ def test_pdf_rejects_empty_html(tmp_path):
     assert exc.value.code == "PDF_EMPTY_HTML"
 
 
+def test_pdf_missing_browser_triggers_install(monkeypatch, tmp_path):
+    """Sin Chromium: BROWSER_MISSING + instalacion en fondo (una vez)."""
+    from app.adapt import pdf as pdf_module
+
+    calls: list = []
+
+    class FakeBrowser:
+        def close(self):
+            pass
+
+    class FakeChromium:
+        def launch(self, **kwargs):
+            raise RuntimeError(
+                "BrowserType.launch: Executable doesn't exist at /x")
+
+    class FakeRunner:
+        chromium = FakeChromium()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    import playwright.sync_api as pw_sync
+
+    monkeypatch.setattr(pw_sync, "sync_playwright",
+                        lambda: FakeRunner())
+    monkeypatch.setattr(
+        pdf_module.subprocess, "run",
+        lambda *a, **k: calls.append(a) or __import__(
+            "subprocess").CompletedProcess(a, 0))
+    with pytest.raises(pdf_module.PdfError) as exc:
+        pdf_module.html_to_pdf("<h1>x</h1>", tmp_path / "cv.pdf")
+    assert exc.value.code == "BROWSER_MISSING"
+    import time
+
+    deadline = time.time() + 5
+    while not calls and time.time() < deadline:
+        time.sleep(0.05)
+    assert calls, "debió disparar la instalación en fondo"
+    assert "install" in " ".join(map(str, calls[0]))
+
+
 def test_endpoint_adapt_flow():
     from app.database.models import Job
 

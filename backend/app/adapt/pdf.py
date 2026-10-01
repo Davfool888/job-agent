@@ -2,9 +2,16 @@
 
 Servicio independiente: recibe HTML, devuelve un PDF A4 verificado.
 JavaScript apagado (el CV no lo necesita) y sin recursos externos.
+
+Si Chromium no esta instalado (servidor nuevo), se dispara su
+instalacion en segundo plano y se devuelve BROWSER_MISSING con
+instrucciones; el siguiente intento ya funciona.
 """
 from __future__ import annotations
 
+import subprocess
+import sys
+import threading
 from pathlib import Path
 
 
@@ -14,6 +21,55 @@ class PdfError(RuntimeError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+_install_lock = threading.Lock()
+_installing = False
+
+
+def _executable_missing(message: str) -> bool:
+    return "Executable doesn't exist" in (message or "")
+
+
+def _trigger_background_install() -> None:
+    """Descarga Chromium sin bloquear el request (una sola vez)."""
+    global _installing
+    with _install_lock:
+        if _installing:
+            return
+        _installing = True
+
+    def _run() -> None:
+        global _installing
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "playwright", "install",
+                 "chromium", "--only-shell"],
+                timeout=600, check=False, capture_output=True,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            with _install_lock:
+                _installing = False
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def warmup_chromium() -> bool:
+    """Precalienta/instala Chromium al arrancar (no bloqueante si falta).
+    Devuelve True si quedo listo de inmediato."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as runner:
+            browser = runner.chromium.launch(args=["--no-sandbox"])
+            browser.close()
+        return True
+    except Exception as error:  # noqa: BLE001
+        if _executable_missing(str(error)):
+            _trigger_background_install()
+        return False
 
 
 def chromium_available() -> bool:
@@ -66,6 +122,14 @@ def html_to_pdf(
         raise
     except Exception as error:  # noqa: BLE001
         message = str(error)
+        if _executable_missing(message):
+            _trigger_background_install()
+            raise PdfError(
+                "BROWSER_MISSING",
+                "Motor PDF ausente en el servidor: instalacion iniciada, "
+                "reintenta en 2 minutos. (Permanente: agrega "
+                "'playwright install chromium --only-shell' al build).",
+            ) from error
         if "Timeout" in type(error).__name__ or "timeout" in message.lower():
             raise PdfError(
                 "PDF_TIMEOUT",

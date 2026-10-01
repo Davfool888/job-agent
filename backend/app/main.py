@@ -74,6 +74,14 @@ async def lifespan(app: FastAPI):
         from app.scheduler import start_scheduler
 
         start_scheduler()
+        # Precalienta Chromium para Adaptar-perfil (instala en fondo
+        # si falta; nunca bloquea el arranque).
+        try:
+            from app.adapt.pdf import warmup_chromium
+
+            warmup_chromium()
+        except Exception:  # noqa: BLE001
+            pass
     yield
     from app.scheduler import stop_scheduler
 
