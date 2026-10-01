@@ -13,7 +13,12 @@ import {
 import { useJobs, useProfileOptions } from "../hooks/useApi";
 import { fetchJobsSince } from "../services/searchProfiles";
 import type { Job } from "../types/job";
-import { applyJobFilters, profileOptions, uniqueSorted } from "../utils/jobs";
+import {
+  applyJobFilters,
+  profileOptions,
+  uniqueLocations,
+  uniqueSorted,
+} from "../utils/jobs";
 
 export function Jobs() {
   // Excluye descartadas: esas viven en /discarded.
@@ -63,7 +68,9 @@ export function Jobs() {
   const visible = useMemo(() => applyJobFilters(active, filters), [active, filters]);
 
   const companies = useMemo(() => uniqueSorted(active, (j) => j.company), [active]);
-  const locations = useMemo(() => uniqueSorted(active, (j) => j.location), [active]);
+  // Sin colapsar variantes, el desplegable de ubicaciones era una lista de
+// 30 versions de "Bogotá" y ninguna marcaba resultados.
+const locations = useMemo(() => uniqueLocations(active), [active]);
   const sources = useMemo(() => uniqueSorted(active, (j) => j.source), [active]);
   const profiles = useMemo(
     () => profileOptions(active, allProfiles),

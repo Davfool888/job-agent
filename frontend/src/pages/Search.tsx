@@ -41,6 +41,10 @@ import type {
 import { COLOMBIAN_CITIES } from "../utils/cities";
 import { SKILLS } from "../utils/skills";
 import { TITLES } from "../utils/titles";
+import {
+  MODALITY_FALLBACK,
+  canonicalLocation,
+} from "../utils/profileOptions";
 
 const EMPTY_FORM = {
   name: "",
@@ -66,8 +70,6 @@ const FREQUENCY_OPTIONS = [
   { value: 900, label: "Cada 15 horas" },
   { value: 1440, label: "Cada 24 horas" },
 ];
-
-const MODALITY_FALLBACK = ["Presencial", "Híbrido", "Remoto"];
 
 export const MAX_AGE_OPTIONS = [
   { value: 0, label: "Todas (sin límite)" },
@@ -171,8 +173,23 @@ export function Search() {
     [catalogs],
   );
   const modalityOptions = useMemo(
-    () => catalogs?.modalities.map((m) => m.label) ?? MODALITY_FALLBACK,
+    () =>
+      catalogs?.modalities.map((m) => ({ id: m.id, label: m.label })) ??
+      MODALITY_FALLBACK,
     [catalogs],
+  );
+  // Ciudad guardada como texto libre legacy -> id canonico del catalogo,
+  // para que el select muestre la opcion correcta.
+  const locationValue = useMemo(
+    () => canonicalLocation(form.location, cityOptions),
+    [form.location, cityOptions],
+  );
+  const citySelectOptions = useMemo(
+    () =>
+      locationValue && !cityOptions.includes(locationValue)
+        ? [...cityOptions, locationValue]
+        : cityOptions,
+    [cityOptions, locationValue],
   );
 
   const openCreate = () => {
@@ -401,13 +418,21 @@ export function Search() {
                   </label>
                   <label>
                     Ubicación
-                    <SuggestInput
-                      value={form.location}
-                      onChange={(v) => setForm({ ...form, location: v })}
-                      options={cityOptions}
-                      placeholder="Bogotá"
-                      title="Escribe y elige de la lista"
-                    />
+                    <select
+                      className="select"
+                      value={locationValue}
+                      onChange={(e) =>
+                        setForm({ ...form, location: e.target.value })
+                      }
+                      title="Ciudad donde buscar. Elegir de la lista evita filtros por ciudad que devuelven 0 ofertas."
+                    >
+                      <option value="">Todo el país</option>
+                      {citySelectOptions.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label>
                     Modalidad
@@ -418,8 +443,8 @@ export function Search() {
                     >
                       <option value="">Cualquiera</option>
                       {modalityOptions.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
+                        <option key={m.id} value={m.id}>
+                          {m.label}
                         </option>
                       ))}
                     </select>

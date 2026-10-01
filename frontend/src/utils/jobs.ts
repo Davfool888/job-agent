@@ -1,5 +1,6 @@
 import type { Job } from "../types/job";
 import type { JobFilterState } from "../types/filters";
+import { normText, uniqueCanonicalLocations } from "./profileOptions";
 
 // Filtrado y ordenamiento en cliente sobre datos reales del backend.
 // (El backend expone /jobs?status=&limit=; los filtros finos viven aqui
@@ -31,6 +32,27 @@ export function postedToday(j: Job, now = new Date()): boolean {
   return isSameLocalDay(t, now);
 }
 
+/**
+ * La ubicacion del filtro es canonica ("Bogotá"), pero el scraper guarda
+ * variantes ("Bogotá, D.C., Bogotá, D.C."). Sin normalizar, elegir Bogotá
+ * en el filtro ocultaba ofertas que si están en Bogotá.
+ */
+function locationMatches(
+  jobLocation: string | null | undefined,
+  filterLocation: string,
+): boolean {
+  const wanted = normText(filterLocation);
+  if (!wanted) return true;
+  const actual = normText(jobLocation);
+  if (!actual) return false;
+  if (actual === wanted) return true;
+  // Compara por la parte inicial antes de la primera coma.
+  const head = (v: string) => v.split(",")[0].trim();
+  if (head(actual) === wanted) return true;
+  // "bogota" dentro de "bogota d c" y variantes de sufijos.
+  return actual.startsWith(`${wanted} `);
+}
+
 export function applyJobFilters(jobs: Job[], f: JobFilterState): Job[] {
   const text = f.text.trim().toLowerCase();
   const now = Date.now();
@@ -58,7 +80,7 @@ export function applyJobFilters(jobs: Job[], f: JobFilterState): Job[] {
       }
     }
     if (f.company && j.company !== f.company) return false;
-    if (f.location && j.location !== f.location) return false;
+    if (f.location && !locationMatches(j.location, f.location)) return false;
     if (f.source && j.source !== f.source) return false;
     if (
       f.profile &&
@@ -118,6 +140,14 @@ export function uniqueSorted(
     if (v) set.add(v);
   }
   return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Ubicaciones para el filtro: colapsa las variantes del scraper
+ * ("Bogotá, D.C., Bogotá, D.C.", "Bogotá") en una sola opción.
+ */
+export function uniqueLocations(jobs: Job[]): string[] {
+  return uniqueCanonicalLocations(jobs.map((j) => j.location));
 }
 
 export interface ProfileOption {

@@ -61,37 +61,36 @@ def _trigger_background_install() -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
-def warmup_chromium() -> bool:
-    """Precalienta/instala Chromium al arrancar (no bloqueante si falta).
-    Devuelve True si quedo listo de inmediato."""
+def _browser_present() -> bool:
+    """True si el ejecutable existe (sin lanzar nada: 0 RAM)."""
     try:
+        import os
+
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as runner:
-            browser = runner.chromium.launch(args=["--no-sandbox"])
-            browser.close()
-        return True
-    except Exception as error:  # noqa: BLE001
-        if _executable_missing(str(error)):
-            _trigger_background_install()
+            path = runner.chromium.executable_path
+        return bool(path) and os.path.exists(path)
+    except Exception:  # noqa: BLE001
         return False
+
+
+def warmup_chromium() -> bool:
+    """Asegura Chromium al arrancar sin picos de memoria: solo verifica
+    el archivo y, si falta, instala en fondo. Nunca lanza el navegador
+    (en 512MB un launch en boot puede tumbar el arranque)."""
+    try:
+        if _browser_present():
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    _trigger_background_install()
+    return False
 
 
 def chromium_available() -> bool:
-    try:
-        from playwright.sync_api import sync_playwright
-
-        # --no-sandbox: contenedores sin privilegios.
-        # --disable-dev-shm-usage: /dev/shm tiny en Render/Docker
-        # (hace crashear Chromium con poca RAM si falta).
-        with sync_playwright() as runner:
-            browser = runner.chromium.launch(args=[
-                "--no-sandbox", "--disable-dev-shm-usage",
-                "--disable-gpu", "--no-zygote", "--single-process"])
-            browser.close()
-        return True
-    except Exception:  # noqa: BLE001
-        return False
+    """Solo verifica presencia (sin lanzar: apto para chequeos baratos)."""
+    return _browser_present()
 
 
 def html_to_pdf(

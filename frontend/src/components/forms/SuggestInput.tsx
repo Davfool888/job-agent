@@ -20,6 +20,13 @@ interface Props {
   maxVisible?: number;
   disabled?: boolean;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  /**
+   * Modo estricto: el valor debe coincidir con una opcion del catalogo
+   * (insensible a tildes/mayusculas). Al salir del campo con texto que no
+   * coincide, se revierte a vacio para evitar typos que devuelven
+   * 0 resultados. Enter sin coincidencias no dispara busqueda.
+   */
+  strict?: boolean;
 }
 
 export function SuggestInput({
@@ -31,6 +38,7 @@ export function SuggestInput({
   maxVisible = 8,
   disabled,
   onKeyDown,
+  strict = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -68,13 +76,22 @@ export function SuggestInput({
     setOpen(false);
   };
 
+  const matchesOption = (v: string) => {
+    const q = norm(v);
+    if (!q) return true;
+    return options.some((o) => norm(o) === q);
+  };
+
   return (
     <div className="suggest" ref={boxRef}>
       <input
         className="input suggest-input"
         value={value}
         placeholder={placeholder}
-        title={title}
+        title={
+          title ??
+          (strict ? "Elige una opción de la lista para evitar errores" : undefined)
+        }
         disabled={disabled}
         role="combobox"
         aria-expanded={open}
@@ -85,6 +102,11 @@ export function SuggestInput({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onBlur={() => {
+          if (strict && value.trim() && !matchesOption(value)) {
+            onChange("");
+          }
+        }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" && open && filtered.length > 0) {
             e.preventDefault();
@@ -101,6 +123,12 @@ export function SuggestInput({
             // accidentales con el texto a medias).
             e.preventDefault();
             pick(filtered[highlight] ?? filtered[0]);
+            return;
+          }
+          if (e.key === "Enter" && strict && open && filtered.length === 0) {
+            // Estricto sin coincidencias: no buscar con un typo.
+            e.preventDefault();
+            setOpen(false);
             return;
           }
           if (e.key === "Escape") {

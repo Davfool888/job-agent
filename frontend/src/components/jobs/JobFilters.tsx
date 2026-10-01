@@ -71,6 +71,7 @@ export function JobFilters({
           className="select"
           value={value.location}
           onChange={(e) => set({ location: e.target.value })}
+          title="Las ubicaciones se agrupan por ciudad: el scraper devuelve variantes como “Bogotá, D.C.”"
         >
           <option value="">Todas las ubicaciones</option>
           {locations.map((l) => (

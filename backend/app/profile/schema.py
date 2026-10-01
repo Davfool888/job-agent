@@ -230,6 +230,160 @@ def _to_years(value) -> float | None:
     return number
 
 
+def parse_salary(value) -> dict:
+    """Salario -> {amount, currency, period} best-effort.
+
+    Acepta el formato canonico "2500000 COP mensual", un numero
+    suelto ("3500000") o partes estructuradas
+    (min_salary_amount/currency/period). Jamas falla: lo irreconocible
+    se devuelve como texto en 'raw'.
+    """
+    out: dict = {"amount": None, "currency": None, "period": None,
+                 "raw": ""}
+    if value is None:
+        return out
+    text = str(value).strip()
+    out["raw"] = text
+    if not text:
+        return out
+    match = re.match(
+        r"^([\d][\d.,]*)\s*([A-Za-z]{3})?\s*(.*)$", text)
+    if match:
+        digits = re.sub(r"[.,]", "", match.group(1))
+        try:
+            out["amount"] = int(digits) if digits else None
+        except ValueError:
+            out["amount"] = None
+        out["currency"] = catalogs.norm_salary_currency(
+            match.group(2)) if match.group(2) else None
+        out["period"] = catalogs.norm_salary_period(
+            match.group(3)) if match.group(3).strip() else None
+    return out
+
+
+def format_salary(amount=None, currency=None, period=None,
+                  raw: str = "") -> str:
+    """Reconstruye el string canonico del salario para guardar."""
+    parts = []
+    if amount not in (None, ""):
+        parts.append(str(amount).strip())
+    if currency:
+        parts.append(str(currency).strip().upper())
+    if period:
+        period_item = catalogs.norm_salary_period(period)
+        parts.append(period_item if period_item else str(period).strip())
+    if parts:
+        return " ".join(parts)
+    return (raw or "").strip()
+
+
+def normalize_flat_profile(data: dict | None) -> tuple[dict, list[str]]:
+    """Normaliza el perfil plano (/profile) contra catalogos.
+
+    Colapsa variantes ("hibrido" -> "HYBRID", "analista datos" ->
+    "Analista de Datos") sin borrar nada: lo irreconocible se conserva
+    como texto y se reporta en advertencias. Devuelve
+    (perfil_normalizado, advertencias).
+    """
+    data = dict(data or {})
+    warnings: list[str] = []
+
+    modality_raw = str(data.get("modality") or "").strip()
+    if modality_raw:
+        modality = catalogs.norm_modality(modality_raw)
+        if modality:
+            data["modality"] = modality
+        else:
+            warnings.append(
+                f"Modalidad '{modality_raw}' fuera de catalogo; "
+                "usa el selector (Presencial/Híbrido/Remoto).")
+
+    level_raw = str(data.get("experience_level") or "").strip()
+    if level_raw:
+        level = catalogs.norm_seniority(level_raw)
+        if level:
+            data["experience_level"] = level["id"]
+        else:
+            warnings.append(
+                f"Nivel '{level_raw}' fuera de catalogo; "
+                "usa el selector de nivel.")
+
+    roles = _clean_list(data.get("target_roles"), 20)
+    normalized_roles = []
+    for role in roles:
+        item = catalogs.norm_title(role)
+        normalized_roles.append(item["label"] if item else role)
+        if not item:
+            warnings.append(
+                f"Cargo objetivo '{role}' fuera de catalogo; "
+                "elige una opcion para mejor matching.")
+    data["target_roles"] = normalized_roles
+
+    sectors = _clean_list(data.get("sectors"), 20)
+    normalized_sectors = []
+    for sector in sectors:
+        item = catalogs.norm_sector(sector)
+        normalized_sectors.append(item["label"] if item else sector)
+        if not item:
+            warnings.append(
+                f"Sector '{sector}' fuera de catalogo; "
+                "elige una opcion.")
+    data["sectors"] = normalized_sectors
+
+    # Skills: dedupe insensible a mayusculas/tildes ("Power BI" y
+    # "power bi" son la misma skill y solo inflan el matching).
+    skills = _clean_list(data.get("skills"), 100)
+    seen_skills: set[str] = set()
+    unique_skills: list[str] = []
+    for skill in skills:
+        key = catalogs.norm_text(skill)
+        if key and key not in seen_skills:
+            seen_skills.add(key)
+            unique_skills.append(skill)
+    data["skills"] = unique_skills
+
+    for key in ("location", "preferred_location"):
+        loc_raw = str(data.get(key) or "").strip()
+        if loc_raw:
+            city = catalogs.norm_city(loc_raw)
+            if city:
+                data[key] = city["label"]
+            else:
+                warnings.append(
+                    f"Ubicación '{loc_raw}' fuera de catalogo; "
+                    "elige una ciudad de la lista.")
+
+    salary_parts = parse_salary(data.get("min_salary"))
+    structured_amount = data.get("min_salary_amount")
+    structured_currency = data.get("min_salary_currency")
+    structured_period = data.get("min_salary_period")
+    if (structured_amount not in (None, "")
+            or structured_currency or structured_period):
+        amount = structured_amount if structured_amount not in (
+            None, "") else salary_parts["amount"]
+        currency = (
+            catalogs.norm_salary_currency(structured_currency)
+            if structured_currency
+            else salary_parts["currency"])
+        period = (structured_period if structured_period
+                  else salary_parts["period"])
+        data["min_salary"] = format_salary(
+            amount, currency, period, salary_parts["raw"])
+        if structured_currency and not currency:
+            warnings.append(
+                f"Moneda '{structured_currency}' no reconocida; "
+                "usa el selector (COP/USD/…).")
+        if structured_period and not catalogs.norm_salary_period(
+                structured_period):
+            warnings.append(
+                f"Periodicidad '{structured_period}' no reconocida.")
+    for extra in ("min_salary_amount", "min_salary_currency",
+                  "min_salary_period"):
+        data.pop(extra, None)
+
+    return data, warnings
+
+
 def normalize_rich_profile(data: dict | None) -> tuple[dict, list[str]]:
     """Normaliza el documento completo del perfil modular."""
     from app.profile.perspectives import SECTIONS

@@ -831,17 +831,22 @@ def save_rich_profile(data: dict) -> dict:
 
 
 def save_profile(db: Session, data: dict) -> dict:
+    from app.profile import schema as profile_schema
+
+    # Normaliza variantes contra catalogos (modalidad, nivel,
+    # cargos, sectores, ciudades, salario) sin borrar texto libre.
+    normalized, _ = profile_schema.normalize_flat_profile(data or {})
     if is_firestore(db):
         from app.database import firestore_repo as fs
 
-        merged = fs.save_profile_doc(db, data or {}, DEFAULT_PROFILE)
+        merged = fs.save_profile_doc(db, normalized, DEFAULT_PROFILE)
         _merge_rich_profile(merged)
         return merged
     row = db.query(Profile).filter(Profile.id == 1).first()
     if not row:
         row = Profile(id=1, data="{}")
         db.add(row)
-    allowed = {key: data.get(key, DEFAULT_PROFILE[key]) for key in DEFAULT_PROFILE}
+    allowed = {key: normalized.get(key, DEFAULT_PROFILE[key]) for key in DEFAULT_PROFILE}
     row.data = json.dumps(allowed, ensure_ascii=False)
     db.add(row)
     db.commit()
@@ -934,7 +939,10 @@ def save_profile_for(
     from app.services.search_profiles import _is_guest
 
     store_uid = GUEST_OWNER if _is_guest(uid, email) else uid
-    allowed = {key: (data or {}).get(key, DEFAULT_PROFILE[key])
+    from app.profile import schema as profile_schema
+
+    normalized, _ = profile_schema.normalize_flat_profile(data or {})
+    allowed = {key: normalized.get(key, DEFAULT_PROFILE[key])
                for key in DEFAULT_PROFILE}
     if is_firestore(db):
         from app.database import firestore_repo as fs

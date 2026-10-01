@@ -207,6 +207,120 @@ def test_save_rich_profile_normalizes_and_roundtrips():
             BASE_CV_PATH.write_text(backup, encoding="utf-8")
 
 
+def test_seniority_and_sector_normalization():
+    assert catalogs.norm_seniority("Junior")["id"] == "junior"
+    assert catalogs.norm_seniority("SEMI-SENIOR")["id"] == "mid"
+    assert catalogs.norm_seniority("Semi Senior")["id"] == "mid"
+    assert catalogs.norm_seniority("semi-senior")["id"] == "mid"
+    assert catalogs.norm_seniority("Dios de los datos") is None
+    assert catalogs.norm_seniority("") is None
+    assert catalogs.norm_sector("Tecnología")["id"] == "tecnologia"
+    assert catalogs.norm_sector("tecnologia")["id"] == "tecnologia"
+    assert catalogs.norm_sector("Servicios Financieros")["id"] == "finanzas"
+    assert catalogs.norm_sector("banca")["id"] == "finanzas"
+    assert catalogs.norm_sector("Retail")["id"] == "comercio"
+    assert catalogs.norm_sector("Sector publico")["id"] == "gobierno"
+    assert catalogs.norm_sector("Astrologia") is None
+
+
+def test_salary_currency_and_period():
+    assert catalogs.norm_salary_currency("cop") == "COP"
+    assert catalogs.norm_salary_currency("COP ($)") == "COP"
+    assert catalogs.norm_salary_currency("XXX") is None
+    assert catalogs.norm_salary_period("Mensual") == "mensual"
+    assert catalogs.norm_salary_period("mensual") == "mensual"
+    assert catalogs.norm_salary_period("quincenal") is None
+
+
+def test_parse_and_format_salary():
+    parsed = profile_schema.parse_salary("3500000 COP mensual")
+    assert parsed["amount"] == 3500000
+    assert parsed["currency"] == "COP"
+    assert parsed["period"] == "mensual"
+    assert profile_schema.parse_salary("")["amount"] is None
+    assert profile_schema.parse_salary(None)["amount"] is None
+    # Numero suelto: no inventa moneda ni periodo.
+    solo = profile_schema.parse_salary("3500000")
+    assert solo["amount"] == 3500000
+    assert solo["currency"] is None
+    assert profile_schema.format_salary(3500000, "COP", "mensual") == (
+        "3500000 COP mensual"
+    )
+    assert profile_schema.format_salary(None, None, None, "texto") == "texto"
+
+
+def test_normalize_flat_profile_collapses_variants():
+    profile, warnings = profile_schema.normalize_flat_profile({
+        "modality": "hibrido",
+        "experience_level": "Semi Senior",
+        "target_roles": ["analista datos", "Astronauta"],
+        "sectors": ["banca", "Retail"],
+        "location": "Bogotá, Colombia",
+        "preferred_location": "BOGOTA",
+        "min_salary": "3500000 COP mensual",
+        "skills": ["Power BI", "power bi", "SQL"],
+    })
+    assert profile["modality"] == "HYBRID"
+    assert profile["experience_level"] == "mid"
+    # Cargo en catalogo se canoniza; fuera de catalogo se conserva.
+    assert profile["target_roles"] == ["Analista de Datos", "Astronauta"]
+    assert profile["sectors"] == ["Servicios Financieros", "Comercio / Retail"]
+    assert profile["location"] == "Bogotá"
+    assert profile["preferred_location"] == "Bogotá"
+    assert profile["min_salary"] == "3500000 COP mensual"
+    # Skills de-duplicadas sin tildes/mayusculas.
+    assert profile["skills"] == ["Power BI", "SQL"]
+    assert any("Astronauta" in w for w in warnings)
+
+
+def test_normalize_flat_profile_bad_modality_warns():
+    profile, warnings = profile_schema.normalize_flat_profile({
+        "modality": "desde la playa",
+    })
+    assert profile["modality"] == "desde la playa"
+    assert any("Modalidad" in w for w in warnings)
+
+
+def test_normalize_flat_profile_salary_structured():
+    profile, _ = profile_schema.normalize_flat_profile({
+        "min_salary": "3000000",
+        "min_salary_currency": "USD",
+        "min_salary_period": "anual",
+    })
+    assert profile["min_salary"] == "3000000 USD anual"
+    assert "min_salary_currency" not in profile
+    assert "min_salary_period" not in profile
+
+
+def test_save_profile_normalizes_flat():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    # save_profile necesita una Session de SQLAlchemy; el endpoint
+    # /profile sin token usa el perfil global y ejercita el mismo camino.
+    with TestClient(app) as client:
+        original = client.get("/profile").json()
+        try:
+            response = client.put("/profile", json={
+                "full_name": "Test",
+                "modality": "remoto",
+                "experience_level": "Semi Senior",
+                "target_roles": ["data analyst"],
+                "sectors": ["banca"],
+                "min_salary": "4500000 COP mensual",
+            })
+            assert response.status_code == 200
+            body = response.json()
+            assert body["modality"] == "REMOTE"
+            assert body["experience_level"] == "mid"
+            assert body["target_roles"] == ["Analista de Datos"]
+            assert body["sectors"] == ["Servicios Financieros"]
+            assert body["min_salary"] == "4500000 COP mensual"
+        finally:
+            client.put("/profile", json=original)
+
+
 def test_catalogs_endpoint():
     with TestClient(app) as client:
         response = client.get("/catalogs")
@@ -216,3 +330,25 @@ def test_catalogs_endpoint():
         assert "cities" in body
         assert any(c["id"] == "bogota" for c in body["cities"])
         assert body["cities"][0]["id"] == "bogota"
+        # Catalogos nuevos que consume la UI para los desplegables.
+        for key in ("seniority_levels", "sectors", "salary_currencies",
+                    "salary_periods"):
+            assert key in body, key
+            assert len(body[key]) > 0, key
+        assert any(
+            s["id"] == "senior" for s in body["seniority_levels"]
+        )
+        assert any(s["id"] == "tecnologia" for s in body["sectors"])
+        assert any(c["id"] == "COP" for c in body["salary_currencies"])
+
+
+def test_catalogs_no_duplicates_extended():
+    catalogs_data = catalogs.get_catalogs()
+    for name in ("seniority_levels", "sectors", "salary_currencies",
+                 "salary_periods", "entry_status", "contract_types",
+                 "modalities", "education_levels", "language_levels"):
+        labels = [c["label"] for c in catalogs_data[name]]
+        ids = [c["id"] for c in catalogs_data[name]]
+        assert len(ids) == len(set(ids)), name
+        lowered = [catalogs.norm_text(label) for label in labels]
+        assert len(lowered) == len(set(lowered)), name

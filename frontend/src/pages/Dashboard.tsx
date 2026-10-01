@@ -13,7 +13,6 @@ import {
   Target,
 } from "lucide-react";
 import { Header } from "../components/layout/Header";
-import { SuggestInput } from "../components/forms/SuggestInput";
 import { ErrorState, LoadingState } from "../components/jobs/States";
 import { useJobs, useJobSearch, useSources, useStats } from "../hooks/useApi";
 import { useSearchSession } from "../context/SearchSessionContext";
@@ -23,6 +22,7 @@ import type { SchedulerStatus } from "../types/searchProfile";
 import { timeAgo } from "../utils/format";
 import { COLOMBIAN_CITIES } from "../utils/cities";
 import { STATUS_LABELS, sourceLabel } from "../utils/constants";
+import { canonicalLocation } from "../utils/profileOptions";
 
 interface SourceSummary {
   source: string;
@@ -75,6 +75,17 @@ export function Dashboard() {
 
   const all = useMemo(() => jobs.data ?? [], [jobs.data]);
   const byStatus = stats.data?.by_status ?? {};
+
+  // Ciudad canonica: un typo en "Bogotà" hacia que el filtro de ubicacion
+  // del scraper devuelva 0 ofertas sin explicar por que.
+  const cityValue = canonicalLocation(city, COLOMBIAN_CITIES);
+  const cityOptions = useMemo(
+    () =>
+      cityValue && !COLOMBIAN_CITIES.includes(cityValue)
+        ? [...COLOMBIAN_CITIES, cityValue]
+        : COLOMBIAN_CITIES,
+    [cityValue],
+  );
 
   const recentActivity = useMemo(() => all.slice(0, 8), [all]);
 
@@ -149,16 +160,20 @@ export function Dashboard() {
               placeholder="Ej: desarrollador python"
               onKeyDown={(e) => e.key === "Enter" && runSearch()}
             />
-            <div style={{ width: 150 }}>
-              <SuggestInput
-                value={city}
-                onChange={setCity}
-                options={COLOMBIAN_CITIES}
-                placeholder="Ciudad (ej: Bogotá)"
-                title="Filtra por ciudad antes de guardar. Vacío = todo el país."
-                onKeyDown={(e) => e.key === "Enter" && runSearch()}
-              />
-            </div>
+            <select
+              className="select"
+              value={cityValue}
+              onChange={(e) => setCity(e.target.value)}
+              style={{ maxWidth: 165 }}
+              title="Filtra por ciudad antes de guardar. Vacío = todo el país. Elegir de la lista evita búsquedas con 0 resultados por error de escritura."
+            >
+              <option value="">Todo el país</option>
+              {cityOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
             <select
               className="select"
               value={source}

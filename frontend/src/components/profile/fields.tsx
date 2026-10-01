@@ -141,21 +141,52 @@ export function DateInput({
 }
 
 // Lista de tags con agregar/eliminar (skills, dominios, etc.).
+// Con `suggestions` muestra desplegable al escribir (vocabulario guiado
+// pero abierto: permite texto libre con `allowCustom`).
 export function TagInput({
   value,
   onChange,
   placeholder,
+  suggestions = [],
+  allowCustom = true,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;
+  suggestions?: string[];
+  allowCustom?: boolean;
 }) {
   const [text, setText] = useState("");
-  const add = () => {
-    const item = text.trim();
+  const [open, setOpen] = useState(false);
+  const add = (raw?: string) => {
+    const item = (raw ?? text).trim();
     if (item && !value.includes(item)) onChange([...value, item]);
     setText("");
+    setOpen(false);
   };
+  const norm = (s: string) =>
+    s
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .trim();
+  const filtered = useMemo(() => {
+    const seen = new Set(value);
+    const uniq = [...new Set(suggestions.map((s) => s.trim()).filter(Boolean))].filter(
+      (s) => !seen.has(s),
+    );
+    const q = norm(text);
+    if (!q) return uniq.slice(0, 8);
+    const starts: string[] = [];
+    const contains: string[] = [];
+    for (const s of uniq) {
+      const n = norm(s);
+      if (n.startsWith(q)) starts.push(s);
+      else if (n.includes(q)) contains.push(s);
+    }
+    return [...starts, ...contains].slice(0, 8);
+  }, [suggestions, text, value]);
+  const showList = open && filtered.length > 0;
   return (
     <div>
       <div className="skill-chips" style={{ marginBottom: 6 }}>
@@ -182,23 +213,67 @@ export function TagInput({
           <span className="chip chip-neutral">—</span>
         )}
       </div>
-      <div style={{ display: "flex", gap: 6 }}>
+      <div style={{ display: "flex", gap: 6, position: "relative" }}>
         <input
           className="input"
           style={{ flex: 1 }}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              add();
+              if (filtered.length > 0) add(filtered[0]);
+              else if (allowCustom) add();
             }
+            if (e.key === "Escape") setOpen(false);
           }}
           placeholder={placeholder ?? "Agregar y Enter"}
         />
-        <button type="button" className="btn btn-ghost btn-sm" onClick={add}>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => add()}>
           +
         </button>
+        {showList && (
+          <div
+            style={{
+              position: "absolute",
+              zIndex: 20,
+              top: "100%",
+              left: 0,
+              right: 40,
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              marginTop: 4,
+              maxHeight: 200,
+              overflowY: "auto",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+            }}
+          >
+            {filtered.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="btn btn-ghost btn-sm"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  border: "none",
+                  borderRadius: 0,
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => add(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

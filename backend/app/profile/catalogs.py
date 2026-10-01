@@ -83,6 +83,63 @@ LANGUAGES: list[dict] = [
     {"id": "it", "label": "Italiano"},
 ]
 
+SENIORITY_LEVELS: list[dict] = [
+    {"id": "trainee", "label": "Trainee / Practicante",
+     "aliases": ["practicante", "pasantia", "intern", "internship"]},
+    {"id": "junior", "label": "Junior",
+     "aliases": ["jr", "entry level", "sin experiencia"]},
+    {"id": "mid", "label": "Semi-senior",
+     "aliases": ["semi senior", "semsenior", "intermediate", "intermedio"]},
+    {"id": "senior", "label": "Senior", "aliases": ["sr"]},
+    {"id": "lead", "label": "Lead / Líder técnico",
+     "aliases": ["lider", "tech lead", "principal", "staff"]},
+    {"id": "manager", "label": "Manager / Gerente",
+     "aliases": ["gerente", "head", "jefe"]},
+]
+
+SECTORS: list[dict] = [
+    {"id": "tecnologia", "label": "Tecnología"},
+    {"id": "finanzas", "label": "Servicios Financieros",
+     "aliases": ["financiero", "banca", "banco"]},
+    {"id": "salud", "label": "Salud"},
+    {"id": "educacion", "label": "Educación"},
+    {"id": "comercio", "label": "Comercio / Retail",
+     "aliases": ["retail", "ventas"]},
+    {"id": "industria", "label": "Industria / Manufactura",
+     "aliases": ["manufactura", "industrial"]},
+    {"id": "servicios", "label": "Servicios"},
+    {"id": "consultoria", "label": "Consultoría"},
+    {"id": "gobierno", "label": "Gobierno / Sector público",
+     "aliases": ["publico", "sector publico", "estado"]},
+    {"id": "telecom", "label": "Telecomunicaciones"},
+    {"id": "logistica", "label": "Logística / Transporte",
+     "aliases": ["transporte"]},
+    {"id": "energia", "label": "Energía"},
+    {"id": "construccion", "label": "Construcción"},
+    {"id": "turismo", "label": "Turismo / Hospitalidad",
+     "aliases": ["hospitalidad", "hotel"]},
+    {"id": "medios", "label": "Medios / Entretenimiento",
+     "aliases": ["entretenimiento"]},
+    {"id": "otro", "label": "Otro"},
+]
+
+SALARY_CURRENCIES: list[dict] = [
+    {"id": "COP", "label": "COP ($)"},
+    {"id": "USD", "label": "USD ($)"},
+    {"id": "MXN", "label": "MXN ($)"},
+    {"id": "EUR", "label": "EUR (€)"},
+    {"id": "CLP", "label": "CLP ($)"},
+    {"id": "PEN", "label": "PEN (S/)"},
+    {"id": "ARS", "label": "ARS ($)"},
+]
+
+SALARY_PERIODS: list[dict] = [
+    {"id": "mensual", "label": "Mensual"},
+    {"id": "anual", "label": "Anual"},
+    {"id": "hora", "label": "Por hora"},
+    {"id": "proyecto", "label": "Por proyecto"},
+]
+
 LANGUAGE_LEVELS: list[dict] = [
     {"id": "A1", "label": "A1"},
     {"id": "A2", "label": "A2"},
@@ -235,6 +292,34 @@ def norm_education_level(raw: str | None) -> str | None:
     return item["id"] if item else None
 
 
+def norm_seniority(raw: str | None) -> dict | None:
+    """Nivel de experiencia -> item del catalogo o None."""
+    return _match_catalog(raw, SENIORITY_LEVELS)
+
+
+def norm_sector(raw: str | None) -> dict | None:
+    """Sector economico -> item del catalogo o None."""
+    return _match_catalog(raw, SECTORS)
+
+
+def norm_salary_currency(raw: str | None) -> str | None:
+    """Moneda ISO (COP, USD...). Acepta id o label."""
+    if not raw or not str(raw).strip():
+        return None
+    text = str(raw).strip().upper()
+    valid = {item["id"] for item in SALARY_CURRENCIES}
+    if text in valid:
+        return text
+    item = _match_catalog(raw, SALARY_CURRENCIES)
+    return item["id"] if item else None
+
+
+def norm_salary_period(raw: str | None) -> str | None:
+    """Periodicidad del salario -> id o None."""
+    item = _match_catalog(raw, SALARY_PERIODS)
+    return item["id"] if item else None
+
+
 def get_catalogs() -> dict:
     """Todo lo que la UI necesita para selects/autocompletes."""
     return {
@@ -247,4 +332,8 @@ def get_catalogs() -> dict:
         "contract_types": CONTRACT_TYPES,
         "countries": COUNTRIES,
         "cities": CITIES,
+        "seniority_levels": SENIORITY_LEVELS,
+        "sectors": SECTORS,
+        "salary_currencies": SALARY_CURRENCIES,
+        "salary_periods": SALARY_PERIODS,
     }

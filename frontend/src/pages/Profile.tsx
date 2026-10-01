@@ -20,8 +20,24 @@ import {
   saveFullProfile,
 } from "../services/profile";
 import { COLOMBIAN_CITIES } from "../utils/cities";
+import { SKILLS } from "../utils/skills";
 import { TITLES } from "../utils/titles";
+import {
+  DOMAIN_SUGGESTIONS,
+  ENTRY_STATUS_FALLBACK,
+  MODALITY_FALLBACK,
+  SALARY_CURRENCY_FALLBACK,
+  SALARY_PERIOD_FALLBACK,
+  SECTOR_FALLBACK,
+  SENIORITY_FALLBACK,
+  SOFT_SKILLS_FALLBACK,
+  TITLE_CATEGORY_SUGGESTIONS,
+  canonicalLocation,
+  parseSalaryString,
+  resolveOptionId,
+} from "../utils/profileOptions";
 import type {
+  CatalogItem,
   Catalogs,
   CityRef,
   LanguageEntry,
@@ -38,13 +54,6 @@ function useIsAdminSession(): boolean {
   const { firebaseUser, isGuest } = useAuth();
   if (!firebaseUser || isGuest) return false;
   return (firebaseUser.email ?? "").trim().toLowerCase() === ADMIN_EMAIL;
-}
-
-function splitList(v: string): string[] {
-  return v
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
 }
 
 export function ProfilePage() {
@@ -91,6 +100,42 @@ export function ProfilePage() {
   const titleOptions =
     catalogs?.professional_titles.map((t) => t.label) ?? TITLES;
   const cityOptions = catalogs?.cities.map((c) => c.label) ?? COLOMBIAN_CITIES;
+  const modalityOpts =
+    catalogs?.modalities.map((m) => ({ id: m.id, label: m.label })) ??
+    MODALITY_FALLBACK;
+  const seniorityOpts =
+    catalogs?.seniority_levels.map((s) => ({ id: s.id, label: s.label })) ??
+    SENIORITY_FALLBACK;
+  const sectorLabels =
+    catalogs?.sectors.map((s) => s.label) ??
+    SECTOR_FALLBACK.map((s) => s.label);
+  const currencyOpts =
+    catalogs?.salary_currencies.map((c) => ({ id: c.id, label: c.label })) ??
+    SALARY_CURRENCY_FALLBACK;
+  const periodOpts =
+    catalogs?.salary_periods.map((p) => ({ id: p.id, label: p.label })) ??
+    SALARY_PERIOD_FALLBACK;
+
+  // Valores guardados legacy (texto libre) resueltos al id canonico para
+  // que los selects muestren la opcion correcta sin perder datos.
+  const modalityValue = resolveOptionId(current.modality, modalityOpts) ?? "";
+  const seniorityValue =
+    resolveOptionId(current.experience_level, seniorityOpts) ?? "";
+  const locationValue = canonicalLocation(current.location, cityOptions);
+  const preferredLocationValue = canonicalLocation(
+    current.preferred_location,
+    cityOptions,
+  );
+  const salary = parseSalaryString(current.min_salary);
+  const composeSalary = (amount: string, currency: string, period: string) =>
+    [amount.trim(), currency, period].filter(Boolean).join(" ");
+
+  // Opciones de ciudad garantizando que el valor guardado siempre aparece
+  // (aunque sea texto libre legacy que ya no esta en el catalogo).
+  const citySelectOptions = (value: string) =>
+    value && !cityOptions.includes(value)
+      ? [...cityOptions, value]
+      : cityOptions;
 
   const set = (patch: Partial<Profile>) => {
     if (locked) return;
@@ -115,9 +160,6 @@ export function ProfilePage() {
       // noop
     }
   };
-
-  const setList = (key: "skills" | "target_roles" | "sectors", raw: string) =>
-    set({ [key]: splitList(raw) } as Partial<Profile>);
 
   return (
     <>
@@ -176,30 +218,38 @@ export function ProfilePage() {
                 value={current.title}
                 onChange={(v) => set({ title: v })}
                 options={titleOptions}
-                placeholder="Ej: Analista de Datos"
+                placeholder="Elige de la lista: Analista de Datos"
+                strict
               />
             </div>
             <div className="field">
               <label>Ubicación</label>
-              <SuggestInput
-                value={current.location}
-                onChange={(v) => set({ location: v })}
-                options={cityOptions}
-                placeholder="Ej: Bogotá, Colombia"
-              />
+              <select
+                className="select"
+                value={locationValue}
+                onChange={(e) => set({ location: e.target.value })}
+              >
+                <option value="">— Elige una ciudad —</option>
+                {citySelectOptions(locationValue).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
           <h3 className="card-title" style={{ marginTop: 8 }}>
             Habilidades
           </h3>
-          <p className="card-sub">Separadas por comas. Ej: Python, SQL, Power BI</p>
+          <p className="card-sub">Escribe y elige de la lista para evitar variantes (“powerbi” vs “Power BI”)</p>
           <div className="field">
             <label>Habilidades</label>
-            <textarea
-              className="textarea"
-              value={current.skills.join(", ")}
-              onChange={(e) => setList("skills", e.target.value)}
+            <TagInput
+              value={current.skills}
+              onChange={(next) => set({ skills: next })}
+              suggestions={SKILLS}
+              placeholder="Escribe para buscar skill y Enter"
             />
           </div>
 
@@ -208,28 +258,153 @@ export function ProfilePage() {
           </h3>
           <div className="form-grid">
             <div className="field">
-              <label>Cargos objetivo (coma)</label>
-              <input className="input" value={current.target_roles.join(", ")} onChange={(e) => setList("target_roles", e.target.value)} />
+              <label>Cargos objetivo</label>
+              <TagInput
+                value={current.target_roles}
+                onChange={(next) => set({ target_roles: next })}
+                suggestions={titleOptions}
+                placeholder="Escribe para buscar cargo y Enter"
+              />
             </div>
             <div className="field">
-              <label>Sectores de interés (coma)</label>
-              <input className="input" value={current.sectors.join(", ")} onChange={(e) => setList("sectors", e.target.value)} />
+              <label>Sectores de interés</label>
+              <TagInput
+                value={current.sectors}
+                onChange={(next) => set({ sectors: next })}
+                suggestions={sectorLabels}
+                placeholder="Escribe para buscar sector y Enter"
+              />
             </div>
             <div className="field">
               <label>Modalidad</label>
-              <input className="input" value={current.modality} onChange={(e) => set({ modality: e.target.value })} placeholder="Ej: Híbrido" />
+              <select
+                className="select"
+                value={modalityValue}
+                onChange={(e) => set({ modality: e.target.value })}
+              >
+                <option value="">— Cualquiera —</option>
+                {modalityOpts.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+                {current.modality &&
+                  !modalityValue && (
+                    <option value={current.modality}>
+                      {current.modality} (libre)
+                    </option>
+                  )}
+              </select>
             </div>
             <div className="field">
               <label>Ubicación preferida</label>
-              <input className="input" value={current.preferred_location} onChange={(e) => set({ preferred_location: e.target.value })} />
+              <select
+                className="select"
+                value={preferredLocationValue}
+                onChange={(e) => set({ preferred_location: e.target.value })}
+              >
+                <option value="">— Cualquiera —</option>
+                {citySelectOptions(preferredLocationValue).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field">
               <label>Salario mínimo</label>
-              <input className="input" value={current.min_salary} onChange={(e) => set({ min_salary: e.target.value })} />
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  step={10000}
+                  style={{ flex: 1, minWidth: 0 }}
+                  value={salary.amount}
+                  onChange={(e) =>
+                    set({
+                      min_salary: composeSalary(
+                        e.target.value,
+                        salary.currency,
+                        salary.period,
+                      ),
+                    })
+                  }
+                  placeholder="Ej: 3500000"
+                />
+                <select
+                  className="select"
+                  style={{ maxWidth: 110 }}
+                  value={salary.currency}
+                  onChange={(e) =>
+                    set({
+                      min_salary: composeSalary(
+                        salary.amount,
+                        e.target.value,
+                        salary.period,
+                      ),
+                    })
+                  }
+                  title="Moneda"
+                >
+                  <option value="">Mon.</option>
+                  {currencyOpts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.id}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="select"
+                  style={{ maxWidth: 120 }}
+                  value={salary.period}
+                  onChange={(e) =>
+                    set({
+                      min_salary: composeSalary(
+                        salary.amount,
+                        salary.currency,
+                        e.target.value,
+                      ),
+                    })
+                  }
+                  title="Periodicidad"
+                >
+                  <option value="">Periodo</option>
+                  {periodOpts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {current.min_salary.trim() &&
+                !salary.amount && (
+                  <small style={{ color: "var(--text-muted)" }}>
+                    Valor guardado: “{current.min_salary}” (edítalo para
+                    normalizarlo).
+                  </small>
+                )}
             </div>
             <div className="field">
               <label>Nivel de experiencia</label>
-              <input className="input" value={current.experience_level} onChange={(e) => set({ experience_level: e.target.value })} placeholder="Ej: Junior" />
+              <select
+                className="select"
+                value={seniorityValue}
+                onChange={(e) => set({ experience_level: e.target.value })}
+              >
+                <option value="">— Elige un nivel —</option>
+                {seniorityOpts.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+                {current.experience_level &&
+                  !seniorityValue && (
+                    <option value={current.experience_level}>
+                      {current.experience_level} (libre)
+                    </option>
+                  )}
+              </select>
             </div>
           </div>
 
@@ -430,9 +605,9 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
                 <input
                   className="input"
                   value={personal.title_label ?? personal.title ?? ""}
-                  onChange={(e) =>
-                    patchPersonal({ title_label: e.target.value })
-                  }
+                  disabled
+                  placeholder="Cargando catálogos…"
+                  title="Espera a que carguen los catálogos para elegir sin errores"
                 />
               )}
             </div>
@@ -506,15 +681,9 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
                 <input
                   className="input"
                   value={rich.personal.preferred_location ?? ""}
-                  onChange={(e) =>
-                    update({
-                      ...rich,
-                      personal: {
-                        ...rich.personal,
-                        preferred_location: e.target.value,
-                      },
-                    })
-                  }
+                  disabled
+                  placeholder="Cargando catálogos…"
+                  title="Espera a que carguen los catálogos para elegir sin errores"
                 />
               )}
             </div>
@@ -534,7 +703,7 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
                 }
               >
                 <option value="">—</option>
-                {(catalogs?.modalities ?? []).map((m) => (
+                {((catalogs?.modalities ?? []) as CatalogItem[]).map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.label}
                   </option>
@@ -550,7 +719,8 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
               <TagInput
                 value={rich.technical_skills ?? []}
                 onChange={(next) => update({ ...rich, technical_skills: next })}
-                placeholder="Agregar skill técnica"
+                suggestions={SKILLS}
+                placeholder="Escribe para buscar skill y Enter"
               />
             </div>
             <div className="field">
@@ -558,7 +728,8 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
               <TagInput
                 value={rich.soft_skills ?? []}
                 onChange={(next) => update({ ...rich, soft_skills: next })}
-                placeholder="Agregar skill blanda"
+                suggestions={SOFT_SKILLS_FALLBACK}
+                placeholder="Escribe para buscar skill y Enter"
               />
             </div>
           </div>
@@ -670,13 +841,9 @@ function LanguageManager({
                   ))}
                 </select>
               ) : (
-                <input
-                  className="input"
-                  value={lang.language_label ?? ""}
-                  onChange={(e) =>
-                    patch(i, { language_label: e.target.value })
-                  }
-                />
+                <select className="select" disabled title="Cargando catálogos…">
+                  <option>Cargando catálogos…</option>
+                </select>
               )}
             </div>
             <div className="field">
@@ -844,22 +1011,24 @@ function CityAutocomplete({
   catalogs: Catalogs | null;
   onChange: (next: CityRef | null) => void;
 }) {
+  // Sin catalogos no se escribe texto libre: un id "custom" sin catalogar
+  // lo rechaza el backend. Se muestra deshabilitado hasta que carguen.
   if (!catalogs) {
     return (
       <input
         className="input"
         value={value?.label ?? ""}
-        onChange={(e) =>
-          onChange(
-            e.target.value
-              ? { id: "custom", label: e.target.value, country: null }
-              : null,
-          )
-        }
-        placeholder="Ciudad"
+        disabled
+        placeholder="Cargando catálogos…"
+        title="Espera a que carguen los catálogos para elegir sin errores"
       />
     );
   }
+  const options = (catalogs.cities ?? []).map((c) => ({
+    id: c.id,
+    label: c.label,
+    hint: c.country,
+  }));
   return (
     <Autocomplete
       value={value?.id ?? ""}
@@ -871,11 +1040,9 @@ function CityAutocomplete({
             : null,
         );
       }}
-      options={catalogs.cities.map((c) => ({
-        id: c.id,
-        label: c.label,
-        hint: c.country,
-      }))}
+      options={options}
+      // Si el valor guardado no esta en el catalogo, se agrega como opcion
+      // unica para no perderlo en silencio.
       placeholder="Escribe para buscar ciudad…"
     />
   );
@@ -890,6 +1057,9 @@ function ExperienceFields({
   catalogs: Catalogs | null;
   onPatch: (p: Partial<ProfileEntry>) => void;
 }) {
+  const titleItem = catalogs
+    ? resolveOptionId(entry.title, catalogs.professional_titles)
+    : null;
   return (
     <div className="form-grid">
       <div className="field">
@@ -902,11 +1072,32 @@ function ExperienceFields({
       </div>
       <div className="field">
         <label>Cargo</label>
-        <input
-          className="input"
-          value={entry.title ?? ""}
-          onChange={(e) => onPatch({ title: e.target.value })}
-        />
+        {catalogs ? (
+          <Autocomplete
+            value={titleItem ?? ""}
+            onChange={(id) =>
+              onPatch({
+                title:
+                  catalogs.professional_titles.find((t) => t.id === id)
+                    ?.label ?? entry.title,
+              })
+            }
+            options={catalogs.professional_titles.map((t) => ({
+              id: t.id,
+              label: t.label,
+            }))}
+            allowCustom
+            customLabel="Otro (texto libre)"
+            placeholder="Escribe para buscar cargo…"
+          />
+        ) : (
+          <input
+            className="input"
+            value={entry.title ?? ""}
+            disabled
+            placeholder="Cargando catálogos…"
+          />
+        )}
       </div>
       <div className="field">
         <label>Fecha de inicio</label>
@@ -947,9 +1138,11 @@ function ExperienceFields({
           onChange={(e) => onPatch({ modality: e.target.value || null })}
         >
           <option value="">—</option>
-          <option value="ONSITE">Presencial</option>
-          <option value="HYBRID">Híbrido</option>
-          <option value="REMOTE">Remoto</option>
+          {(catalogs?.modalities ?? MODALITY_FALLBACK).map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
         </select>
       </div>
       <div className="field">
@@ -1018,11 +1211,13 @@ function EducationFields({
           onChange={(e) => onPatch({ level: e.target.value || null })}
         >
           <option value="">—</option>
-          {(catalogs?.education_levels ?? []).map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.label}
-            </option>
-          ))}
+          {((catalogs?.education_levels ?? ENTRY_STATUS_FALLBACK) as CatalogItem[]).map(
+            (l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ),
+          )}
         </select>
       </div>
       <div className="field">
@@ -1033,9 +1228,11 @@ function EducationFields({
           onChange={(e) => onPatch({ status: e.target.value || null })}
         >
           <option value="">—</option>
-          <option value="finished">Finalizado</option>
-          <option value="in_progress">En curso</option>
-          <option value="abandoned">Abandonado</option>
+          {(catalogs?.entry_status ?? ENTRY_STATUS_FALLBACK).map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.label}
+            </option>
+          ))}
         </select>
       </div>
       <div className="field">
@@ -1102,15 +1299,12 @@ function ProjectFields({
         />
       </div>
       <div className="field">
-        <label>Tecnologías (coma)</label>
-        <input
-          className="input"
-          value={(entry.technologies ?? []).join(", ")}
-          onChange={(e) =>
-            onPatch({
-              technologies: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-            })
-          }
+        <label>Tecnologías</label>
+        <TagInput
+          value={entry.technologies ?? []}
+          onChange={(next) => onPatch({ technologies: next })}
+          suggestions={SKILLS}
+          placeholder="Escribe para buscar y Enter"
         />
       </div>
       <div className="field">
@@ -1223,7 +1417,8 @@ function EntrySkills({
         <TagInput
           value={entry.technical_skills ?? []}
           onChange={(next) => onPatch({ technical_skills: next })}
-          placeholder="Agregar skill técnica"
+          suggestions={SKILLS}
+          placeholder="Escribe para buscar skill y Enter"
         />
       </div>
       <div className="field">
@@ -1231,7 +1426,8 @@ function EntrySkills({
         <TagInput
           value={entry.soft_skills ?? []}
           onChange={(next) => onPatch({ soft_skills: next })}
-          placeholder="Agregar skill blanda"
+          suggestions={SOFT_SKILLS_FALLBACK}
+          placeholder="Escribe para buscar skill y Enter"
         />
       </div>
     </div>
@@ -1246,20 +1442,15 @@ function EntryPerspectives({
   onPatch: (p: Partial<ProfileEntry>) => void;
 }) {
   const perspectives = entry.perspectives ?? [];
-  const patchOne = (k: number, p: Partial<import("../types/profile").Perspective>) =>
+  const patchOne = (
+    k: number,
+    p: Partial<import("../types/profile").Perspective>,
+  ) =>
     onPatch({
       perspectives: perspectives.map((prev, j) =>
         j === k ? { ...prev, ...p } : prev,
       ),
     });
-  const setList = (
-    k: number,
-    field: "skills" | "tools" | "domains" | "roles",
-    raw: string,
-  ) =>
-    patchOne(k, {
-      [field]: raw.split(",").map((s) => s.trim()).filter(Boolean),
-    } as Partial<import("../types/profile").Perspective>);
   return (
     <div style={{ marginTop: 8 }}>
       <h4 style={{ margin: "8px 0" }}>
@@ -1290,12 +1481,12 @@ function EntryPerspectives({
               />
             </div>
             <div className="field">
-              <label>Roles afines (coma)</label>
-              <input
-                className="input"
-                value={(p.roles ?? []).join(", ")}
-                onChange={(e) => setList(k, "roles", e.target.value)}
-                placeholder="DATA_ANALYST, BI_ANALYST"
+              <label>Roles afines</label>
+              <TagInput
+                value={p.roles ?? []}
+                onChange={(next) => patchOne(k, { roles: next })}
+                suggestions={TITLE_CATEGORY_SUGGESTIONS}
+                placeholder="Escribe para buscar rol y Enter"
               />
             </div>
           </div>
@@ -1309,27 +1500,30 @@ function EntryPerspectives({
           </div>
           <div className="form-grid">
             <div className="field">
-              <label>Skills (coma)</label>
-              <input
-                className="input"
-                value={(p.skills ?? []).join(", ")}
-                onChange={(e) => setList(k, "skills", e.target.value)}
+              <label>Skills</label>
+              <TagInput
+                value={p.skills ?? []}
+                onChange={(next) => patchOne(k, { skills: next })}
+                suggestions={SKILLS}
+                placeholder="Escribe para buscar skill y Enter"
               />
             </div>
             <div className="field">
-              <label>Herramientas (coma)</label>
-              <input
-                className="input"
-                value={(p.tools ?? []).join(", ")}
-                onChange={(e) => setList(k, "tools", e.target.value)}
+              <label>Herramientas</label>
+              <TagInput
+                value={p.tools ?? []}
+                onChange={(next) => patchOne(k, { tools: next })}
+                suggestions={SKILLS}
+                placeholder="Escribe para buscar y Enter"
               />
             </div>
             <div className="field">
-              <label>Dominios (coma)</label>
-              <input
-                className="input"
-                value={(p.domains ?? []).join(", ")}
-                onChange={(e) => setList(k, "domains", e.target.value)}
+              <label>Dominios</label>
+              <TagInput
+                value={p.domains ?? []}
+                onChange={(next) => patchOne(k, { domains: next })}
+                suggestions={DOMAIN_SUGGESTIONS}
+                placeholder="Escribe para buscar y Enter"
               />
             </div>
             <div className="field">

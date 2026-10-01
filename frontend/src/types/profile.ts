@@ -81,6 +81,10 @@ export interface Catalogs {
   contract_types: CatalogItem[];
   countries: CatalogItem[];
   cities: CityOption[];
+  seniority_levels: CatalogItem[];
+  sectors: CatalogItem[];
+  salary_currencies: CatalogItem[];
+  salary_periods: CatalogItem[];
 }
 
 export interface ProfileEntry {
