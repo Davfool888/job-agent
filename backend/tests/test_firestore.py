@@ -105,36 +105,52 @@ def test_status_y_analisis(fsdb):
 @needs_firestore
 def test_profile_applications_cvs_interactions(fsdb):
     from app.services import job_service as jobs
+    from app.database import firestore_repo as fs
 
-    profile = jobs.get_profile(fsdb)
-    assert "skills" in profile and "target_roles" in profile
-    saved = jobs.save_profile(
-        fsdb, {**profile, "skills": ["Python"], "target_roles": ["Data Analyst"]}
-    )
-    assert saved["skills"] == ["Python"]
+    # Backup del doc real para restaurarlo al final.
+    ref = fs._col(fsdb, "profiles").document("base")
+    snap = ref.get()
+    backup = snap.to_dict() if snap.exists else None
+    try:
+        profile = jobs.get_profile(fsdb)
+        assert "skills" in profile and "target_roles" in profile
+        saved = jobs.save_profile(
+            fsdb, {**profile, "skills": ["Python"], "target_roles": ["Data Analyst"]}
+        )
+        # La vista mezcla skills guardados + base_cv.json (merge intencional
+        # para matching); lo guardado debe estar presente, sin duplicados.
+        assert "Python" in saved["skills"]
+        assert "Data Analyst" in saved["target_roles"]
+        assert len(saved["skills"]) == len(set(saved["skills"]))
+        # El store conserva exactamente lo enviado (sin contaminacion).
+        raw = fs._col(fsdb, "profiles").document("base").get().to_dict()
+        assert raw["legacy_skills_flat"] == ["Python"]
 
-    applied = jobs.update_job_status(
-        fsdb, jobs.save_jobs(fsdb, [_offer(TEST_URLS[0])])[0], "applied",
-        application_status="entrevista",
-    )
-    apps = jobs.list_applications(fsdb)
-    mine = [a for a in apps if a["job_id"] == applied.id]
-    assert len(mine) == 1
-    assert mine[0]["status"] == "INTERVIEW"
-    assert len(mine[0]["events"]) >= 2  # creada + cambio de etapa
+        applied = jobs.update_job_status(
+            fsdb, jobs.save_jobs(fsdb, [_offer(TEST_URLS[0])])[0], "applied",
+            application_status="entrevista",
+        )
+        apps = jobs.list_applications(fsdb)
+        mine = [a for a in apps if a["job_id"] == applied.id]
+        assert len(mine) == 1
+        assert mine[0]["status"] == "INTERVIEW"
+        assert len(mine[0]["events"]) >= 2  # creada + cambio de etapa
 
-    cv = jobs.register_cv_version(fsdb, applied.id, {
-        "tex_path": "/tmp/x.tex", "match_score": 80.0,
-        "skills_selected": ["Python"],
-    })
-    assert cv["version"] >= 1 and cv["status"] == "GENERATED"
+        cv = jobs.register_cv_version(fsdb, applied.id, {
+            "tex_path": "/tmp/x.tex", "match_score": 80.0,
+            "skills_selected": ["Python"],
+        })
+        assert cv["version"] >= 1 and cv["status"] == "GENERATED"
 
-    iid = jobs.log_interaction(fsdb, "JOB_VIEWED", applied.id)
-    assert iid
+        iid = jobs.log_interaction(fsdb, "JOB_VIEWED", applied.id)
+        assert iid
 
-    stats = jobs.get_stats(fsdb)
-    assert stats["total"] >= 1
-    assert "by_status" in stats and "top_skills" in stats
+        stats = jobs.get_stats(fsdb)
+        assert stats["total"] >= 1
+        assert "by_status" in stats and "top_skills" in stats
+    finally:
+        if backup is not None:
+            ref.set(backup)
 
 
 @needs_firestore

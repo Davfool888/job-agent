@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Header } from "../components/layout/Header";
 import { DiscardModal } from "../components/jobs/DiscardModal";
 import { JobCard } from "../components/jobs/JobCard";
@@ -11,51 +11,22 @@ import {
   LoadingState,
 } from "../components/jobs/States";
 import { useJobs } from "../hooks/useApi";
-import { fetchJobsSince } from "../services/searchProfiles";
 import type { Job } from "../types/job";
 import { applyJobFilters, uniqueSorted } from "../utils/jobs";
 
-export function Jobs() {
-  // Excluye descartadas: esas viven en /discarded.
-  const { data, loading, error, reload, mutate } = useJobs();
+export function Viewed() {
+  const { data, loading, error, reload, mutate } = useJobs("opened");
   const [filters, setFilters] = useState<JobFilterState>(DEFAULT_FILTERS);
   const [discarding, setDiscarding] = useState<Job | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [newCount, setNewCount] = useState<number | null>(null);
 
-  // "N nuevas desde tu ultima visita": usa GET /jobs?since= con la marca
-  // guardada localmente (solo preferencia visual, los datos son del backend).
-  useEffect(() => {
-    let alive = true;
-    const lastVisit = window.localStorage.getItem("jobagent_last_visit");
-    if (lastVisit) {
-      fetchJobsSince(lastVisit)
-        .then((jobs) => {
-          if (alive) setNewCount(jobs.filter((j) => j.status !== "discarded").length);
-        })
-        .catch(() => {
-          if (alive) setNewCount(null);
-        });
-    } else {
-      setNewCount(0);
-    }
-    window.localStorage.setItem("jobagent_last_visit", new Date().toISOString());
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const all = useMemo(() => data ?? [], [data]);
+  const visible = useMemo(() => applyJobFilters(all, filters), [all, filters]);
 
-  const active = useMemo(
-    () => (data ?? []).filter((j) => j.status !== "discarded"),
-    [data],
-  );
-
-  const visible = useMemo(() => applyJobFilters(active, filters), [active, filters]);
-
-  const companies = useMemo(() => uniqueSorted(active, (j) => j.company), [active]);
-  const locations = useMemo(() => uniqueSorted(active, (j) => j.location), [active]);
-  const sources = useMemo(() => uniqueSorted(active, (j) => j.source), [active]);
+  const companies = useMemo(() => uniqueSorted(all, (j) => j.company), [all]);
+  const locations = useMemo(() => uniqueSorted(all, (j) => j.location), [all]);
+  const sources = useMemo(() => uniqueSorted(all, (j) => j.source), [all]);
 
   const run = async (job: Job, fn: () => Promise<unknown>) => {
     setBusyId(job.id);
@@ -78,10 +49,7 @@ export function Jobs() {
     });
 
   const openOriginal = (job: Job) => {
-    // "Ir a oferta": abrir la URL registra la vista (pasa a Vistas).
-    if (job.status === "new" || job.status === "kept") {
-      void mutate(job.id, { status: "opened" });
-    }
+    window.open(job.url, "_blank", "noopener");
   };
 
   const confirmDiscard = async (reason: string, note: string) => {
@@ -105,33 +73,19 @@ export function Jobs() {
   return (
     <>
       <Header
-        title="Ofertas"
-        subtitle={`${active.length} ofertas activas (sin descartadas)`}
+        title="Vistas"
+        subtitle={`${all.length} ofertas visualizadas (abriste la oferta original o el detalle)`}
       />
       <div className="content">
         {actionError && <div className="alert-error">{actionError}</div>}
-        {newCount !== null && newCount > 0 && (
-          <div className="card" style={{ marginBottom: 16 }}>
-            <p style={{ margin: 0, fontSize: 13 }}>
-              ✨ <strong>{newCount} nuevas</strong> desde tu última visita
-              (traídas por la búsqueda automática).{" "}
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setFilters({ ...filters, sort: "found" })}
-              >
-                Ver recientes
-              </button>
-            </p>
-          </div>
-        )}
         {loading ? (
-          <LoadingState label="Cargando ofertas…" />
+          <LoadingState label="Cargando vistas…" />
         ) : error ? (
           <ErrorState message={error} onRetry={reload} />
-        ) : active.length === 0 ? (
+        ) : all.length === 0 ? (
           <EmptyState
-            title="No hay ofertas disponibles."
-            hint="Usa «Buscar nuevas ofertas» en el Dashboard para traer ofertas de Computrabajo."
+            title="No hay ofertas vistas."
+            hint="Cuando abras una oferta (Ver oferta / Ir a oferta) aparecerá aquí. Si la descartas, pasa a Descartadas."
           />
         ) : (
           <>
@@ -143,10 +97,7 @@ export function Jobs() {
               sources={sources}
             />
             {visible.length === 0 ? (
-              <EmptyState
-                title="Sin resultados para esos filtros."
-                hint="Ajusta la búsqueda o limpia los filtros."
-              />
+              <EmptyState title="Sin resultados para esos filtros." />
             ) : (
               <div className="job-list">
                 {visible.map((job) => (

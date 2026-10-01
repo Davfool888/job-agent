@@ -885,3 +885,36 @@ def summarize(db) -> dict:
             else None
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Usuarios (login con Google). Solo uid/email/nombre/telefono.
+# ---------------------------------------------------------------------------
+
+def get_user(db, uid: str) -> dict | None:
+    snap = _col(db, "users").document(str(uid)).get()
+    if not snap.exists:
+        return None
+    data = dict(snap.to_dict() or {})
+    out = {
+        "uid": str(uid),
+        "email": data.get("email") or "",
+        "nombre": data.get("nombre") or "",
+        "telefono": data.get("telefono") or "",
+    }
+    for key in ("created_at", "updated_at"):
+        value = data.get(key)
+        out[key] = value.isoformat() if hasattr(value, "isoformat") else value
+    return out
+
+
+def save_user(db, uid: str, fields: dict) -> dict:
+    ref = _col(db, "users").document(str(uid))
+    snap = ref.get()
+    current = dict(snap.to_dict() or {}) if snap.exists else {}
+    merged = {**current, **{k: v for k, v in fields.items() if v is not None}}
+    merged.setdefault("email", "")
+    merged.setdefault("nombre", "")
+    merged.setdefault("telefono", "")
+    ref.set(merged, merge=True)
+    return get_user(db, uid) or {"uid": str(uid), **merged}

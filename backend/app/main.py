@@ -23,6 +23,7 @@ from app.database.connection import get_db
 from app.database.models import JOB_STATUSES
 from app.database.models import Job  # noqa: F401  (registra el modelo)
 from app.database.models import Profile  # noqa: F401
+from app.database.models import User  # noqa: F401
 from app.schemas.job import JobResponse
 from app.schemas.job import JobStatusUpdate
 from app.scraper.registry import available_sources
@@ -110,6 +111,69 @@ def _json_list(value) -> list:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/auth/status")
+def auth_status():
+    """Dice si el backend puede verificar sesiones de Firebase."""
+    try:
+        from app.database import firestore_client
+
+        firestore_client.get_firestore()
+        return {"configured": True, "provider": "google"}
+    except Exception as exc:
+        return {"configured": False, "provider": "google", "error": str(exc)}
+
+
+@app.get("/auth/me")
+def auth_me(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Verifica el ID token (Bearer) y devuelve/crea el usuario.
+
+    Solo guarda nombre, telefono y gmail.
+    """
+    from app.auth import verify_bearer_token
+    from app.services.user_service import get_or_create_user
+
+    claims = verify_bearer_token(request.headers.get("authorization"))
+    user, created = get_or_create_user(
+        db, claims["uid"], claims["email"], claims["name"]
+    )
+    return {
+        **user,
+        "is_new": created,
+        "is_profile_complete": bool((user.get("nombre") or "").strip())
+        and bool((user.get("telefono") or "").strip()),
+    }
+
+
+@app.put("/auth/me")
+def auth_update_me(
+    payload: dict[str, Any],
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Completa/actualiza nombre y telefono del usuario autenticado."""
+    from app.auth import verify_bearer_token
+    from app.services.user_service import get_or_create_user, update_user
+
+    claims = verify_bearer_token(request.headers.get("authorization"))
+    # Asegura que existe (primer login sin GET previo).
+    get_or_create_user(db, claims["uid"], claims["email"], claims["name"])
+    nombre = payload.get("nombre") if isinstance(payload, dict) else None
+    telefono = payload.get("telefono") if isinstance(payload, dict) else None
+    if nombre is not None and not str(nombre).strip():
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio.")
+    if telefono is not None and not str(telefono).strip():
+        raise HTTPException(status_code=400, detail="El telefono es obligatorio.")
+    user = update_user(db, claims["uid"], nombre=nombre, telefono=telefono)
+    return {
+        **user,
+        "is_profile_complete": bool((user.get("nombre") or "").strip())
+        and bool((user.get("telefono") or "").strip()),
+    }
 
 
 @app.get("/stats")

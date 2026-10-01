@@ -4,8 +4,10 @@ import {
   BarChart3,
   BookmarkX,
   Briefcase,
+  Eye,
   FileText,
   LayoutDashboard,
+  LogOut,
   Menu,
   Radar,
   Send,
@@ -13,12 +15,14 @@ import {
   User,
 } from "lucide-react";
 import { API_URL } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 
 const LINKS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/jobs", label: "Ofertas", icon: Briefcase },
   { to: "/search", label: "Búsqueda", icon: Radar },
   { to: "/discarded", label: "Descartadas", icon: BookmarkX },
+  { to: "/viewed", label: "Vistas", icon: Eye },
   { to: "/applications", label: "Postulaciones", icon: Send },
   { to: "/cv", label: "CV", icon: FileText },
   { to: "/analytics", label: "Análisis", icon: BarChart3 },
@@ -28,6 +32,7 @@ const LINKS = [
 
 export function Sidebar() {
   const [open, setOpen] = useState(false);
+  const { firebaseUser, profile, logout } = useAuth();
 
   return (
     <>
@@ -61,6 +66,20 @@ export function Sidebar() {
           ))}
         </nav>
         <div className="sidebar-foot">
+          {firebaseUser && (
+            <div className="sidebar-user">
+              <span title={profile?.email || firebaseUser.email || ""}>
+                {profile?.nombre || firebaseUser.displayName || "Usuario"}
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => void logout()}
+                title="Cerrar sesion"
+              >
+                <LogOut size={13} /> Salir
+              </button>
+            </div>
+          )}
           API: {API_URL.replace(/^https?:\/\//, "")}
         </div>
       </aside>

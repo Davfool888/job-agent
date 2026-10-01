@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Archive,
@@ -45,6 +45,17 @@ export function JobDetail() {
   const [discarding, setDiscarding] = useState<Job | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Visualizar el detalle registra la vista: new -> opened (pasa a Vistas).
+  // kept se conserva para no perder "guardadas".
+  useEffect(() => {
+    if (job.data && job.data.status === "new") {
+      updateJobStatus(jobId, { status: "opened" })
+        .then(() => job.reload())
+        .catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.data?.status]);
 
   const mutate = async (payload: Parameters<typeof updateJobStatus>[1]) => {
     setBusy(true);

@@ -372,3 +372,27 @@ class Profile(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+
+class User(Base):
+    """Usuario de la app (login con Google via Firebase Auth).
+
+    Solo: uid (Firebase), email (gmail), nombre y telefono."""
+
+    __tablename__ = "users"
+
+    uid = Column(String(128), primary_key=True, index=True)
+
+    email = Column(String(320), nullable=False, default="")
+
+    nombre = Column(String(200), nullable=False, default="")
+
+    telefono = Column(String(50), nullable=False, default="")
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )

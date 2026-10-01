@@ -24,6 +24,7 @@ interface Props {
   onDiscard: (job: Job) => void;
   onRecover?: (job: Job) => void;
   onApply?: (job: Job) => void;
+  onOpen?: (job: Job) => void;
   showRecover?: boolean;
 }
 
@@ -34,6 +35,7 @@ export function JobCard({
   onDiscard,
   onRecover,
   onApply,
+  onOpen,
   showRecover,
 }: Props) {
   return (
@@ -99,7 +101,7 @@ export function JobCard({
           href={job.url}
           target="_blank"
           rel="noreferrer"
-          onClick={() => onApply?.(job)}
+          onClick={() => (onOpen ?? onApply)?.(job)}
           title={`Abre la oferta original en ${sourceLabel(job.source)}`}
         >
           <ExternalLink /> Ir a oferta
@@ -124,7 +126,7 @@ export function JobCard({
                 <BookmarkCheck /> Conservar
               </button>
             )}
-            {job.status === "kept" && onApply && (
+            {job.status !== "applied" && job.status !== "discarded" && onApply && (
               <button
                 className="btn btn-primary btn-sm"
                 disabled={busy}

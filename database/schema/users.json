@@ -1,0 +1,12 @@
+{
+  "required": ["uid", "email"],
+  "fields": {
+    "uid": "string — Firebase Auth UID (document ID)",
+    "email": "string — gmail de Google (minusculas)",
+    "nombre": "string — nombre del usuario",
+    "telefono": "string — telefono del registro",
+    "created_at": "timestamp",
+    "updated_at": "timestamp"
+  },
+  "note": "Solo nombre, telefono y gmail. Lo escribe el backend con Admin SDK (rules deny-all)."
+}

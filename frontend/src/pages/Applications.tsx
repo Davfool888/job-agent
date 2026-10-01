@@ -14,13 +14,10 @@ import { formatDateTime } from "../utils/format";
 import { updateJobStatus } from "../services/jobs";
 
 export function Applications() {
-  const { data, loading, error, reload } = useJobs();
+  const { data, loading, error, reload } = useJobs("applied");
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const applied = useMemo(
-    () => (data ?? []).filter((j) => j.status === "applied" || j.status === "opened"),
-    [data],
-  );
+  const applied = useMemo(() => data ?? [], [data]);
 
   const setStage = async (id: string, stage: string) => {
     setBusyId(id);
@@ -36,7 +33,7 @@ export function Applications() {
     <>
       <Header
         title="Postulaciones"
-        subtitle="Ofertas abiertas o con postulación iniciada. Abrir la URL registra el interés, no la postulación completada."
+        subtitle="Ofertas con postulación iniciada. Las vistas sin postular viven en Vistas."
       />
       <div className="content">
         {loading ? (
