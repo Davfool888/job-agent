@@ -13,6 +13,7 @@ import {
   Target,
 } from "lucide-react";
 import { Header } from "../components/layout/Header";
+import { SuggestInput } from "../components/forms/SuggestInput";
 import { ErrorState, LoadingState } from "../components/jobs/States";
 import { useJobs, useJobSearch, useSources, useStats } from "../hooks/useApi";
 import { useSearchSession } from "../context/SearchSessionContext";
@@ -148,21 +149,16 @@ export function Dashboard() {
               placeholder="Ej: desarrollador python"
               onKeyDown={(e) => e.key === "Enter" && runSearch()}
             />
-            <input
-              className="input"
-              style={{ width: 150 }}
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="Ciudad (ej: Bogotá)"
-              title="Filtra por ciudad antes de guardar. Vacío = todo el país."
-              list="colombian-cities"
-              onKeyDown={(e) => e.key === "Enter" && runSearch()}
-            />
-            <datalist id="colombian-cities">
-              {COLOMBIAN_CITIES.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+            <div style={{ width: 150 }}>
+              <SuggestInput
+                value={city}
+                onChange={setCity}
+                options={COLOMBIAN_CITIES}
+                placeholder="Ciudad (ej: Bogotá)"
+                title="Filtra por ciudad antes de guardar. Vacío = todo el país."
+                onKeyDown={(e) => e.key === "Enter" && runSearch()}
+              />
+            </div>
             <select
               className="select"
               value={source}

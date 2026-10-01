@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Download,
@@ -12,6 +12,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Header } from "../components/layout/Header";
+import { SuggestInput } from "../components/forms/SuggestInput";
 import {
   EmptyState,
   ErrorState,
@@ -30,23 +31,43 @@ import {
   uploadProfileCv,
 } from "../services/searchProfiles";
 import { fetchSources } from "../services/jobs";
+import { fetchCatalogs } from "../services/profile";
+import type { Catalogs } from "../types/profile";
 import type {
   ProfileCvStatus,
   SchedulerStatus,
   SearchProfile,
 } from "../types/searchProfile";
+import { COLOMBIAN_CITIES } from "../utils/cities";
+import { SKILLS } from "../utils/skills";
+import { TITLES } from "../utils/titles";
 
 const EMPTY_FORM = {
   name: "",
   title: "",
   location: "",
   modality: "",
-  keywords: "",
   sources: [] as string[],
   active: true,
   frequency_minutes: 10,
   max_age_days: 0,
 };
+
+const FREQUENCY_OPTIONS = [
+  { value: 5, label: "Cada 5 minutos" },
+  { value: 10, label: "Cada 10 minutos" },
+  { value: 20, label: "Cada 20 minutos" },
+  { value: 30, label: "Cada 30 minutos" },
+  { value: 45, label: "Cada 45 minutos" },
+  { value: 60, label: "Cada hora" },
+  { value: 120, label: "Cada 2 horas" },
+  { value: 300, label: "Cada 5 horas" },
+  { value: 600, label: "Cada 10 horas" },
+  { value: 900, label: "Cada 15 horas" },
+  { value: 1440, label: "Cada 24 horas" },
+];
+
+const MODALITY_FALLBACK = ["Presencial", "Híbrido", "Remoto"];
 
 export const MAX_AGE_OPTIONS = [
   { value: 0, label: "Todas (sin límite)" },
@@ -95,6 +116,9 @@ export function Search() {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [cvMap, setCvMap] = useState<Record<string, ProfileCvStatus>>({});
   const [cvBusy, setCvBusy] = useState<string | null>(null);
+  // Palabras relacionadas: una por fila, con autocompletado y botón +.
+  const [kwRows, setKwRows] = useState<string[]>([""]);
+  const [catalogs, setCatalogs] = useState<Catalogs | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,8 +156,28 @@ export function Search() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    fetchCatalogs()
+      .then(setCatalogs)
+      .catch(() => setCatalogs(null));
+  }, []);
+
+  const titleOptions = useMemo(
+    () => catalogs?.professional_titles.map((t) => t.label) ?? TITLES,
+    [catalogs],
+  );
+  const cityOptions = useMemo(
+    () => catalogs?.cities.map((c) => c.label) ?? COLOMBIAN_CITIES,
+    [catalogs],
+  );
+  const modalityOptions = useMemo(
+    () => catalogs?.modalities.map((m) => m.label) ?? MODALITY_FALLBACK,
+    [catalogs],
+  );
+
   const openCreate = () => {
     setForm(EMPTY_FORM);
+    setKwRows([""]);
     setCreating(true);
     setEditing(null);
   };
@@ -144,12 +188,12 @@ export function Search() {
       title: p.title,
       location: p.location ?? "",
       modality: p.modality ?? "",
-      keywords: p.keywords.join(", "),
       sources: p.sources,
       active: p.active,
       frequency_minutes: p.frequency_minutes,
       max_age_days: p.max_age_days ?? 0,
     });
+    setKwRows(p.keywords.length > 0 ? [...p.keywords] : [""]);
     setEditing(p.id);
     setCreating(false);
   };
@@ -172,10 +216,7 @@ export function Search() {
         title: form.title.trim(),
         location: form.location.trim() || null,
         modality: form.modality.trim() || null,
-        keywords: form.keywords
-          .split(",")
-          .map((k) => k.trim())
-          .filter(Boolean),
+        keywords: [...new Set(kwRows.map((k) => k.trim()).filter(Boolean))],
         sources: form.sources,
         active: form.active,
         frequency_minutes: Number(form.frequency_minutes) || 10,
@@ -350,42 +391,77 @@ export function Search() {
                   </label>
                   <label>
                     Cargo objetivo *
-                    <input
-                      className="input"
+                    <SuggestInput
                       value={form.title}
-                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                      onChange={(v) => setForm({ ...form, title: v })}
+                      options={titleOptions}
                       placeholder="Analista de Datos"
+                      title="Escribe y elige de la lista"
                     />
                   </label>
                   <label>
                     Ubicación
-                    <input
-                      className="input"
+                    <SuggestInput
                       value={form.location}
-                      onChange={(e) => setForm({ ...form, location: e.target.value })}
+                      onChange={(v) => setForm({ ...form, location: v })}
+                      options={cityOptions}
                       placeholder="Bogotá"
+                      title="Escribe y elige de la lista"
                     />
                   </label>
                   <label>
                     Modalidad
-                    <input
-                      className="input"
+                    <select
+                      className="select"
                       value={form.modality}
                       onChange={(e) => setForm({ ...form, modality: e.target.value })}
-                      placeholder="Remoto / Híbrido / Presencial"
-                    />
+                    >
+                      <option value="">Cualquiera</option>
+                      {modalityOptions.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
-                <label style={{ display: "block", marginTop: 8 }}>
-                  Palabras relacionadas (separadas por coma)
-                  <input
-                    className="input"
-                    value={form.keywords}
-                    onChange={(e) => setForm({ ...form, keywords: e.target.value })}
-                    placeholder="Power BI, DAX, Excel, Power Query, SQL"
-                    style={{ width: "100%" }}
-                  />
-                </label>
+                <div className="field" style={{ marginTop: 6 }}>
+                  <label>Palabras relacionadas (una por fila)</label>
+                  {kwRows.map((kw, i) => (
+                    <div className="kw-row" key={i}>
+                      <SuggestInput
+                        value={kw}
+                        onChange={(v) =>
+                          setKwRows((rows) =>
+                            rows.map((r, j) => (j === i ? v : r)),
+                          )
+                        }
+                        options={SKILLS}
+                        placeholder="Ej: DAX"
+                        title="Escribe y elige de la lista"
+                      />
+                      {kwRows.length > 1 && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() =>
+                            setKwRows((rows) => rows.filter((_, j) => j !== i))
+                          }
+                          title="Quitar palabra"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <div>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setKwRows((rows) => [...rows, ""])}
+                    >
+                      <Plus size={14} /> Añadir palabra
+                    </button>
+                  </div>
+                </div>
                 <div style={{ marginTop: 8 }}>
                   <p style={{ fontSize: 12.5, margin: "0 0 6px" }}>
                     Fuentes (vacío = todas por defecto)
@@ -412,17 +488,21 @@ export function Search() {
                 </div>
                 <div className="form-grid" style={{ marginTop: 8 }}>
                   <label>
-                    Frecuencia (minutos, 5–1440)
-                    <input
-                      className="input"
-                      type="number"
-                      min={5}
-                      max={1440}
-                      value={form.frequency_minutes}
+                    Frecuencia de búsqueda
+                    <select
+                      className="select"
+                      value={String(form.frequency_minutes)}
                       onChange={(e) =>
                         setForm({ ...form, frequency_minutes: Number(e.target.value) })
                       }
-                    />
+                      title="Cada cuánto ejecuta el backend este perfil"
+                    >
+                      {FREQUENCY_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label>
                     Antigüedad máxima (por defecto)

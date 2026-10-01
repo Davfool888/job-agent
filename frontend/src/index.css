@@ -860,13 +860,86 @@ a {
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
+  gap: 14px 16px;
+  margin-bottom: 6px;
+}
+
+.form-grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.form-grid .input,
+.form-grid .select {
+  width: 100%;
 }
 
 @media (max-width: 700px) {
   .form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- Autocompletado con desplegable ---------- */
+.suggest {
+  position: relative;
+}
+
+.suggest-input {
+  width: 100%;
+}
+
+.suggest-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  max-height: 224px;
+  overflow-y: auto;
+}
+
+.suggest-list button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.suggest-list button:hover,
+.suggest-list button.active {
+  background: var(--surface-2);
+}
+
+/* ---------- Filas dinámicas (palabras clave) ---------- */
+.kw-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.kw-row .suggest {
+  flex: 1;
+  min-width: 0;
 }
 
 /* ---------- States ---------- */

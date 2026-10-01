@@ -436,10 +436,13 @@ def update_search_profile(
 
 @app.delete("/search-profiles/{profile_id}", status_code=204)
 def delete_search_profile(profile_id: str, db: Session = Depends(get_db)):
+    from app.services import profile_cvs as pcvs
     from app.services import search_profiles as profiles
 
     if not profiles.delete_profile(db, profile_id):
         raise HTTPException(status_code=404, detail="Perfil no encontrado.")
+    # Sin perfil no hay CV que lo referencie: borra su PDF + metadatos.
+    pcvs.delete_profile_cv(db, profile_id)
     return None
 
 

@@ -1,0 +1,27 @@
+// Cargos para autocompletado. Respaldo local si GET /catalogs falla;
+// la fuente primaria es el backend (professional_titles).
+export const TITLES: string[] = [
+  "Analista de Datos",
+  "Desarrollador Python",
+  "Desarrollador de Software",
+  "Desarrollador Backend",
+  "Desarrollador Frontend",
+  "Desarrollador Full Stack",
+  "Ingeniero de Datos",
+  "Científico de Datos",
+  "Analista BI",
+  "Desarrollador BI",
+  "Administrador de Bases de Datos",
+  "Ingeniero QA",
+  "Ingeniero DevOps",
+  "Ingeniero de Machine Learning",
+  "Ingeniero de Software",
+  "Ingeniero de Sistemas",
+  "Gerente de Producto",
+  "Gerente de Proyectos",
+  "Analista de Negocios",
+  "Analista Financiero",
+  "Contador",
+  "Ejecutivo Comercial",
+  "Asesor Comercial",
+];

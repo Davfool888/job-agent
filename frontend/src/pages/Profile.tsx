@@ -11,11 +11,14 @@ import {
   TagInput,
 } from "../components/profile/fields";
 import { useProfile } from "../hooks/useApi";
+import { SuggestInput } from "../components/forms/SuggestInput";
 import {
   fetchCatalogs,
   fetchFullProfile,
   saveFullProfile,
 } from "../services/profile";
+import { COLOMBIAN_CITIES } from "../utils/cities";
+import { TITLES } from "../utils/titles";
 import type {
   Catalogs,
   CityRef,
@@ -34,6 +37,7 @@ function splitList(v: string): string[] {
 
 export function ProfilePage() {
   const { data, loading, error, reload, save, saving } = useProfile();
+  const { catalogs } = useCatalogs();
   const [form, setForm] = useState<Profile | null>(null);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -61,6 +65,10 @@ export function ProfilePage() {
   }
 
   const current = form ?? data;
+
+  const titleOptions =
+    catalogs?.professional_titles.map((t) => t.label) ?? TITLES;
+  const cityOptions = catalogs?.cities.map((c) => c.label) ?? COLOMBIAN_CITIES;
 
   const set = (patch: Partial<Profile>) => {
     setForm({ ...current, ...patch });
@@ -115,11 +123,21 @@ export function ProfilePage() {
             </div>
             <div className="field">
               <label>Título profesional</label>
-              <input className="input" value={current.title} onChange={(e) => set({ title: e.target.value })} placeholder="Ej: Analista de Datos" />
+              <SuggestInput
+                value={current.title}
+                onChange={(v) => set({ title: v })}
+                options={titleOptions}
+                placeholder="Ej: Analista de Datos"
+              />
             </div>
             <div className="field">
               <label>Ubicación</label>
-              <input className="input" value={current.location} onChange={(e) => set({ location: e.target.value })} placeholder="Ej: Bogotá, Colombia" />
+              <SuggestInput
+                value={current.location}
+                onChange={(v) => set({ location: v })}
+                options={cityOptions}
+                placeholder="Ej: Bogotá, Colombia"
+              />
             </div>
           </div>
 

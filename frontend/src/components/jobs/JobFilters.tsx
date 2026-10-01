@@ -1,5 +1,10 @@
 import type { JobFilterState } from "../../types/filters";
 import { DEFAULT_FILTERS } from "../../types/filters";
+import { SuggestInput } from "../forms/SuggestInput";
+import { SKILLS } from "../../utils/skills";
+import { TITLES } from "../../utils/titles";
+
+const TEXT_OPTIONS = [...TITLES, ...SKILLS];
 
 interface Props {
   value: JobFilterState;
@@ -24,12 +29,15 @@ export function JobFilters({
   return (
     <div className="toolbar">
       <div className="toolbar-row">
-        <input
-          className="input search-input"
-          placeholder="Buscar por cargo, empresa, skill (DAX, Python)…"
-          value={value.text}
-          onChange={(e) => set({ text: e.target.value })}
-        />
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <SuggestInput
+            value={value.text}
+            onChange={(v) => set({ text: v })}
+            options={TEXT_OPTIONS}
+            placeholder="Buscar por cargo, empresa, skill (DAX, Python)…"
+            title="Escribe y elige una sugerencia, o texto libre"
+          />
+        </div>
         <select
           className="select"
           value={value.sort}
