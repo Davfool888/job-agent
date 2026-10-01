@@ -918,3 +918,39 @@ def save_user(db, uid: str, fields: dict) -> dict:
     merged.setdefault("telefono", "")
     ref.set(merged, merge=True)
     return get_user(db, uid) or {"uid": str(uid), **merged}
+
+
+# ---------------------------------------------------------------------------
+# Perfiles propios por usuario (no-admin). El admin usa el perfil global.
+# ---------------------------------------------------------------------------
+
+def get_user_profile(db, uid: str) -> dict:
+    """Perfil plano propio ({campo: valor}). Vacio si nunca guardo."""
+    snap = _col(db, "user_profiles").document(str(uid)).get()
+    if not snap.exists:
+        return {}
+    data = (snap.to_dict() or {}).get("data") or {}
+    return dict(data) if isinstance(data, dict) else {}
+
+
+def save_user_profile(db, uid: str, data: dict) -> dict:
+    ref = _col(db, "user_profiles").document(str(uid))
+    ref.set({"data": dict(data or {}), "updated_at": utcnow_naive()},
+            merge=True)
+    return get_user_profile(db, uid)
+
+
+def get_user_rich_profile(db, uid: str) -> dict:
+    """Perfil estructurado propio. Vacio si nunca guardo."""
+    snap = _col(db, "user_rich_profiles").document(str(uid)).get()
+    if not snap.exists:
+        return {}
+    data = (snap.to_dict() or {}).get("profile") or {}
+    return dict(data) if isinstance(data, dict) else {}
+
+
+def save_user_rich_profile(db, uid: str, profile: dict) -> dict:
+    ref = _col(db, "user_rich_profiles").document(str(uid))
+    ref.set({"profile": dict(profile or {}), "updated_at": utcnow_naive()},
+            merge=True)
+    return get_user_rich_profile(db, uid)

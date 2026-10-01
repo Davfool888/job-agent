@@ -71,8 +71,10 @@ export function JobDetail() {
   };
 
   const apply = async (j: Job) => {
-    await mutate({ status: "applied", application_status: "iniciada" });
+    // Abrir PRIMERO: si va despues del await, el bloqueador de popups
+    // lo intercepta porque pierde el gesto del usuario.
     window.open(j.url, "_blank", "noopener");
+    await mutate({ status: "applied", application_status: "iniciada" });
     navigate("/applications");
   };
 
@@ -280,9 +282,11 @@ function DetailBody({
               <Archive /> Descartar
             </button>
           )}
-          <button className="btn btn-primary btn-sm" disabled={busy} onClick={onApply}>
-            <Send /> Postularme
-          </button>
+          {job.status !== "applied" && job.status !== "discarded" && (
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={onApply}>
+              <Send /> Postularme
+            </button>
+          )}
           {job.match_score === null && (
             <button
               className="btn btn-ghost btn-sm"

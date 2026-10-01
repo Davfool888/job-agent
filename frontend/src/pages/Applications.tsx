@@ -16,14 +16,18 @@ import { updateJobStatus } from "../services/jobs";
 export function Applications() {
   const { data, loading, error, reload } = useJobs("applied");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [stageError, setStageError] = useState<string | null>(null);
 
   const applied = useMemo(() => data ?? [], [data]);
 
   const setStage = async (id: string, stage: string) => {
     setBusyId(id);
+    setStageError(null);
     try {
       await updateJobStatus(id, { status: "applied", application_status: stage });
       reload();
+    } catch (e) {
+      setStageError(e instanceof Error ? e.message : "No se pudo cambiar la etapa");
     } finally {
       setBusyId(null);
     }
@@ -36,6 +40,7 @@ export function Applications() {
         subtitle="Ofertas con postulación iniciada. Las vistas sin postular viven en Vistas."
       />
       <div className="content">
+        {stageError && <div className="alert-error">{stageError}</div>}
         {loading ? (
           <LoadingState label="Cargando postulaciones…" />
         ) : error ? (

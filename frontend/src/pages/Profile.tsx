@@ -91,17 +91,19 @@ export function ProfilePage() {
         subtitle="Fuente estructurada para matching, CV y análisis (PUT /profile y /profile/full)"
       />
       <div className="content">
+        {data.scope === "own" && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <p style={{ margin: 0, fontSize: 13 }}>
+              👤 Este es <strong>tu perfil personal</strong>: empieza en
+              blanco y solo se llena con lo que guardes aquí. El perfil
+              base de la cuenta principal no es visible para ti.
+            </p>
+          </div>
+        )}
         <form className="card" onSubmit={submit}>
           {saveError && <div className="alert-error">{saveError}</div>}
           {saved && (
-            <div
-              className="alert-error"
-              style={{
-                background: "var(--success-soft)",
-                borderColor: "#bfe3cf",
-                color: "var(--success)",
-              }}
-            >
+            <div className="alert-success">
               Perfil guardado en el backend.
             </div>
           )}

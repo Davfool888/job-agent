@@ -5,9 +5,9 @@ export function Layout() {
   return (
     <div className="layout">
       <Sidebar />
-      <div className="main">
+      <main className="main">
         <Outlet />
-      </div>
+      </main>
     </div>
   );
 }

@@ -27,21 +27,29 @@ export function Jobs() {
 
   // "N nuevas desde tu ultima visita": usa GET /jobs?since= con la marca
   // guardada localmente (solo preferencia visual, los datos son del backend).
+  // La marca solo avanza si la lectura fue exitosa.
   useEffect(() => {
     let alive = true;
     const lastVisit = window.localStorage.getItem("jobagent_last_visit");
+    const stamp = () =>
+      window.localStorage.setItem(
+        "jobagent_last_visit",
+        new Date().toISOString(),
+      );
     if (lastVisit) {
       fetchJobsSince(lastVisit)
         .then((jobs) => {
-          if (alive) setNewCount(jobs.filter((j) => j.status !== "discarded").length);
+          if (!alive) return;
+          setNewCount(jobs.filter((j) => j.status !== "discarded").length);
+          stamp();
         })
         .catch(() => {
           if (alive) setNewCount(null);
         });
     } else {
       setNewCount(0);
+      stamp();
     }
-    window.localStorage.setItem("jobagent_last_visit", new Date().toISOString());
     return () => {
       alive = false;
     };
@@ -78,8 +86,10 @@ export function Jobs() {
 
   const apply = (job: Job) =>
     run(job, async () => {
-      await mutate(job.id, { status: "applied", application_status: "iniciada" });
+      // Abrir PRIMERO (gesto del usuario); el await despues evita que el
+      // bloqueador de popups intercepte la ventana.
       window.open(job.url, "_blank", "noopener");
+      await mutate(job.id, { status: "applied", application_status: "iniciada" });
     });
 
   const openOriginal = (job: Job) => {

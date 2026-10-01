@@ -14,6 +14,15 @@ load_dotenv(BASE_DIR / ".env")
 
 APP_NAME = os.getenv("APP_NAME", "job-agent")
 
+# Cuenta administradora: la unica que ve y edita el perfil base global
+# (singleton Profile + base_cv.json). Cualquier otro usuario con sesion
+# usa su propio perfil, que empieza en blanco.
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "davfool888@gmail.com").strip().lower()
+
+
+def is_admin_email(email: str | None) -> bool:
+    return bool(email) and email.strip().lower() == ADMIN_EMAIL
+
 _DEFAULT_DB = f"sqlite:///{(BASE_DIR / 'data' / 'job_agent.db').as_posix()}"
 DATABASE_URL = os.getenv("DATABASE_URL", _DEFAULT_DB)
 
@@ -104,13 +113,6 @@ OPENAI_COMPAT_BASE_URL = os.getenv(
 )
 OPENAI_COMPAT_API_KEY = os.getenv("OPENAI_COMPAT_API_KEY", "")
 OPENAI_COMPAT_MODEL = os.getenv("OPENAI_COMPAT_MODEL", "gpt-4o-mini")
-
-# --- Scheduler de busqueda automatica ---
-# En Render (gratuito) la instancia duerme: ademas del scheduler interno,
-# un cron externo puede llamar POST /scheduler/tick (ver SCHEDULER_CRON_SECRET).
-SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "true").lower() == "true"
-SCHEDULER_INTERVAL_SECONDS = int(os.getenv("SCHEDULER_INTERVAL_SECONDS", "60"))
-SCHEDULER_CRON_SECRET = os.getenv("SCHEDULER_CRON_SECRET", "")
 
 # --- Scheduler de busqueda automatica ---
 # En Render (gratuito) la instancia duerme: ademas del scheduler interno,

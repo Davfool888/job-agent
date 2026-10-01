@@ -403,3 +403,39 @@ class User(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+
+class UserProfile(Base):
+    """Perfil plano (/profile) propio de cada usuario no-admin.
+
+    El admin usa el singleton global Profile; los demas empiezan en
+    blanco y solo guardan aqui, sin tocar el perfil base."""
+
+    __tablename__ = "user_profiles"
+
+    uid = Column(String(128), primary_key=True, index=True)
+
+    data = Column(Text, nullable=False, default="{}")
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
+class UserRichProfile(Base):
+    """Perfil estructurado (/profile/full) propio de cada usuario
+    no-admin. El admin usa base_cv.json; los demas empiezan en blanco."""
+
+    __tablename__ = "user_rich_profiles"
+
+    uid = Column(String(128), primary_key=True, index=True)
+
+    data = Column(Text, nullable=False, default="{}")
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )

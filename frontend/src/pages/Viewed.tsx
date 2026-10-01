@@ -49,8 +49,10 @@ export function Viewed() {
 
   const apply = (job: Job) =>
     run(job, async () => {
-      await mutate(job.id, { status: "applied", application_status: "iniciada" });
+      // Abrir PRIMERO (gesto del usuario); el await despues evita que el
+      // bloqueador de popups intercepte la ventana.
       window.open(job.url, "_blank", "noopener");
+      await mutate(job.id, { status: "applied", application_status: "iniciada" });
     });
 
   const openOriginal = (job: Job) => {

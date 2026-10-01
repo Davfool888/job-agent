@@ -70,6 +70,7 @@ export function Search() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -175,8 +176,8 @@ export function Search() {
   };
 
   const remove = async (p: SearchProfile) => {
-    if (!window.confirm(`¿Eliminar el perfil "${p.name}"?`)) return;
     setBusyId(p.id);
+    setConfirming(null);
     try {
       await deleteSearchProfile(p.id);
       await load();
@@ -472,13 +473,32 @@ export function Search() {
                       >
                         Editar
                       </button>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        disabled={busyId === p.id}
-                        onClick={() => remove(p)}
-                      >
-                        <Trash2 size={14} /> Eliminar
-                      </button>
+                      {confirming === p.id ? (
+                        <>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            disabled={busyId === p.id}
+                            onClick={() => remove(p)}
+                            title="Confirma la eliminación"
+                          >
+                            <Trash2 size={14} /> Sí, eliminar
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setConfirming(null)}
+                          >
+                            Cancelar
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          disabled={busyId === p.id}
+                          onClick={() => setConfirming(p.id)}
+                        >
+                          <Trash2 size={14} /> Eliminar
+                        </button>
+                      )}
                       <span className="spacer" />
                       <Link className="btn btn-ghost btn-sm" to="/jobs">
                         Ver ofertas <RefreshCw size={14} />

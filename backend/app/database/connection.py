@@ -30,15 +30,6 @@ SessionLocal = sessionmaker(
 Base = declarative_base()
 
 
-def get_db():
-    db = SessionLocal()
-
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 def ensure_columns():
     """Migracion ligera para SQLite: agrega a `jobs` las columnas de
     gestion que no existan (la BD actual se creo con el schema viejo y

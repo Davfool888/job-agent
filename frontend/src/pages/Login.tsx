@@ -1,11 +1,12 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Briefcase, LogIn, Phone, User as UserIcon } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { isFirebaseConfigured } from "../lib/firebase";
 
 export function Login() {
   const {
+    configured,
     loginWithGoogle,
     completeProfile,
     firebaseUser,
@@ -15,11 +16,36 @@ export function Login() {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nombre, setNombre] = useState(profile?.nombre ?? "");
-  const [telefono, setTelefono] = useState(profile?.telefono ?? "");
+  const [nombre, setNombre] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [touchedNombre, setTouchedNombre] = useState(false);
+  const [touchedTelefono, setTouchedTelefono] = useState(false);
+
+  const uid = firebaseUser?.uid ?? null;
+  // Al cambiar de cuenta se resetea lo editado.
+  useEffect(() => {
+    setTouchedNombre(false);
+    setTouchedTelefono(false);
+  }, [uid]);
+  // Pre-rellena desde Google/backend sin pisar lo que ya escribio.
+  useEffect(() => {
+    if (!touchedNombre) {
+      setNombre(profile?.nombre || firebaseUser?.displayName || "");
+    }
+    if (!touchedTelefono) {
+      setTelefono(profile?.telefono || "");
+    }
+  }, [firebaseUser, profile, touchedNombre, touchedTelefono]);
 
   const googleName = firebaseUser?.displayName ?? "";
   const googleEmail = firebaseUser?.email ?? profile?.email ?? "";
+
+  // Si ya hay sesion completa, no quedarse en /login.
+  useEffect(() => {
+    if (firebaseUser && !needsProfile) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [firebaseUser, needsProfile, navigate]);
 
   const doLogin = async () => {
     setBusy(true);
@@ -75,7 +101,10 @@ export function Login() {
               <input
                 className="input"
                 value={nombre || googleName}
-                onChange={(e) => setNombre(e.target.value)}
+                onChange={(e) => {
+                  setTouchedNombre(true);
+                  setNombre(e.target.value);
+                }}
                 placeholder="Tu nombre"
               />
             </div>
@@ -91,7 +120,10 @@ export function Login() {
               <input
                 className="input"
                 value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
+                onChange={(e) => {
+                  setTouchedTelefono(true);
+                  setTelefono(e.target.value);
+                }}
                 placeholder="+57 300 123 4567"
                 inputMode="tel"
               />
@@ -133,6 +165,11 @@ export function Login() {
         >
           <LogIn size={15} /> {busy ? "Conectando…" : "Continuar con Google"}
         </button>
+        {!configured && (
+          <p className="auth-hint">
+            <Link to="/dashboard">Continuar sin iniciar sesión (modo local)</Link>
+          </p>
+        )}
         <p className="auth-hint">
           Al continuar aceptas guardar nombre, telefono y gmail para tu cuenta.
         </p>

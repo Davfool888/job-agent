@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Archive,
@@ -17,6 +17,8 @@ import { ErrorState, LoadingState } from "../components/jobs/States";
 import { useJobs, useJobSearch, useSources, useStats } from "../hooks/useApi";
 import { useSearchSession } from "../context/SearchSessionContext";
 import { discoverJobs } from "../services/jobs";
+import { fetchSchedulerStatus } from "../services/searchProfiles";
+import type { SchedulerStatus } from "../types/searchProfile";
 import { timeAgo } from "../utils/format";
 import { COLOMBIAN_CITIES } from "../utils/cities";
 import { STATUS_LABELS, sourceLabel } from "../utils/constants";
@@ -62,6 +64,13 @@ export function Dashboard() {
   } = useSearchSession();
   const [discovering, setDiscovering] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [sched, setSched] = useState<SchedulerStatus | null>(null);
+
+  useEffect(() => {
+    fetchSchedulerStatus()
+      .then(setSched)
+      .catch(() => setSched(null));
+  }, []);
 
   const all = useMemo(() => jobs.data ?? [], [jobs.data]);
   const byStatus = stats.data?.by_status ?? {};
@@ -130,7 +139,7 @@ export function Dashboard() {
         title="Dashboard"
         subtitle="Resumen del estado de tu búsqueda laboral"
         actions={
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <input
               className="input"
               style={{ width: 200 }}
@@ -402,24 +411,37 @@ export function Dashboard() {
                 <p className="card-sub">
                   Búsqueda automática y análisis IA
                 </p>
-                <div className="notice-pending">
-                  <Target size={15} />
-                  <span>
-                    Funcionalidad pendiente de conexión con backend: aún no
-                    existe endpoint de estado del agente, planificación de
-                    búsquedas ni análisis automático de coincidencia
-                    (ver <code>backend/app/agents/job_analyzer.py</code>,
-                    actualmente stub). Las ofertas y decisiones de esta
-                    página sí son datos reales.
-                  </span>
-                </div>
+                {sched && !sched.enabled && (
+                  <div className="notice-pending">
+                    <Target size={15} />
+                    <span>
+                      Scheduler inactivo en el backend
+                      (SCHEDULER_ENABLED=false o instancia dormida en plan
+                      gratuito). Configura los perfiles en{" "}
+                      <Link to="/search">Búsqueda</Link> y un cron externo
+                      hacia <code>POST /scheduler/tick</code>.
+                    </span>
+                  </div>
+                )}
                 <dl className="kv">
                   <dt>Agente</dt>
-                  <dd>○ No configurado</dd>
+                  <dd>
+                    {sched
+                      ? sched.enabled
+                        ? "● Activo"
+                        : "○ Inactivo"
+                      : "…"}
+                  </dd>
                   <dt>Ofertas en BD</dt>
                   <dd>{stats.data?.total ?? 0}</dd>
                   <dt>Ofertas analizadas</dt>
                   <dd>{stats.data?.scored_count ?? 0}</dd>
+                  <dt>Último tick</dt>
+                  <dd>
+                    {sched?.last_tick.at
+                      ? `${timeAgo(sched.last_tick.at)} (${sched.last_tick.profiles} perfiles, ${sched.last_tick.new} nuevas)`
+                      : "Sin ticks registrados"}
+                  </dd>
                   <dt>Última oferta</dt>
                   <dd>
                     {stats.data?.last_job

@@ -24,6 +24,8 @@ from app.database.models import JOB_STATUSES
 from app.database.models import Job  # noqa: F401  (registra el modelo)
 from app.database.models import Profile  # noqa: F401
 from app.database.models import User  # noqa: F401
+from app.database.models import UserProfile  # noqa: F401
+from app.database.models import UserRichProfile  # noqa: F401
 from app.schemas.job import JobResponse
 from app.schemas.job import JobStatusUpdate
 from app.scraper.registry import available_sources
@@ -33,6 +35,7 @@ from app.services.job_service import backfill_fingerprints
 from app.services.job_service import get_all_jobs
 from app.services.job_service import get_job_by_id
 from app.services.job_service import get_profile
+from app.services.job_service import get_profile_for
 from app.services.job_service import get_stats
 from app.services.job_service import save_analysis
 from app.services.job_service import save_jobs
@@ -201,14 +204,36 @@ def ai_status():
     }
 
 
+def _profile_identity(request: Request) -> tuple:
+    """(uid, email) de la sesion Firebase, o (None, None) sin token.
+
+    Token invalido o Admin sin configurar -> (None, None): se conserva
+    el comportamiento historico (perfil base global, modo local)."""
+    try:
+        from app.auth import verify_bearer_token
+
+        claims = verify_bearer_token(request.headers.get("authorization"))
+        return claims.get("uid"), claims.get("email")
+    except HTTPException:
+        return None, None
+
+
 @app.get("/profile")
-def read_profile(db: Session = Depends(get_db)):
-    return get_profile(db)
+def read_profile(request: Request, db: Session = Depends(get_db)):
+    """Perfil plano. Con sesion no-admin devuelve SOLO su perfil
+    (en blanco si nunca guardo); el admin ve el base global."""
+    return get_profile_for(db, *_profile_identity(request))
 
 
 @app.put("/profile")
-def write_profile(payload: dict[str, Any], db: Session = Depends(get_db)):
-    return save_profile(db, payload or {})
+def write_profile(
+    payload: dict[str, Any],
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    from app.services.job_service import save_profile_for
+
+    return save_profile_for(db, *_profile_identity(request), payload or {})
 
 
 @app.get("/catalogs")
@@ -221,22 +246,27 @@ def read_catalogs():
 
 
 @app.get("/profile/full")
-def read_full_profile(db: Session = Depends(get_db)):
-    """Perfil modular completo (base bloqueada + secciones con
-    perspectivas) + advertencias de validacion."""
-    from app.services.job_service import get_rich_profile
+def read_full_profile(request: Request, db: Session = Depends(get_db)):
+    """Perfil modular completo. No-admin: en blanco hasta que guarda;
+    jamas expone base_cv.json."""
+    from app.services.job_service import get_rich_profile_for
 
-    return get_rich_profile(db)
+    return get_rich_profile_for(db, *_profile_identity(request))
 
 
 @app.put("/profile/full")
-def write_full_profile(payload: dict[str, Any]):
-    """Guarda base_cv.json (fuente de verdad modular). No borra claves
-    no enviadas; normaliza perspectivas y devuelve advertencias."""
-    from app.services.job_service import save_rich_profile
+def write_full_profile(
+    payload: dict[str, Any],
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Guarda el perfil estructurado. No-admin escribe solo su
+    registro; nunca toca base_cv.json."""
+    from app.services.job_service import save_rich_profile_for
 
     try:
-        return save_rich_profile(payload or {})
+        return save_rich_profile_for(
+            db, *_profile_identity(request), payload or {})
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
@@ -250,6 +280,7 @@ async def import_latex_profile(
         "Si false (defecto), solo devuelve vista previa para revision.",
     ),
     file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
 ):
     """Importa un CV en LaTeX (.tex por multipart o texto en JSON
     {"latex": "..."}) y lo convierte a perfil estructurado.
@@ -295,13 +326,20 @@ async def import_latex_profile(
         "applied": False,
     }
     if apply:
+        from app.config import is_admin_email
         from app.services.job_service import save_rich_profile
+        from app.services.job_service import save_rich_profile_for
 
-        saved = save_rich_profile(result["profile"])
-        BASE_CV_PATH.parent.mkdir(parents=True, exist_ok=True)
-        (BASE_CV_PATH.parent / "base_cv.tex").write_text(
-            tex_text, encoding="utf-8"
-        )
+        uid, email = _profile_identity(request)
+        if uid and not is_admin_email(email):
+            # No-admin: guarda en SU registro, nunca en base_cv.json.
+            saved = save_rich_profile_for(db, uid, email, result["profile"])
+        else:
+            saved = save_rich_profile(result["profile"])
+            BASE_CV_PATH.parent.mkdir(parents=True, exist_ok=True)
+            (BASE_CV_PATH.parent / "base_cv.tex").write_text(
+                tex_text, encoding="utf-8"
+            )
         response["applied"] = True
         response["warnings"] = saved.get("warnings", result["warnings"])
     return response
@@ -478,18 +516,18 @@ def discover_jobs(
     source = str(payload.get("source") or "computrabajo")
     packs = payload.get("packs") or ["titles", "skills", "responsibilities"]
     queries = payload.get("queries")
-    pages = int(payload.get("pages") or 1)
-    max_details = int(payload.get("max_details", 15))
     if isinstance(packs, str):
         packs = [packs]
     try:
+        pages = max(1, min(int(payload.get("pages") or 1), 5))
+        max_details = max(0, min(int(payload.get("max_details", 15)), 60))
         return discover(
             db,
             source=source,
             packs=list(packs),
             queries=list(queries) if queries else None,
-            pages=max(1, min(pages, 5)),
-            max_details=max(0, min(max_details, 60)),
+            pages=pages,
+            max_details=max_details,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
@@ -951,6 +989,15 @@ def download_job_cv(
         )
     tex = Path(job.cv_path)
     target = tex.with_suffix(".pdf") if format == "pdf" else tex
+    # El path viene de la BD: confinarlo bajo CVS_DIR (anti traversal).
+    from app.config import CVS_DIR
+
+    try:
+        target.resolve().relative_to(CVS_DIR.resolve())
+    except ValueError:
+        raise HTTPException(
+            status_code=404, detail="Archivo no disponible."
+        )
     if not target.exists():
         raise HTTPException(
             status_code=404,

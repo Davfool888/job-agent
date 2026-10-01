@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import {
   ArrowLeftRight,
   BarChart3,
@@ -34,7 +34,7 @@ const LINKS = [
 
 export function Sidebar() {
   const [open, setOpen] = useState(false);
-  const { firebaseUser, profile, logout, switchAccount } = useAuth();
+  const { configured, firebaseUser, profile, logout, switchAccount } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [menuError, setMenuError] = useState<string | null>(null);
@@ -108,6 +108,15 @@ export function Sidebar() {
           ))}
         </nav>
         <div className="sidebar-foot">
+          {!configured && (
+            <Link
+              to="/login"
+              className="sidebar-auth-note"
+              title="Este despliegue no tiene las claves VITE_FIREBASE_* : el login está desactivado. Configúralas en Vercel y redeploya."
+            >
+              🔒 Sesión sin configurar
+            </Link>
+          )}
           {firebaseUser && (
             <div className="sidebar-user-block">
               {menuOpen && (

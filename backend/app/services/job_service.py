@@ -14,9 +14,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database.firestore_client import is_firestore
+from app.database.firestore_client import is_firestore
 from app.database.models import JOB_STATUSES
 from app.database.models import Job
 from app.database.models import Profile
+from app.database.models import UserProfile
+from app.database.models import UserRichProfile
 from app.scraper.base import fingerprint_of
 from app.scraper.normalize import content_hash_of
 from app.scraper.normalize import normalize_job
@@ -843,6 +846,176 @@ def save_profile(db: Session, data: dict) -> dict:
     db.add(row)
     db.commit()
     return get_profile(db)
+
+
+# ---------------------------------------------------------------------------
+# Perfiles por usuario (§login). Solo el ADMIN_EMAIL ve y edita el perfil
+# base global; cualquier otro usuario con sesion usa su propio perfil,
+# que empieza en blanco y solo existe cuando guarda datos.
+# Sin sesion (modo local sin Firebase) se conserva el global historico.
+# ---------------------------------------------------------------------------
+
+def _is_admin(email: str | None) -> bool:
+    from app.config import is_admin_email
+
+    return is_admin_email(email)
+
+
+def _stored_user_flat(db, uid: str) -> dict:
+    """Datos planos guardados por el usuario ({} si nunca guardo)."""
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.get_user_profile(db, uid)
+    row = db.query(UserProfile).filter(UserProfile.uid == uid).first()
+    if not row:
+        return {}
+    try:
+        data = json.loads(row.data or "{}")
+    except ValueError:
+        data = {}
+    return data if isinstance(data, dict) else {}
+
+
+def _stored_user_rich(db, uid: str) -> dict:
+    """Perfil estructurado guardado por el usuario ({} si nunca guardo)."""
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        return fs.get_user_rich_profile(db, uid)
+    row = db.query(UserRichProfile).filter(
+        UserRichProfile.uid == uid).first()
+    if not row:
+        return {}
+    try:
+        data = json.loads(row.data or "{}")
+    except ValueError:
+        data = {}
+    return data if isinstance(data, dict) else {}
+
+
+def get_profile_for(
+    db: Session, uid: str | None, email: str | None
+) -> dict:
+    """Perfil plano segun quien llama. Admin/sin sesion -> base global;
+    otro usuario -> solo lo suyo (en blanco si nunca guardo)."""
+    if not uid or _is_admin(email):
+        out = get_profile(db)
+        out["scope"] = "admin" if uid else "shared"
+        return out
+    stored = _stored_user_flat(db, uid)
+    # Solo claves conocidas; jamas se mezcla el perfil base global.
+    out = {key: stored.get(key, DEFAULT_PROFILE[key])
+           for key in DEFAULT_PROFILE}
+    out["scope"] = "own"
+    return out
+
+
+def save_profile_for(
+    db: Session, uid: str | None, email: str | None, data: dict
+) -> dict:
+    """Guarda el perfil plano. No-admin escribe SOLO su registro."""
+    if not uid or _is_admin(email):
+        out = save_profile(db, data or {})
+        out["scope"] = "admin" if uid else "shared"
+        return out
+    allowed = {key: (data or {}).get(key, DEFAULT_PROFILE[key])
+               for key in DEFAULT_PROFILE}
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        fs.save_user_profile(db, uid, allowed)
+    else:
+        row = db.query(UserProfile).filter(UserProfile.uid == uid).first()
+        if not row:
+            row = UserProfile(uid=uid, data="{}")
+            db.add(row)
+        row.data = json.dumps(allowed, ensure_ascii=False)
+        row.updated_at = datetime.utcnow()
+        db.add(row)
+        db.commit()
+    return get_profile_for(db, uid, email)
+
+
+def _assemble_rich(base_rich: dict, flat: dict) -> dict:
+    """Normaliza + valida un perfil estructurado y le pega su plano."""
+    from app.profile.perspectives import SECTIONS
+    from app.profile.perspectives import validate_profile
+    from app.profile import schema as profile_schema
+
+    normalized, schema_warnings = profile_schema.normalize_rich_profile(
+        base_rich)
+    rich = normalized
+    for section in SECTIONS:
+        if not isinstance(rich.get(section), list):
+            rich[section] = []
+    rich["_flat"] = {k: flat.get(k) for k in (
+        "full_name", "title", "location", "linkedin", "github", "portfolio",
+        "skills", "target_roles", "sectors", "modality",
+        "preferred_location", "min_salary", "experience_level",
+    )}
+    rich["_warnings"] = validate_profile(rich) + schema_warnings
+    return rich
+
+
+def get_rich_profile_for(
+    db: Session, uid: str | None, email: str | None
+) -> dict:
+    """Perfil estructurado segun quien llama. No-admin: en blanco hasta
+    que guarda; jamas lee base_cv.json."""
+    if not uid or _is_admin(email):
+        out = get_rich_profile(db)
+        out["scope"] = "admin" if uid else "shared"
+        return out
+    flat = get_profile_for(db, uid, email)
+    out = _assemble_rich(_stored_user_rich(db, uid), flat)
+    out["scope"] = "own"
+    return out
+
+
+def save_rich_profile_for(
+    db: Session, uid: str | None, email: str | None, data: dict
+) -> dict:
+    """Guarda el perfil estructurado. No-admin escribe SOLO su registro;
+    nunca toca base_cv.json."""
+    if not isinstance(data, dict):
+        raise ValueError("Perfil invalido: se esperaba un objeto")
+    if not uid or _is_admin(email):
+        out = save_rich_profile(data)
+        out["scope"] = "admin" if uid else "shared"
+        return out
+    from app.profile.perspectives import SECTIONS
+    from app.profile import schema as profile_schema
+    from app.profile.perspectives import validate_profile
+
+    current = _stored_user_rich(db, uid)
+    merged = dict(current)
+    for key in ("personal", "professional_summary", "skills", "languages",
+                "certifications", "target_roles", "technical_skills",
+                "soft_skills", "years_experience"):
+        if key in data:
+            merged[key] = data[key]
+    for section in SECTIONS:
+        if section in data and isinstance(data[section], list):
+            merged[section] = data[section]
+    normalized, schema_warnings = profile_schema.normalize_rich_profile(
+        merged)
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        fs.save_user_rich_profile(db, uid, normalized)
+    else:
+        row = db.query(UserRichProfile).filter(
+            UserRichProfile.uid == uid).first()
+        if not row:
+            row = UserRichProfile(uid=uid, data="{}")
+            db.add(row)
+        row.data = json.dumps(normalized, ensure_ascii=False)
+        row.updated_at = datetime.utcnow()
+        db.add(row)
+        db.commit()
+    warnings = validate_profile(normalized) + schema_warnings
+    return {"profile": normalized, "warnings": warnings, "scope": "own"}
 
 
 def backfill_fingerprints(db: Session) -> int:
