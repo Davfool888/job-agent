@@ -763,6 +763,62 @@ def tailor_job_profile(job_id: str, db: Session = Depends(get_db)):
     }
 
 
+@app.post("/jobs/{job_id}/adapt-cv")
+def adapt_job_cv(job_id: str, db: Session = Depends(get_db)):
+    """Adaptar-perfil: matching deterministico + seleccion + HTML/CSS
+    + PDF (Chromium) con el perfil ficticio de invitado. Sin LaTeX,
+    sin LLM obligatorio. Errores controlados {success, error}."""
+    from fastapi.responses import JSONResponse
+
+    from app.adapt.service import adapt_profile_for_job, AdaptError, error_body
+
+    try:
+        return adapt_profile_for_job(db, job_id)
+    except AdaptError as error:
+        return JSONResponse(
+            status_code=error.http, content=error_body(error))
+
+
+@app.get("/jobs/{job_id}/adapt-cv/download")
+def download_adapt_cv(
+    job_id: str,
+    format: str = Query("pdf", pattern="^(pdf|html)$"),
+    db: Session = Depends(get_db),
+):
+    """Descarga el CV adaptado (pdf o html). 404 honesto si no existe."""
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+
+    from app.adapt.service import adapt_dir
+    from app.services.job_service import get_job_by_id
+
+    job = None
+    try:
+        job = get_job_by_id(db=db, job_id=job_id)
+    except (TypeError, ValueError):
+        job = None
+    if not job:
+        raise HTTPException(status_code=404, detail="Oferta no encontrada.")
+    from app.config import ADAPT_CVS_DIR
+
+    target = adapt_dir(job.id) / (f"cv.{format}")
+    try:
+        target.resolve().relative_to(ADAPT_CVS_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Archivo no disponible.")
+    if not Path(target).exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Aún no hay CV adaptado. Usa «Adaptar perfil».",
+        )
+    return FileResponse(
+        path=str(target),
+        filename=f"cv_adaptado_job_{job.id}.{format}",
+        media_type="application/pdf" if format == "pdf" else "text/html",
+    )
+
+
 
 # IMPORTANTE: /jobs/search debe ir ANTES de /jobs/{job_id},
 # si no FastAPI interpreta "search" como un job_id.

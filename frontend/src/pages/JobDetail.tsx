@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   BookmarkCheck,
   Building2,
+  Download,
   ExternalLink,
   Eye,
   FileText,
@@ -25,15 +26,19 @@ import {
 } from "../components/jobs/States";
 import { useJob, useJobExtra } from "../hooks/useApi";
 import { analyzeJob, updateJobStatus } from "../services/jobs";
+import {
+  ADAPT_STAGES,
+  adaptCv,
+  adaptDownloadUrl,
+  type AdaptCvResult,
+} from "../services/adapt";
 import { API_URL } from "../services/api";
 import {
   fetchCustomizedCv,
   generateCv,
   type CustomizedCv,
 } from "../services/cv";
-import { tailorJob } from "../services/profile";
 import type { Job } from "../types/job";
-import type { TailorResult } from "../types/profile";
 import { formatDate, formatDateTime, timeAgo } from "../utils/format";
 
 export function JobDetail() {
@@ -92,8 +97,9 @@ export function JobDetail() {
     }
   };
 
-  const [tailored, setTailored] = useState<TailorResult | null>(null);
-  const [tailoring, setTailoring] = useState(false);
+  const [adapt, setAdapt] = useState<AdaptCvResult | null>(null);
+  const [adapting, setAdapting] = useState(false);
+  const [adaptStage, setAdaptStage] = useState<string | null>(null);
 
   const [cvView, setCvView] = useState<{
     phase: "loading" | "ready" | "error";
@@ -134,15 +140,25 @@ export function JobDetail() {
     }
   };
 
-  const tailor = async () => {
-    setTailoring(true);
+  const runAdapt = async () => {
+    if (adapting) return;
+    setAdapting(true);
+    setAdaptStage(ADAPT_STAGES[0]);
     setError(null);
+    // Etapas visibles mientras el backend procesa (puede tardar).
+    let stage = 0;
+    const timer = window.setInterval(() => {
+      stage = Math.min(stage + 1, ADAPT_STAGES.length - 1);
+      setAdaptStage(ADAPT_STAGES[stage]);
+    }, 6000);
     try {
-      setTailored(await tailorJob(jobId));
+      setAdapt(await adaptCv(jobId));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
     } finally {
-      setTailoring(false);
+      window.clearInterval(timer);
+      setAdapting(false);
+      setAdaptStage(null);
     }
   };
 
@@ -176,9 +192,10 @@ export function JobDetail() {
             onDiscard={() => setDiscarding(job.data)}
             onApply={() => job.data && apply(job.data)}
             onAnalyze={analyze}
-            onTailor={tailor}
-            tailoring={tailoring}
-            tailored={tailored}
+            onAdapt={runAdapt}
+            adapting={adapting}
+            adaptStage={adaptStage}
+            adaptResult={adapt}
             onShowCv={() => void showCv()}
             generatingCv={generating}
             onGenerateCv={(force: boolean) => void generate(force)}
@@ -203,6 +220,109 @@ export function JobDetail() {
   );
 }
 
+function AdaptResultCard({
+  jobId,
+  result,
+}: {
+  jobId: number | string;
+  result: AdaptCvResult;
+}) {
+  const [showPreview, setShowPreview] = useState(false);
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h3 className="card-title">CV personalizado</h3>
+      <p className="card-sub">
+        {result.job.title}
+        {result.job.company ? ` · ${result.job.company}` : ""}
+      </p>
+      <p style={{ fontSize: 26, fontWeight: 700, margin: "0 0 8px" }}>
+        {result.matching.percentage}%
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 400,
+            color: "var(--text-muted)",
+          }}
+        >
+          {" "}
+          de coincidencia
+        </span>
+      </p>
+      {result.matching.matched_skills.length > 0 && (
+        <>
+          <p className="card-sub">Skills coincidentes</p>
+          <div className="skill-chips">
+            {result.matching.matched_skills.map((s) => (
+              <span key={s} className="chip">
+                {s} ✓
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+      {result.matching.missing_skills.length > 0 && (
+        <>
+          <p className="card-sub" style={{ marginTop: 10 }}>
+            Faltantes en tu perfil
+          </p>
+          <div className="skill-chips">
+            {result.matching.missing_skills.slice(0, 12).map((s) => (
+              <span key={s} className="chip chip-missing">
+                {s} ✕
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+      {result.cv.experiences.length > 0 && (
+        <p className="card-sub" style={{ marginTop: 10 }}>
+          Experiencia seleccionada:{" "}
+          <strong>
+            {result.cv.experiences
+              .map((e) => e.title || e.company)
+              .filter(Boolean)
+              .join(" · ")}
+          </strong>
+        </p>
+      )}
+      {result.cv.projects.length > 0 && (
+        <p className="card-sub">
+          Proyecto seleccionado: <strong>{result.cv.projects[0]}</strong>
+        </p>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => setShowPreview((v) => !v)}
+        >
+          <Eye size={14} /> {showPreview ? "Ocultar CV" : "Ver CV"}
+        </button>
+        <a
+          className="btn btn-primary btn-sm"
+          href={adaptDownloadUrl(jobId, "pdf")}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Download size={14} /> Descargar PDF
+        </a>
+      </div>
+      {showPreview && (
+        <iframe
+          title="CV personalizado"
+          src={adaptDownloadUrl(jobId, "pdf")}
+          style={{
+            width: "100%",
+            height: 560,
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            marginTop: 10,
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 function DetailBody({
   job,
   extraDesc,
@@ -214,9 +334,10 @@ function DetailBody({
   onDiscard,
   onApply,
   onAnalyze,
-  onTailor,
-  tailoring,
-  tailored,
+  onAdapt,
+  adapting,
+  adaptStage,
+  adaptResult,
   onShowCv,
   generatingCv,
   onGenerateCv,
@@ -232,9 +353,10 @@ function DetailBody({
   onDiscard: () => void;
   onApply: () => void;
   onAnalyze: () => void;
-  onTailor: () => void;
-  tailoring: boolean;
-  tailored: TailorResult | null;
+  onAdapt: () => void;
+  adapting: boolean;
+  adaptStage: string | null;
+  adaptResult: AdaptCvResult | null;
   onShowCv: () => void;
   generatingCv: boolean;
   onGenerateCv: (force: boolean) => void;
@@ -299,11 +421,11 @@ function DetailBody({
           )}
           <button
             className="btn btn-ghost btn-sm"
-            disabled={tailoring}
-            onClick={onTailor}
-            title="Selecciona las perspectivas del perfil relevantes para esta vacante (POST /jobs/{id}/tailor)"
+            disabled={adapting}
+            onClick={onAdapt}
+            title="Analiza la oferta y genera un CV personalizado en PDF (POST /jobs/{id}/adapt-cv)"
           >
-            <Sparkles size={15} /> {tailoring ? "Adaptando…" : "Adaptar perfil"}
+            <Sparkles size={15} /> {adapting ? adaptStage ?? "Adaptando…" : "Adaptar perfil"}
           </button>
           <button
             className="btn btn-ghost btn-sm"
@@ -458,61 +580,8 @@ function DetailBody({
         </div>
       </div>
 
-      {tailored && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <h3 className="card-title">Perfil adaptado a esta vacante</h3>
-          <p className="card-sub">
-            Perspectivas del perfil seleccionadas automáticamente (solo
-            información real, con procedencia).
-          </p>
-          {tailored.selection.length === 0 && (
-            <p className="card-sub">
-              Ninguna perspectiva supera el umbral para esta vacante.
-            </p>
-          )}
-          {tailored.selection.map((b, i) => (
-            <div
-              key={`${b.section}-${b.item_index}-${i}`}
-              style={{
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                padding: 10,
-                marginBottom: 8,
-              }}
-            >
-              <strong>
-                {b.item_title}
-                {b.item_org ? ` — ${b.item_org}` : ""}
-              </strong>{" "}
-              <span className="chip chip-neutral">{b.perspective}</span>{" "}
-              <span className="chip">{b.relevance_score}% relevante</span>
-              <div className="skill-chips" style={{ marginTop: 6 }}>
-                {b.matched_skills.map((s) => (
-                  <span key={s} className="chip">
-                    {s} ✓
-                  </span>
-                ))}
-                {b.matched_domain.map((d) => (
-                  <span key={d} className="chip chip-neutral">
-                    {d}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-          {tailored.combined_skills.length > 0 && (
-            <>
-              <p className="card-sub">Skills combinadas para el CV</p>
-              <div className="skill-chips">
-                {tailored.combined_skills.map((s) => (
-                  <span key={s} className="chip">
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+      {adaptResult && (
+        <AdaptResultCard jobId={job.id} result={adaptResult} />
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>

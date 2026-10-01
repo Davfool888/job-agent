@@ -1,0 +1,80 @@
+/* Plantilla de CV adaptado (A4, impresion). Sin dependencias externas:
+   todo va inline en el HTML para Chromium headless. */
+@page {
+  size: A4;
+  margin: 16mm 15mm 16mm 15mm;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.45;
+  color: #1c2530;
+  background: #fff;
+}
+.page { max-width: 100%; }
+.header {
+  border-bottom: 2.5pt solid #1f6feb;
+  padding-bottom: 8pt;
+  margin-bottom: 10pt;
+}
+.header h1 {
+  margin: 0 0 2pt 0;
+  font-size: 22pt;
+  color: #101828;
+}
+.title-line {
+  margin: 0;
+  font-size: 12pt;
+  font-weight: 600;
+  color: #1f6feb;
+}
+.contact-line {
+  margin: 4pt 0 0 0;
+  font-size: 9.5pt;
+  color: #475569;
+}
+.target-block {
+  background: #eef4ff;
+  border-left: 3pt solid #1f6feb;
+  padding: 6pt 10pt;
+  margin-bottom: 10pt;
+  font-size: 10pt;
+}
+section { margin-bottom: 10pt; }
+section h2 {
+  margin: 0 0 6pt 0;
+  font-size: 12.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #101828;
+  border-bottom: 1pt solid #dbe3ec;
+  padding-bottom: 3pt;
+}
+.item { margin-bottom: 8pt; page-break-inside: avoid; }
+.item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8pt;
+  align-items: baseline;
+}
+.item-head strong { font-size: 11pt; }
+.item-org { color: #475569; font-size: 10pt; }
+.item-meta { color: #64748b; font-size: 9.5pt; margin: 1pt 0 3pt 0; }
+.item p.desc { margin: 2pt 0 0 0; font-size: 10pt; }
+.chips { margin-top: 6pt; }
+.chip {
+  display: inline-block;
+  background: #eef1f4;
+  color: #1c2530;
+  border-radius: 999px;
+  padding: 2pt 8pt;
+  margin: 0 4pt 4pt 0;
+  font-size: 9.5pt;
+  font-weight: 600;
+}
+ul.tight { margin: 3pt 0 0 16pt; padding: 0; font-size: 10pt; }
+.summary { font-size: 10.5pt; }
+.lang-line { font-size: 10pt; margin: 1pt 0; }

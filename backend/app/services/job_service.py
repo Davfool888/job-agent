@@ -954,59 +954,321 @@ def save_profile_for(
 
 
 GUEST_DEMO_FLAT: dict = {
-    "full_name": "Invitado Demo",
-    "title": "Analista de Datos Junior",
+    "full_name": "Andrés Felipe Ramírez",
+    "title": "Ingeniero de Software",
     "location": "Bogotá, Colombia",
-    "linkedin": "https://linkedin.com/in/invitado-demo",
-    "github": "https://github.com/invitado-demo",
+    "linkedin": "",
+    "github": "",
     "portfolio": "",
-    "skills": ["Python", "SQL", "Excel", "Power BI", "Comunicación"],
-    "target_roles": ["Analista de Datos", "Soporte de Datos"],
-    "sectors": ["Tecnología"],
-    "modality": "Remoto",
-    "preferred_location": "Bogotá",
-    "min_salary": "2000000",
+    "skills": ["Python", "SQL", "Power BI", "Excel", "Pandas", "NumPy",
+               "FastAPI", "JavaScript", "React", "Git", "PostgreSQL",
+               "REST APIs"],
+    "target_roles": ["Data Analyst", "Data Engineer Junior",
+                     "Python Developer Junior"],
+    "sectors": ["Tecnología", "Servicios Financieros", "Retail",
+                "Consultoría"],
+    "modality": "Híbrido",
+    "preferred_location": "Bogotá, Colombia",
+    "min_salary": "3500000",
     "experience_level": "Junior",
 }
 
 GUEST_DEMO_RICH: dict = {
     "personal": {
-        "full_name": "Invitado Demo",
-        "email": "invitado@demo.test",
-        "phone": "+57 300 000 0000",
+        "first_name": "Andrés Felipe",
+        "last_name": "Ramírez Torres",
+        "title": "Ingeniero de Software",
         "location": "Bogotá, Colombia",
-        "linkedin": "https://linkedin.com/in/invitado-demo",
-        "github": "https://github.com/invitado-demo",
+        "email": "andres.ramirez.dev@example.com",
+        "secondary_email": "andres.ramirez.work@example.com",
+        "phone": "+57 310 555 4821",
+        "secondary_phone": "+57 315 555 7394",
+        "linkedin": "https://linkedin.com/in/andres-ramirez-dev",
+        "github": "https://github.com/andresramirez-dev",
+        "portfolio": "https://andresramirez.dev",
+        "address": "Calle 98 # 18-42, Bogotá",
+        "preferred_city_id": "bogota",
+        "preferred_location": "Bogotá, Colombia",
+        "preferred_modality": "HYBRID",
     },
     "professional_summary": (
-        "Perfil de prueba para testear la plataforma "
-        "(datos ficticios de invitado)."),
+        "Ingeniero de Software con experiencia en análisis de datos, "
+        "automatización de procesos y desarrollo de soluciones utilizando "
+        "Python, SQL, Power BI y herramientas de procesamiento de "
+        "información. Interesado en posiciones junior relacionadas con "
+        "análisis de datos, Business Intelligence, ingeniería de datos y "
+        "desarrollo backend con Python."),
     "years_experience": 1,
-    "technical_skills": ["Python", "SQL", "Excel"],
-    "soft_skills": ["Comunicación", "Trabajo en equipo"],
-    "target_roles": ["Analista de Datos"],
-    "languages": [],
-    "certifications": [],
+    "technical_skills": ["Python", "SQL", "Power BI", "Excel", "Pandas",
+                         "NumPy", "FastAPI", "JavaScript", "React", "Git",
+                         "PostgreSQL", "REST APIs"],
+    "soft_skills": ["Análisis de problemas", "Comunicación",
+                    "Trabajo en equipo", "Pensamiento crítico",
+                    "Adaptabilidad", "Organización"],
+    "target_roles": ["Data Analyst", "BI Analyst", "Data Engineer Junior",
+                     "Python Developer Junior", "Backend Developer Junior",
+                     "Financial Data Analyst"],
+    "skills": {
+        "programming": ["Python", "JavaScript", "SQL"],
+        "data_analysis": ["Pandas", "NumPy", "Power BI", "DAX", "Excel"],
+        "backend": ["FastAPI", "REST APIs"],
+        "databases": ["PostgreSQL", "MySQL"],
+        "tools": ["Git", "GitHub", "VS Code"],
+        "business": ["Business Intelligence", "Financial Analysis",
+                     "KPI Analysis"],
+    },
+    "languages": [
+        {"id": "lang1", "language": "en",
+         "academy": "Global Language Institute",
+         "level": "B2", "listening": "B2", "reading": "B2",
+         "writing": "B1", "speaking": "B1"},
+        {"id": "lang2", "language": "pt",
+         "academy": "Centro de Idiomas Modernos",
+         "level": "A2", "listening": "A2", "reading": "A2",
+         "writing": "A1", "speaking": "A2"},
+    ],
     "experience": [
         {
-            "title": "Practicante de Datos (prueba)",
-            "company": "Empresa Demo S.A.S.",
-            "period": "2024 - 2025",
-            "bullets": [
-                "Reportes de prueba en Excel y Power BI.",
-                "Limpieza de datos de prueba con Python.",
+            "company": "FinanRed S.A.S.",
+            "title": "Analista de Datos Junior",
+            "start_date": "2025-03",
+            "end_date": "2026-08",
+            "is_current": False,
+            "modality": "HYBRID",
+            "city": {"id": "bogota", "label": "Bogotá", "country": "CO"},
+            "contract_type": "indefinite",
+            "description": (
+                "Análisis y transformación de información comercial y "
+                "financiera para generación de indicadores, elaboración de "
+                "reportes y seguimiento de resultados. Automatización de "
+                "procesos recurrentes mediante Python y Excel, construcción "
+                "de dashboards en Power BI y validación de calidad de datos."),
+            "technical_skills": ["Python", "SQL", "Power BI", "Excel",
+                                 "Pandas", "DAX"],
+            "soft_skills": ["Análisis", "Comunicación", "Organización",
+                            "Trabajo en equipo"],
+            "perspectives": [
+                {
+                    "id": "p1",
+                    "label": "Análisis y automatización de datos",
+                    "description": (
+                        "Experiencia orientada al análisis de información "
+                        "empresarial, automatización de tareas repetitivas y "
+                        "construcción de indicadores para apoyar procesos de "
+                        "toma de decisiones."),
+                    "skills": ["Data Analysis", "ETL", "Reporting",
+                               "Data Quality"],
+                    "tools": ["Python", "Pandas", "Power BI", "Excel", "SQL"],
+                    "domains": ["Finanzas", "Ventas", "Operaciones",
+                                "Business Intelligence"],
+                    "roles": ["Data Analyst", "BI Analyst",
+                              "Reporting Analyst"],
+                },
             ],
-            "technical_skills": ["Python", "Excel"],
+        },
+        {
+            "company": "TechNova Solutions",
+            "title": "Desarrollador Python Junior",
+            "start_date": "2024-09",
+            "end_date": "2025-02",
+            "is_current": False,
+            "modality": "REMOTE",
+            "city": {"id": "medellin", "label": "Medellín", "country": "CO"},
+            "contract_type": "fixed_term",
+            "description": (
+                "Desarrollo y mantenimiento de servicios backend utilizando "
+                "Python y FastAPI. Integración con APIs externas, "
+                "procesamiento de información y creación de endpoints REST "
+                "para aplicaciones internas."),
+            "technical_skills": ["Python", "FastAPI", "REST API", "Git",
+                                 "PostgreSQL"],
+            "soft_skills": ["Resolución de problemas",
+                            "Aprendizaje autónomo", "Trabajo en equipo"],
+            "perspectives": [
+                {
+                    "id": "p1",
+                    "label": "Desarrollo backend",
+                    "description": (
+                        "Desarrollo de servicios backend y APIs orientadas a "
+                        "la integración y procesamiento de información "
+                        "empresarial."),
+                    "skills": ["Backend Development", "APIs",
+                               "Data Processing"],
+                    "tools": ["Python", "FastAPI", "PostgreSQL", "Git"],
+                    "domains": ["Software", "APIs", "Automatización"],
+                    "roles": ["Python Developer", "Backend Developer",
+                              "API Developer"],
+                },
+            ],
         },
     ],
     "education": [
         {
-            "degree": "Tecnología en Análisis de Datos (prueba)",
-            "institution": "Instituto Demo",
-            "period": "2022 - 2024",
+            "institution": "Universidad Metropolitana de Tecnología",
+            "degree": "Ingeniería de Software",
+            "level": "bachelor",
+            "status": "finished",
+            "start_date": "2021-01",
+            "end_date": "2025-12",
+            "description": (
+                "Formación profesional en desarrollo de software, bases de "
+                "datos, arquitectura de software, análisis de sistemas y "
+                "gestión de proyectos tecnológicos."),
+            "technical_skills": ["Python", "SQL", "JavaScript",
+                                 "Bases de datos", "Git"],
+            "soft_skills": ["Pensamiento lógico", "Trabajo en equipo",
+                            "Gestión de proyectos"],
+            "perspectives": [
+                {
+                    "id": "p1",
+                    "label": "Ingeniería de software y datos",
+                    "description": (
+                        "Formación orientada al desarrollo de soluciones "
+                        "tecnológicas y procesamiento de información "
+                        "mediante herramientas de programación y bases de "
+                        "datos."),
+                    "skills": ["Programming", "Databases",
+                               "Software Engineering"],
+                    "tools": ["Python", "SQL", "Git", "JavaScript"],
+                    "domains": ["Software Engineering", "Data",
+                                "Technology"],
+                    "roles": ["Software Engineer", "Data Analyst",
+                              "Backend Developer"],
+                },
+            ],
+        },
+        {
+            "institution": "Instituto Técnico Empresarial de Colombia",
+            "degree": "Técnico en Análisis Administrativo y Financiero",
+            "level": "technical",
+            "status": "finished",
+            "start_date": "2019-01",
+            "end_date": "2020-12",
+            "description": (
+                "Formación en procesos administrativos, análisis "
+                "financiero, manejo de información empresarial y "
+                "herramientas ofimáticas."),
+            "technical_skills": ["Excel", "Análisis financiero",
+                                 "PowerPoint"],
+            "soft_skills": ["Organización", "Atención al detalle"],
+            "perspectives": [],
         },
     ],
-    "projects": [],
+    "projects": [
+        {
+            "name": "Retail Intelligence Dashboard",
+            "url": "https://andresramirez.dev/projects/retail-intelligence",
+            "repo": "https://github.com/andresramirez-dev/retail-intelligence",
+            "technologies": ["Python", "Pandas", "NumPy", "Power BI",
+                             "SQL", "Excel"],
+            "start_date": "2026-02",
+            "end_date": "2026-04",
+            "description": (
+                "Proyecto de análisis de inventario y demanda para "
+                "identificar tendencias de ventas, productos con riesgo de "
+                "agotamiento y oportunidades de optimización mediante "
+                "indicadores y dashboards interactivos."),
+            "technical_skills": ["Data Analysis", "Data Visualization",
+                                 "Python", "Power BI"],
+            "soft_skills": ["Pensamiento analítico",
+                            "Resolución de problemas"],
+            "perspectives": [
+                {
+                    "id": "p1",
+                    "label": "Business Intelligence",
+                    "description": (
+                        "Proyecto enfocado en convertir datos operativos en "
+                        "indicadores visuales para facilitar el análisis "
+                        "empresarial."),
+                    "skills": ["BI", "Data Visualization", "KPI Analysis"],
+                    "tools": ["Power BI", "Python", "Pandas", "Excel"],
+                    "domains": ["Retail", "Inventory",
+                                "Business Intelligence"],
+                    "roles": ["Data Analyst", "BI Analyst",
+                              "Reporting Analyst"],
+                },
+            ],
+        },
+        {
+            "name": "Currency Analytics API",
+            "url": "https://andresramirez.dev/projects/currency-api",
+            "repo": "https://github.com/andresramirez-dev/currency-analytics",
+            "technologies": ["Python", "FastAPI", "REST API", "Pandas",
+                             "JSON"],
+            "start_date": "2026-05",
+            "end_date": "2026-06",
+            "description": (
+                "Aplicación para consultar y analizar la variación "
+                "histórica de monedas mediante APIs externas, incluyendo "
+                "cálculos de variación porcentual y generación de "
+                "indicadores financieros."),
+            "technical_skills": ["Python", "APIs", "Data Processing"],
+            "soft_skills": ["Investigación", "Pensamiento crítico"],
+            "perspectives": [
+                {
+                    "id": "p1",
+                    "label": "Automatización financiera",
+                    "description": (
+                        "Aplicación orientada al procesamiento automatizado "
+                        "de información financiera obtenida desde servicios "
+                        "externos."),
+                    "skills": ["Financial Analysis", "Automation",
+                               "API Integration"],
+                    "tools": ["Python", "FastAPI", "Pandas"],
+                    "domains": ["Finance", "FinTech", "Data"],
+                    "roles": ["Python Developer", "Data Analyst",
+                              "Financial Data Analyst"],
+                },
+            ],
+        },
+    ],
+    "certifications": [
+        {
+            "name": "Microsoft Power BI Data Analyst",
+            "institution": "Microsoft",
+            "issued_date": "2026-07-15",
+            "expiry_date": "2028-07-15",
+            "credential_id": "PBI-2026-847291",
+            "credential_url": "https://credentials.example.com/PBI-2026-847291",
+            "description": (
+                "Certificación relacionada con análisis de datos, modelado, "
+                "visualización y construcción de reportes empresariales "
+                "utilizando Power BI."),
+            "technical_skills": ["Power BI", "DAX", "Data Modeling"],
+            "soft_skills": ["Análisis", "Comunicación"],
+            "perspectives": [
+                {
+                    "id": "p1",
+                    "label": "Business Intelligence",
+                    "description": (
+                        "Certificación orientada al análisis y visualización "
+                        "de información empresarial."),
+                    "skills": ["Business Intelligence", "Data Modeling",
+                               "Visualization"],
+                    "tools": ["Power BI", "DAX"],
+                    "domains": ["BI", "Analytics", "Business"],
+                    "roles": ["Power BI Analyst", "BI Analyst",
+                              "Data Analyst"],
+                },
+            ],
+        },
+        {
+            "name": "Python for Data Analysis",
+            "institution": "DataCamp",
+            "issued_date": "2026-05-22",
+            "expiry_date": None,
+            "credential_id": "DC-PYDA-582941",
+            "credential_url": "https://credentials.example.com/DC-PYDA-582941",
+            "description": (
+                "Certificación de formación práctica en procesamiento, "
+                "transformación y análisis de datos utilizando Python y "
+                "librerías especializadas."),
+            "technical_skills": ["Python", "Pandas", "NumPy"],
+            "soft_skills": ["Pensamiento analítico",
+                            "Resolución de problemas"],
+            "perspectives": [],
+        },
+    ],
 }
 
 

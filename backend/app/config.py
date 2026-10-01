@@ -133,3 +133,9 @@ MAX_CV_BYTES = int(os.getenv("MAX_CV_BYTES", str(10 * 1024 * 1024)))
 # Cuantos CVs de referencia entran al prompt y con cuantos caracteres c/u.
 REFERENCE_CV_MAX_PROFILES = 2
 REFERENCE_CV_MAX_CHARS = 3000
+
+# --- Adaptar-perfil: CV personalizado HTML -> PDF (Chromium) ---
+ADAPT_CVS_DIR = BASE_DIR / "data" / "adapt_cvs"
+ADAPT_PDF_TIMEOUT_MS = int(os.getenv("ADAPT_PDF_TIMEOUT_MS", "60000"))
+# Pulido opcional del resumen con LLM (apagado = 100% local).
+ADAPT_LLM_ENABLED = os.getenv("ADAPT_LLM_ENABLED", "false").lower() == "true"

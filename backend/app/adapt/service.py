@@ -1,0 +1,138 @@
+"""Orquestador Adaptar-perfil (FASE 8 logica).
+
+Oferta -> perfil invitado -> matching -> seleccion -> (LLM opcional)
+-> HTML -> PDF -> disco. Errores controlados con codigo, nunca
+trazas crudas.
+"""
+from __future__ import annotations
+
+import json
+from datetime import datetime
+from pathlib import Path
+
+
+class AdaptError(RuntimeError):
+    def __init__(self, code: str, message: str, http: int = 502):
+        super().__init__(message)
+        self.code = code
+        self.http = http
+
+
+def adapt_dir(job_id) -> Path:
+    from app.config import ADAPT_CVS_DIR
+
+    directory = ADAPT_CVS_DIR / f"job_{job_id}"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def _as_list(value) -> list:
+    if isinstance(value, list):
+        return list(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except ValueError:
+            return []
+    return []
+
+
+def adapt_profile_for_job(db, job_id) -> dict:
+    """Ejecuta el flujo completo y devuelve la respuesta de la API."""
+    from app.adapt import guest, html_renderer, llm, matcher, pdf, selector
+    from app.services.job_service import get_job_by_id
+
+    try:
+        job = get_job_by_id(db=db, job_id=job_id)
+    except (TypeError, ValueError) as error:
+        raise AdaptError("JOB_NOT_FOUND", "Oferta no encontrada.",
+                         http=404) from error
+    if not job:
+        raise AdaptError("JOB_NOT_FOUND", "Oferta no encontrada.", http=404)
+
+    profile = guest.get_profile_for_cv(db)
+    if guest.profile_is_empty(profile):
+        raise AdaptError(
+            "PROFILE_NOT_FOUND",
+            "Perfil de invitado no disponible.", http=404)
+
+    offer = {
+        "title": job.title or "",
+        "company": job.company or "",
+        "description": job.description or "",
+        "location": job.location or "",
+        "modality": getattr(job, "modality", "") or "",
+        "requirements": _as_list(getattr(job, "requirements", [])),
+        "responsibilities": _as_list(
+            getattr(job, "responsibilities", [])),
+    }
+    if not offer["title"] and not offer["description"]:
+        raise AdaptError(
+            "JOB_INCOMPLETE", "La oferta no tiene datos suficientes.",
+            http=400)
+
+    matching = matcher.match_offer_profile(offer, profile)
+    content = selector.select_cv_content(profile, offer, matching)
+
+    polished = llm.polish_summary(
+        content.get("summary", ""), content.get("target_role", ""),
+        matching.get("matched_skills") or [])
+    content["summary"] = polished["summary"]
+    content["summary_provider"] = polished["provider"]
+
+    # Datos de contacto para la cabecera (vienen del perfil, no del job).
+    for key in ("full_name", "title", "email", "phone", "linkedin",
+                "github", "portfolio", "location"):
+        content[key] = profile.get(key, "")
+
+    try:
+        html_text = html_renderer.render_cv_html(content, offer)
+    except ValueError as error:
+        raise AdaptError("HTML_FAILED", str(error), http=502) from error
+
+    directory = adapt_dir(job.id)
+    (directory / "adapt.json").write_text(json.dumps(
+        {"job_id": job.id,
+         "created_at": datetime.utcnow().isoformat(),
+         "profile_source": "guest",
+         "matching": {k: v for k, v in matching.items()
+                      if k in ("percentage", "matched_skills",
+                               "missing_skills", "modality_ok",
+                               "location_ok", "target_roles_matched",
+                               "years_experience")},
+         "content": content},
+        ensure_ascii=False, indent=2), encoding="utf-8")
+    (directory / "cv.html").write_text(html_text, encoding="utf-8")
+    try:
+        pdf.html_to_pdf(html_text, directory / "cv.pdf")
+    except pdf.PdfError as error:
+        raise AdaptError(error.code, str(error), http=502) from error
+
+    return {
+        "success": True,
+        "job": {"id": job.id, "title": job.title or "",
+                "company": job.company or ""},
+        "matching": {
+            "percentage": matching["percentage"],
+            "matched_skills": matching["matched_skills"],
+            "missing_skills": matching["missing_skills"],
+        },
+        "cv": {
+            "id": f"job-{job.id}",
+            "summary_provider": polished["provider"],
+            "experiences": [
+                {"title": e.get("title") or e.get("name") or "",
+                 "company": e.get("company") or e.get("institution") or ""}
+                for e in content["experiences"]],
+            "projects": [p.get("name") or p.get("title") or ""
+                         for p in content["projects"]],
+            "download_url": f"/jobs/{job.id}/adapt-cv/download?format=pdf",
+            "preview_url": f"/jobs/{job.id}/adapt-cv/download?format=pdf",
+        },
+    }
+
+
+def error_body(error: AdaptError) -> dict:
+    return {"success": False,
+            "error": {"code": error.code, "message": str(error)}}

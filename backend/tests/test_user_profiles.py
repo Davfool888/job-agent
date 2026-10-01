@@ -46,6 +46,25 @@ def _clean_users():
         db.close()
 
 
+def _clean_guest_demo():
+    """Borra el demo sembrado para forzar re-siembra con datos nuevos."""
+    from app.services.search_profiles import GUEST_OWNER
+
+    db = _db()
+    try:
+        from app.database.models import UserProfile, UserRichProfile
+
+        db.query(UserProfile).filter(
+            UserProfile.uid == GUEST_OWNER).delete(
+                synchronize_session=False)
+        db.query(UserRichProfile).filter(
+            UserRichProfile.uid == GUEST_OWNER).delete(
+                synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
+
 def test_other_user_starts_blank_and_roundtrips():
     from app.services import job_service as jobs
 
@@ -199,14 +218,18 @@ def _clean_search_tests():
 def test_guest_gets_demo_profile_not_global():
     from app.services import job_service as jobs
 
+    _clean_guest_demo()
     original = _read_global()
     db = _db()
     try:
         jobs.save_profile(db, {"full_name": "Perfil Base Global"})
         guest = jobs.get_profile_for(db, GUEST_UID, GUEST_EMAIL)
         assert guest["scope"] == "demo"
-        assert guest["full_name"] == "Invitado Demo"
-        assert "Python" in guest["skills"]
+        assert guest["full_name"] == "Andrés Felipe Ramírez"
+        assert guest["title"] == "Ingeniero de Software"
+        assert "REST APIs" in guest["skills"]
+        assert "Consultoría" in guest["sectors"]
+        assert guest["min_salary"] == "3500000"
         # El otro Google sigue en blanco.
         other = jobs.get_profile_for(db, "uid-other-test", OTHER)
         assert other["scope"] == "own"
@@ -219,12 +242,47 @@ def test_guest_gets_demo_profile_not_global():
 def test_guest_demo_rich_seeded():
     from app.services import job_service as jobs
 
+    _clean_guest_demo()
     db = _db()
     try:
         rich = jobs.get_rich_profile_for(db, GUEST_UID, GUEST_EMAIL)
         assert rich["scope"] == "demo"
-        assert rich["personal"].get("full_name") == "Invitado Demo"
-        assert len(rich["experience"]) >= 1
+        # full_name se deriva de first + last ("... Torres").
+        assert rich["personal"].get("first_name") == "Andrés Felipe"
+        assert rich["personal"].get("last_name") == "Ramírez Torres"
+        assert rich["personal"].get("full_name") == (
+            "Andrés Felipe Ramírez Torres")
+        assert rich["personal"].get("email") == (
+            "andres.ramirez.dev@example.com")
+        assert rich["personal"].get("title_id") == "software_engineer"
+        assert "Python" in rich["professional_summary"]
+        assert rich["years_experience"] == 1
+        assert len(rich["technical_skills"]) == 12
+        assert len(rich["soft_skills"]) == 6
+        assert len(rich["target_roles"]) == 6
+        assert set(rich["skills"]) >= {
+            "programming", "data_analysis", "backend", "databases",
+            "tools", "business"}
+        assert len(rich["languages"]) == 2
+        assert rich["languages"][0]["language"] == "en"
+        assert rich["languages"][1]["level"] == "A2"
+        assert len(rich["experience"]) == 2
+        assert len(rich["education"]) == 2
+        assert len(rich["projects"]) == 2
+        assert len(rich["certifications"]) == 2
+        exp1 = rich["experience"][0]
+        assert exp1["company"] == "FinanRed S.A.S."
+        assert exp1["start_date"] == "2025-03-01"
+        assert exp1["modality"] == "HYBRID"
+        assert exp1["city"]["id"] == "bogota"
+        assert exp1["contract_type"] == "indefinite"
+        assert len(exp1["perspectives"]) == 1
+        assert rich["certifications"][0]["issued_date"] == "2026-07-15"
+        assert rich["certifications"][1]["expiry_date"] is None
+        # El dataset mezcla ingles en perspectivas con base en ambos
+        # idiomas: el validador lo reporta honestamente (sirve para
+        # probar la UI de advertencias).
+        assert any("no esta en skills base" in w for w in rich["_warnings"])
     finally:
         db.close()
 
