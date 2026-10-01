@@ -2,21 +2,12 @@ import { useState } from "react";
 import { Header } from "../components/layout/Header";
 import { API_URL } from "../services/api";
 import { checkHealth } from "../services/jobs";
-
-type Theme = "claro" | "oscuro-sistema";
+import { useTheme, type Theme } from "../hooks/useTheme";
 
 export function Settings() {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem("ja-theme") as Theme) ?? "claro",
-  );
+  const { theme, setTheme } = useTheme();
   const [health, setHealth] = useState<string>("Sin comprobar");
   const [checking, setChecking] = useState(false);
-
-  const saveTheme = (t: Theme) => {
-    setTheme(t);
-    // Preferencia puramente visual: único uso legítimo de localStorage.
-    localStorage.setItem("ja-theme", t);
-  };
 
   const ping = async () => {
     setChecking(true);
@@ -53,10 +44,11 @@ export function Settings() {
             <select
               className="select"
               value={theme}
-              onChange={(e) => saveTheme(e.target.value as Theme)}
+              onChange={(e) => setTheme(e.target.value as Theme)}
             >
+              <option value="oscuro">Oscuro</option>
               <option value="claro">Claro</option>
-              <option value="oscuro-sistema">Seguir al sistema (próximamente)</option>
+              <option value="sistema">Seguir al sistema</option>
             </select>
           </div>
         </div>

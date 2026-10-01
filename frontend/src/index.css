@@ -22,6 +22,78 @@
   --sidebar-w: 232px;
   --font: "Inter", -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     sans-serif;
+  color-scheme: light;
+}
+
+/* ---------- Tema oscuro (toda la pagina) ---------- */
+[data-theme="dark"] {
+  --bg: #0b1220;
+  --surface: #121c30;
+  --surface-2: #1a2742;
+  --border: #24344f;
+  --text: #e8eef6;
+  --text-muted: #9aa9bd;
+  --text-faint: #64748b;
+  --primary: #5b9bff;
+  --primary-dark: #3b82f6;
+  --primary-soft: rgba(91, 155, 255, 0.14);
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.13);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.13);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.13);
+  --neutral-soft: #1a2742;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+[data-theme="dark"] .sidebar {
+  background: #0a0f1e;
+}
+
+[data-theme="dark"] .nav-link.active {
+  background: rgba(91, 155, 255, 0.18);
+}
+
+[data-theme="dark"] .badge-applied {
+  background: rgba(139, 92, 246, 0.2);
+  color: #b7a5ff;
+}
+
+[data-theme="dark"] .alert-error {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .notice-pending {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fcd34d;
+}
+
+[data-theme="dark"] .auth-wrap {
+  background: radial-gradient(circle at 20% 10%, rgba(91, 155, 255, 0.12) 0, transparent 45%),
+    var(--bg);
+}
+
+[data-theme="dark"] .modal {
+  border: 1px solid var(--border);
+}
+
+[data-theme="dark"] .input,
+[data-theme="dark"] .select,
+[data-theme="dark"] .textarea {
+  background: var(--surface-2);
+}
+
+[data-theme="dark"] .job-title a {
+  color: var(--text);
+}
+
+[data-theme="dark"] img {
+  opacity: 0.92;
 }
 
 * {

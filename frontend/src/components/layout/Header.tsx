@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Moon, Sun } from "lucide-react";
 import { checkHealth } from "../../services/jobs";
+import { useTheme } from "../../hooks/useTheme";
 
 interface Props {
   title: string;
@@ -9,6 +11,7 @@ interface Props {
 
 export function Header({ title, subtitle, actions }: Props) {
   const [online, setOnline] = useState<boolean | null>(null);
+  const { toggle, isDark } = useTheme();
 
   useEffect(() => {
     let alive = true;
@@ -26,6 +29,14 @@ export function Header({ title, subtitle, actions }: Props) {
       </div>
       <div className="header-spacer" />
       {actions}
+      <button
+        className="btn btn-ghost btn-sm"
+        onClick={toggle}
+        title={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+        aria-label="Cambiar tema"
+      >
+        {isDark ? <Sun size={14} /> : <Moon size={14} />}
+      </button>
       <span className="backend-pill" title="Estado del backend FastAPI">
         <span
           className={`health-dot ${online ? "health-ok" : "health-bad"}`}
