@@ -36,17 +36,35 @@ export function applyJobFilters(jobs: Job[], f: JobFilterState): Job[] {
   const now = Date.now();
 
   const filtered = jobs.filter((j) => {
-    if (
-      text &&
-      !`${j.title} ${j.company ?? ""} ${j.location ?? ""} ${j.description ?? ""}`
-        .toLowerCase()
-        .includes(text)
-    ) {
-      return false;
+    if (text) {
+      // Texto libre: cargo, empresa, ciudad, descripcion y señales del
+      // analisis (skills como DAX/Python, rol detectado, query origen).
+      const haystack = [
+        j.title,
+        j.company ?? "",
+        j.location ?? "",
+        j.description ?? "",
+        j.search_query ?? "",
+        j.detected_role ?? "",
+        j.category ?? "",
+        ...(j.evidence ?? []),
+        ...(j.matched_skills ?? []),
+        ...(j.missing_skills ?? []),
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(text)) {
+        return false;
+      }
     }
     if (f.company && j.company !== f.company) return false;
     if (f.location && j.location !== f.location) return false;
     if (f.source && j.source !== f.source) return false;
+    if (
+      f.profile &&
+      !(j.search_profile_ids ?? []).map(String).includes(f.profile)
+    )
+      return false;
     if (f.onlyScored && j.match_score === null) return false;
     if (
       f.minMatch > 0 &&
@@ -100,4 +118,32 @@ export function uniqueSorted(
     if (v) set.add(v);
   }
   return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+export interface ProfileOption {
+  id: string;
+  name: string;
+  count: number;
+}
+
+// Perfiles que encontraron las ofertas visibles (para el filtro).
+export function profileOptions(
+  jobs: Job[],
+  profiles: Array<{ id: string | number; name: string }>,
+): ProfileOption[] {
+  const counts = new Map<string, number>();
+  for (const j of jobs) {
+    for (const pid of j.search_profile_ids ?? []) {
+      const key = String(pid);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  const names = new Map(profiles.map((p) => [String(p.id), p.name]));
+  return [...counts.entries()]
+    .map(([id, count]) => ({
+      id,
+      name: names.get(id) ?? `Perfil ${id}`,
+      count,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

@@ -35,6 +35,7 @@ export async function searchJobs(
   details = false,
   source = "computrabajo",
   location?: string,
+  maxAgeDays = 0,
 ): Promise<SearchResult> {
   const { data } = await api.get<SearchResult>("/jobs/search", {
     params: {
@@ -43,6 +44,7 @@ export async function searchJobs(
       details,
       source,
       ...(location?.trim() ? { location: location.trim() } : {}),
+      ...(maxAgeDays > 0 ? { max_age_days: maxAgeDays } : {}),
     },
   });
   return data;

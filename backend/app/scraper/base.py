@@ -87,6 +87,47 @@ def filter_by_location(
     return [j for j in jobs if matches_location(j.get("location"), location)]
 
 
+def job_posted_at(job: dict, now: datetime | None = None) -> datetime | None:
+    """Fecha de publicacion de una oferta cruda (dict de scraper).
+
+    Usa `published_at` (datetime o ISO) o interpreta `published_text`.
+    None = sin informacion de fecha (no se puede descartar por edad)."""
+    published = job.get("published_at")
+    if isinstance(published, datetime):
+        return published
+    if isinstance(published, str) and published.strip():
+        try:
+            return datetime.fromisoformat(
+                published.replace("Z", "+00:00")
+            ).replace(tzinfo=None)
+        except ValueError:
+            pass
+    return parse_posted_datetime(job.get("published_text"), now=now)
+
+
+def filter_by_max_age(
+    jobs: list[dict], max_age_days: int | None,
+    now: datetime | None = None,
+) -> list[dict]:
+    """Descarta ofertas mas viejas que `max_age_days`.
+
+    0/None = sin filtro (trae todo). Sin fecha de publicacion la oferta
+    se conserva (no se puede probar que sea vieja)."""
+    try:
+        limit = int(max_age_days or 0)
+    except (TypeError, ValueError):
+        return jobs
+    if limit <= 0:
+        return jobs
+    now = now or datetime.utcnow()
+    fresh = []
+    for job in jobs:
+        posted = job_posted_at(job, now=now)
+        if posted is None or (now - posted) <= timedelta(days=limit):
+            fresh.append(job)
+    return fresh
+
+
 def fingerprint_of(title: str | None, company: str | None,
                    location: str | None = None) -> str:
     """Huella de 'la misma oferta': titulo+empresa+ubicacion

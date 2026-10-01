@@ -627,6 +627,11 @@ def search_jobs(
         "(ej: Bogotá, Medellín). LinkedIn e Indeed lo aplican en el "
         "sitio; el resto filtra por texto de ubicación.",
     ),
+    max_age_days: int = Query(
+        0, ge=0, le=60,
+        description="Antigüedad maxima en dias (0 = todas). "
+        "Descarta ofertas con publicacion mas vieja antes de guardar.",
+    ),
     db: Session = Depends(get_db),
 ):
     if not q.strip():
@@ -650,6 +655,13 @@ def search_jobs(
             status_code=502,
             detail=f"Error consultando {scraper.source}: {error}",
         )
+
+    # Antigüedad maxima: filtra antes de guardar (no se repite ni se
+    # guarda lo viejo). Sin fecha de publicacion se conserva.
+    from app.scraper.base import filter_by_max_age
+
+    found_total = len(jobs)
+    jobs = filter_by_max_age(jobs, max_age_days)
 
     saved_jobs = save_jobs(db=db, jobs=jobs, search_query=q)
 
@@ -683,7 +695,9 @@ def search_jobs(
         "pages": pages,
         "source": scraper.source,
         "location": location,
-        "found": len(jobs),
+        "max_age_days": max_age_days,
+        "found": found_total,
+        "filtered_out": found_total - len(jobs),
         "saved": len(saved_jobs),
         "analyzed": analyzed,
         "relevant": relevant,

@@ -313,6 +313,13 @@ class SearchProfile(Base):
         default=10,
     )
 
+    # Antigüedad maxima de vacantes a traer (dias). 0 = sin limite.
+    max_age_days = Column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
     last_run_at = Column(
         DateTime,
         nullable=True,

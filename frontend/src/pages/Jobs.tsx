@@ -10,14 +10,15 @@ import {
   ErrorState,
   LoadingState,
 } from "../components/jobs/States";
-import { useJobs } from "../hooks/useApi";
+import { useJobs, useProfileOptions } from "../hooks/useApi";
 import { fetchJobsSince } from "../services/searchProfiles";
 import type { Job } from "../types/job";
-import { applyJobFilters, uniqueSorted } from "../utils/jobs";
+import { applyJobFilters, profileOptions, uniqueSorted } from "../utils/jobs";
 
 export function Jobs() {
   // Excluye descartadas: esas viven en /discarded.
   const { data, loading, error, reload, mutate } = useJobs();
+  const allProfiles = useProfileOptions();
   const [filters, setFilters] = useState<JobFilterState>(DEFAULT_FILTERS);
   const [discarding, setDiscarding] = useState<Job | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -56,6 +57,10 @@ export function Jobs() {
   const companies = useMemo(() => uniqueSorted(active, (j) => j.company), [active]);
   const locations = useMemo(() => uniqueSorted(active, (j) => j.location), [active]);
   const sources = useMemo(() => uniqueSorted(active, (j) => j.source), [active]);
+  const profiles = useMemo(
+    () => profileOptions(active, allProfiles),
+    [active, allProfiles],
+  );
 
   const run = async (job: Job, fn: () => Promise<unknown>) => {
     setBusyId(job.id);
@@ -141,6 +146,7 @@ export function Jobs() {
               companies={companies}
               locations={locations}
               sources={sources}
+              profiles={profiles}
             />
             {visible.length === 0 ? (
               <EmptyState

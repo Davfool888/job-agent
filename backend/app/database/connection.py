@@ -92,6 +92,19 @@ def ensure_columns():
         for column, ddl in wanted.items():
             if column not in existing:
                 conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {column} {ddl}"))
+        # Perfil de busqueda: antigüedad maxima (0 = sin limite).
+        if "search_profiles" in tables:
+            existing_sp = {
+                row[1]
+                for row in conn.execute(
+                    text("PRAGMA table_info(search_profiles)")
+                ).fetchall()
+            }
+            if "max_age_days" not in existing_sp:
+                conn.execute(
+                    text("ALTER TABLE search_profiles "
+                         "ADD COLUMN max_age_days INTEGER NOT NULL DEFAULT 0")
+                )
 
 
 def get_db():

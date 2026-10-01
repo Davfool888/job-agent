@@ -9,12 +9,13 @@ import {
   ErrorState,
   LoadingState,
 } from "../components/jobs/States";
-import { useJobs } from "../hooks/useApi";
+import { useJobs, useProfileOptions } from "../hooks/useApi";
 import { formatDateTime } from "../utils/format";
-import { applyJobFilters, uniqueSorted } from "../utils/jobs";
+import { applyJobFilters, profileOptions, uniqueSorted } from "../utils/jobs";
 
 export function Discarded() {
   const { data, loading, error, reload, mutate } = useJobs("discarded");
+  const allProfiles = useProfileOptions();
   const [filters, setFilters] = useState<JobFilterState>(DEFAULT_FILTERS);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -25,6 +26,10 @@ export function Discarded() {
   const companies = useMemo(() => uniqueSorted(all, (j) => j.company), [all]);
   const locations = useMemo(() => uniqueSorted(all, (j) => j.location), [all]);
   const sources = useMemo(() => uniqueSorted(all, (j) => j.source), [all]);
+  const profiles = useMemo(
+    () => profileOptions(all, allProfiles),
+    [all, allProfiles],
+  );
 
   const recover = async (id: string) => {
     setBusyId(id);
@@ -63,6 +68,7 @@ export function Discarded() {
               companies={companies}
               locations={locations}
               sources={sources}
+              profiles={profiles}
             />
             {visible.length === 0 ? (
               <EmptyState title="Sin resultados para esos filtros." />

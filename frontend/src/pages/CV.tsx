@@ -8,7 +8,7 @@ import {
   ErrorState,
   LoadingState,
 } from "../components/jobs/States";
-import { useJobs } from "../hooks/useApi";
+import { useJobs, useProfileOptions } from "../hooks/useApi";
 import {
   cvDownloadUrl,
   fetchCvStatus,
@@ -16,10 +16,24 @@ import {
   type CvStatus,
 } from "../services/cv";
 import type { Job } from "../types/job";
+import { DEFAULT_FILTERS } from "../types/filters";
+import type { JobFilterState } from "../types/filters";
+import { JobFilters } from "../components/jobs/JobFilters";
+import { applyJobFilters, profileOptions, uniqueSorted } from "../utils/jobs";
 
 export function CV() {
   const { data, loading, error, reload } = useJobs("kept");
+  const allProfiles = useProfileOptions();
   const kept = useMemo(() => data ?? [], [data]);
+  const [filters, setFilters] = useState<JobFilterState>(DEFAULT_FILTERS);
+  const visible = useMemo(() => applyJobFilters(kept, filters), [kept, filters]);
+  const companies = useMemo(() => uniqueSorted(kept, (j) => j.company), [kept]);
+  const locations = useMemo(() => uniqueSorted(kept, (j) => j.location), [kept]);
+  const sources = useMemo(() => uniqueSorted(kept, (j) => j.source), [kept]);
+  const profiles = useMemo(
+    () => profileOptions(kept, allProfiles),
+    [kept, allProfiles],
+  );
   const [statuses, setStatuses] = useState<Record<string, CvStatus>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -88,8 +102,23 @@ export function CV() {
             hint="Conserva ofertas desde la página de Ofertas y aparecerán aquí como candidatas para generar su CV."
           />
         ) : (
-          <div className="job-list">
-            {kept.map((j) => {
+          <>
+            <JobFilters
+              value={filters}
+              onChange={setFilters}
+              companies={companies}
+              locations={locations}
+              sources={sources}
+              profiles={profiles}
+            />
+            {visible.length === 0 ? (
+              <EmptyState
+                title="Sin resultados para esos filtros."
+                hint="Ajusta la búsqueda o limpia los filtros."
+              />
+            ) : (
+              <div className="job-list">
+                {visible.map((j) => {
               const st = statuses[j.id] ?? (j.cv_generated ? {
                 job_id: j.id,
                 match_score: j.match_score,
@@ -174,7 +203,9 @@ export function CV() {
                 </div>
               );
             })}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </>

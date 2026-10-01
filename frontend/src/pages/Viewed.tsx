@@ -10,12 +10,13 @@ import {
   ErrorState,
   LoadingState,
 } from "../components/jobs/States";
-import { useJobs } from "../hooks/useApi";
+import { useJobs, useProfileOptions } from "../hooks/useApi";
 import type { Job } from "../types/job";
-import { applyJobFilters, uniqueSorted } from "../utils/jobs";
+import { applyJobFilters, profileOptions, uniqueSorted } from "../utils/jobs";
 
 export function Viewed() {
   const { data, loading, error, reload, mutate } = useJobs("opened");
+  const allProfiles = useProfileOptions();
   const [filters, setFilters] = useState<JobFilterState>(DEFAULT_FILTERS);
   const [discarding, setDiscarding] = useState<Job | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -27,6 +28,10 @@ export function Viewed() {
   const companies = useMemo(() => uniqueSorted(all, (j) => j.company), [all]);
   const locations = useMemo(() => uniqueSorted(all, (j) => j.location), [all]);
   const sources = useMemo(() => uniqueSorted(all, (j) => j.source), [all]);
+  const profiles = useMemo(
+    () => profileOptions(all, allProfiles),
+    [all, allProfiles],
+  );
 
   const run = async (job: Job, fn: () => Promise<unknown>) => {
     setBusyId(job.id);
@@ -95,6 +100,7 @@ export function Viewed() {
               companies={companies}
               locations={locations}
               sources={sources}
+              profiles={profiles}
             />
             {visible.length === 0 ? (
               <EmptyState title="Sin resultados para esos filtros." />

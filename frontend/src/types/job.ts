@@ -58,7 +58,9 @@ export interface SearchResult {
   pages: number;
   source: string;
   location?: string | null;
+  max_age_days?: number;
   found: number;
+  filtered_out?: number;
   saved: number;
   jobs: Array<{
     id: string;

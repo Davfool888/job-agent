@@ -30,7 +30,22 @@ const EMPTY_FORM = {
   sources: [] as string[],
   active: true,
   frequency_minutes: 10,
+  max_age_days: 0,
 };
+
+export const MAX_AGE_OPTIONS = [
+  { value: 0, label: "Todas (sin límite)" },
+  { value: 1, label: "Hoy" },
+  { value: 3, label: "Últimos 3 días" },
+  { value: 7, label: "Últimos 7 días" },
+  { value: 14, label: "Últimos 14 días" },
+  { value: 30, label: "Últimos 30 días" },
+];
+
+export function maxAgeLabel(days: number | null | undefined): string {
+  const opt = MAX_AGE_OPTIONS.find((o) => o.value === (days ?? 0));
+  return opt ? opt.label : `${days} días`;
+}
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -98,6 +113,7 @@ export function Search() {
       sources: p.sources,
       active: p.active,
       frequency_minutes: p.frequency_minutes,
+      max_age_days: p.max_age_days ?? 0,
     });
     setEditing(p.id);
     setCreating(false);
@@ -128,6 +144,7 @@ export function Search() {
         sources: form.sources,
         active: form.active,
         frequency_minutes: Number(form.frequency_minutes) || 10,
+        max_age_days: Number(form.max_age_days) || 0,
       };
       if (editing) {
         await updateSearchProfile(editing, payload);
@@ -338,6 +355,25 @@ export function Search() {
                       }
                     />
                   </label>
+                  <label>
+                    Antigüedad máxima (por defecto)
+                    <select
+                      className="select"
+                      value={String(form.max_age_days)}
+                      onChange={(e) =>
+                        setForm({ ...form, max_age_days: Number(e.target.value) })
+                      }
+                      title="Qué tan atrás trae vacantes: filtra por fecha de publicación antes de guardar. Sin fecha se conserva."
+                    >
+                      {MAX_AGE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div style={{ marginTop: 8 }}>
                   <label
                     style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5 }}
                   >
@@ -393,6 +429,9 @@ export function Search() {
                           <span>Próxima búsqueda: {formatDateTime(p.next_run_at)}</span>
                           <span>
                             Ofertas encontradas: {p.last_found} · Nuevas: {p.last_new}
+                          </span>
+                          <span>
+                            Antigüedad máx.: {maxAgeLabel(p.max_age_days)}
                           </span>
                         </div>
                         {p.last_error && (

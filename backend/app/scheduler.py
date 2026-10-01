@@ -113,6 +113,8 @@ def run_profile(profile_id, *, db=None) -> dict:
             user_profile = jobs.get_profile(db)
             queries = build_queries(profile)
             sources = profile.get("sources") or ["computrabajo"]
+            location = profile.get("location")
+            max_age_days = int(profile.get("max_age_days") or 0)
             all_rows: list = []
 
             for source in sources:
@@ -124,7 +126,9 @@ def run_profile(profile_id, *, db=None) -> dict:
                 rows: list = []
                 for query in queries:
                     try:
-                        found = scraper.search(query, max_pages=1)
+                        found = scraper.search(
+                            query, max_pages=1, location=location
+                        )
                     except Exception as error:  # noqa: BLE001
                         summary["errors"].append(
                             f"{source}/{query}: {str(error)[:150]}"
@@ -134,6 +138,11 @@ def run_profile(profile_id, *, db=None) -> dict:
                             source, query, error,
                         )
                         continue
+                    # Antigüedad del perfil: lo viejo ni se guarda.
+                    if max_age_days > 0:
+                        from app.scraper.base import filter_by_max_age
+
+                        found = filter_by_max_age(found, max_age_days)
                     summary["found"] += len(found)
                     try:
                         saved = jobs.save_jobs(

@@ -3,13 +3,23 @@ __pycache__/
 *.pyc
 
 .env
+.env.local
+.env.development
+.env.production
 
 # Firebase: jamas subir credenciales (ni el JSON ni la carpeta)
+# Cubre backend/.secrets/firebase-service-account.json y cualquier
+# service account que se guarde en otra ruta.
 /backend/.secrets/
 .secrets/
 *-key.json
 service-account*.json
+*service-account*.json
+firebase-service-account*.json
 firebase-credentials*.json
+firebase-adminsdk*.json
+*.pem
+*.key
 database/.env
 
 *.db

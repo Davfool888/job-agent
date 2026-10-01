@@ -3,6 +3,8 @@ export interface JobFilterState {
   company: string;
   location: string;
   source: string;
+  // Perfil de busqueda que encontro la oferta ("": todos).
+  profile: string;
   minMatch: number; // 0 = sin filtro
   onlyScored: boolean;
   // Antigüedad de la publicación (usa published_at, con fallback a created_at).
@@ -16,6 +18,7 @@ export const DEFAULT_FILTERS: JobFilterState = {
   company: "",
   location: "",
   source: "",
+  profile: "",
   minMatch: 0,
   onlyScored: false,
   maxAgeDays: 0,

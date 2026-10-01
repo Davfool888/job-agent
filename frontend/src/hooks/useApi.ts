@@ -9,6 +9,7 @@ import {
   updateJobStatus,
 } from "../services/jobs";
 import { fetchProfile, saveProfile } from "../services/profile";
+import { fetchSearchProfiles } from "../services/searchProfiles";
 import type {
   Job,
   JobDetailExtra,
@@ -129,6 +130,7 @@ export function useJobSearch(): {
     details: boolean,
     source?: string,
     location?: string,
+    maxAgeDays?: number,
   ) => Promise<SearchResult>;
 } {
   const [result, setResult] = useState<SearchResult | null>(null);
@@ -142,11 +144,12 @@ export function useJobSearch(): {
       details: boolean,
       source = "computrabajo",
       location?: string,
+      maxAgeDays = 0,
     ) => {
       setSearching(true);
       setSearchError(null);
       try {
-        const r = await searchJobs(q, pages, details, source, location);
+        const r = await searchJobs(q, pages, details, source, location, maxAgeDays);
         setResult(r);
         return r;
       } catch (e: unknown) {
@@ -181,4 +184,28 @@ export function useSources(): {
   }, []);
 
   return { sources, loading };
+}
+
+export function useProfileOptions(): Array<{ id: string; name: string }> {
+  const [profiles, setProfiles] = useState<Array<{ id: string; name: string }>>(
+    [],
+  );
+
+  useEffect(() => {
+    let alive = true;
+    fetchSearchProfiles()
+      .then((list) => {
+        if (alive) {
+          setProfiles(list.map((p) => ({ id: String(p.id), name: p.name })));
+        }
+      })
+      .catch(() => {
+        if (alive) setProfiles([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return profiles;
 }

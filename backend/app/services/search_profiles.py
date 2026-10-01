@@ -20,8 +20,11 @@ DEFAULT_SOURCES = ["computrabajo", "magneto", "linkedin"]
 
 PROFILE_FIELDS = (
     "name", "title", "location", "modality", "keywords", "sources",
-    "active", "frequency_minutes",
+    "active", "frequency_minutes", "max_age_days",
 )
+
+# Antigüedad maxima permitida en perfiles (dias). 0 = sin limite.
+MAX_AGE_DAYS_LIMIT = 60
 
 
 def _clean_str(value, limit: int = 300) -> str:
@@ -62,6 +65,11 @@ def validate_profile_data(data: dict) -> dict:
     except (TypeError, ValueError):
         raise ValueError("frequency_minutes debe ser un entero.")
     frequency = max(5, min(frequency, 1440))
+    try:
+        max_age = int(data.get("max_age_days") or 0)
+    except (TypeError, ValueError):
+        raise ValueError("max_age_days debe ser un entero (0 = sin limite).")
+    max_age = max(0, min(max_age, MAX_AGE_DAYS_LIMIT))
     return {
         "name": _clean_str(data.get("name") or title, 200),
         "title": title,
@@ -71,6 +79,7 @@ def validate_profile_data(data: dict) -> dict:
         "sources": sources,
         "active": bool(data.get("active", True)),
         "frequency_minutes": frequency,
+        "max_age_days": max_age,
     }
 
 
@@ -97,6 +106,7 @@ def _record_to_dict(record_id, data: dict) -> dict:
         "sources": list(sources or []),
         "active": bool(data.get("active", True)),
         "frequency_minutes": int(data.get("frequency_minutes") or 10),
+        "max_age_days": int(data.get("max_age_days") or 0),
         "last_run_at": _iso(data.get("last_run_at")),
         "next_run_at": _iso(data.get("next_run_at")),
         "last_run_status": data.get("last_run_status"),
@@ -122,6 +132,7 @@ def _orm_to_dict(row: SearchProfile) -> dict:
         "modality": row.modality, "keywords": row.keywords,
         "sources": row.sources, "active": row.active,
         "frequency_minutes": row.frequency_minutes,
+        "max_age_days": getattr(row, "max_age_days", 0) or 0,
         "last_run_at": row.last_run_at, "next_run_at": row.next_run_at,
         "last_run_status": row.last_run_status,
         "last_found": row.last_found, "last_new": row.last_new,
@@ -198,6 +209,7 @@ def update_profile(db: Session, profile_id, data: dict) -> dict | None:
     row.sources = json.dumps(cleaned["sources"], ensure_ascii=False)
     row.active = 1 if cleaned["active"] else 0
     row.frequency_minutes = cleaned["frequency_minutes"]
+    row.max_age_days = cleaned["max_age_days"]
     # Si se reactiva sin proxima ejecucion, programarla ya.
     if cleaned["active"] and not row.next_run_at:
         row.next_run_at = now

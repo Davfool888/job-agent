@@ -7,9 +7,17 @@ interface Props {
   companies: string[];
   locations: string[];
   sources: string[];
+  profiles?: Array<{ id: string; name: string; count: number }>;
 }
 
-export function JobFilters({ value, onChange, companies, locations, sources }: Props) {
+export function JobFilters({
+  value,
+  onChange,
+  companies,
+  locations,
+  sources,
+  profiles = [],
+}: Props) {
   const set = (patch: Partial<JobFilterState>) =>
     onChange({ ...value, ...patch });
 
@@ -18,7 +26,7 @@ export function JobFilters({ value, onChange, companies, locations, sources }: P
       <div className="toolbar-row">
         <input
           className="input search-input"
-          placeholder="Buscar por cargo, empresa o palabra clave…"
+          placeholder="Buscar por cargo, empresa, skill (DAX, Python)…"
           value={value.text}
           onChange={(e) => set({ text: e.target.value })}
         />
@@ -72,6 +80,19 @@ export function JobFilters({ value, onChange, companies, locations, sources }: P
           {sources.map((s) => (
             <option key={s} value={s}>
               {s}
+            </option>
+          ))}
+        </select>
+        <select
+          className="select"
+          value={value.profile}
+          onChange={(e) => set({ profile: e.target.value })}
+          title="Perfil de búsqueda que encontró la oferta"
+        >
+          <option value="">Todos los perfiles</option>
+          {profiles.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} ({p.count})
             </option>
           ))}
         </select>

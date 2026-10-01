@@ -11,6 +11,8 @@ export interface SearchProfile {
   sources: string[];
   active: boolean;
   frequency_minutes: number;
+  // Antigüedad maxima de vacantes a traer (dias). 0 = sin limite.
+  max_age_days: number;
   last_run_at: string | null;
   next_run_at: string | null;
   last_run_status: string | null;

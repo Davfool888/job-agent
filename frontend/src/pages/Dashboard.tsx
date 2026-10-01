@@ -34,6 +34,14 @@ export function Dashboard() {
   const stats = useStats(refreshKey);
   const search = useJobSearch();
   const { sources } = useSources();
+  // Antigüedad maxima por defecto (se guarda en este navegador).
+  const [maxAge, setMaxAge] = useState<number>(() =>
+    Number(window.localStorage.getItem("jobagent_default_max_age") ?? 0) || 0,
+  );
+  const changeMaxAge = (v: number) => {
+    setMaxAge(v);
+    window.localStorage.setItem("jobagent_default_max_age", String(v));
+  };
   // Sesion de busqueda compartida: persiste al navegar entre secciones,
   // no re-ejecuta scraping al volver y no resetea la consulta.
   const {
@@ -71,7 +79,7 @@ export function Dashboard() {
         const summaries: SourceSummary[] = [];
         for (const src of sources) {
           try {
-            const r = await search.run(query.trim(), pages, false, src, city);
+            const r = await search.run(query.trim(), pages, false, src, city, maxAge);
             summaries.push({ source: src, found: r.found, saved: r.saved });
           } catch {
             summaries.push({
@@ -84,7 +92,7 @@ export function Dashboard() {
         }
         setMulti(summaries);
       } else {
-        const r = await search.run(query.trim(), pages, false, source, city);
+        const r = await search.run(query.trim(), pages, false, source, city, maxAge);
         setResult(r);
       }
       jobs.reload();
@@ -170,6 +178,19 @@ export function Dashboard() {
               <option value="3">3 págs. (~60)</option>
               <option value="5">5 págs. (~100)</option>
             </select>
+            <select
+              className="select"
+              value={String(maxAge)}
+              onChange={(e) => changeMaxAge(Number(e.target.value))}
+              title="Antigüedad máxima por defecto: descarta ofertas con publicación más vieja antes de guardar. Se recuerda en este navegador."
+            >
+              <option value="0">Todas</option>
+              <option value="1">Hoy</option>
+              <option value="3">3 días</option>
+              <option value="7">7 días</option>
+              <option value="14">14 días</option>
+              <option value="30">30 días</option>
+            </select>
             <button
               className="btn btn-primary btn-sm"
               disabled={search.searching}
@@ -241,8 +262,14 @@ export function Dashboard() {
                   {" "}· <strong>{result.location}</strong>
                 </>
               ) : null}
-              : {result.found} encontradas, {result.saved}{" "}
-              guardadas/actualizadas.{" "}
+              {result.max_age_days ? (
+                <> · últimos {result.max_age_days} días</>
+              ) : null}
+              : {result.found} encontradas
+              {result.filtered_out ? (
+                <> ({result.filtered_out} viejas filtradas)</>
+              ) : null}
+              , {result.saved} guardadas/actualizadas (sin duplicar links).{" "}
               <Link to="/jobs">Ver ofertas</Link>
             </p>
           </div>
