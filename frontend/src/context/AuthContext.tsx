@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   onAuthStateChanged,
+  signInAnonymously,
   signInWithPopup,
   signOut,
   type User as FirebaseUser,
@@ -27,8 +28,10 @@ interface AuthState {
   firebaseUser: FirebaseUser | null;
   profile: BackendUser | null;
   needsProfile: boolean;
+  isGuest: boolean;
   authError: string | null;
   loginWithGoogle: () => Promise<void>;
+  loginAsGuest: () => Promise<void>;
   switchAccount: () => Promise<void>;
   completeProfile: (nombre: string, telefono: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -110,6 +113,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loginWithGoogle();
   }, [loginWithGoogle]);
 
+  // Invitado: sesion anonima de Firebase (sin Google, sin telefono).
+  // Persiste igual en este navegador. Requiere el proveedor Anonymous
+  // activo en Firebase Console → Authentication → Sign-in method.
+  const loginAsGuest = useCallback(async () => {
+    setAuthError(null);
+    const auth = getFirebaseAuth();
+    try {
+      const cred = await signInAnonymously(auth);
+      setFirebaseUser(cred.user);
+      await syncProfile(cred.user);
+    } catch (e) {
+      const code = (e as { code?: string })?.code ?? "";
+      if (
+        code === "auth/operation-not-allowed" ||
+        code === "auth/admin-restricted-operation"
+      ) {
+        throw new Error(
+          "Activa el proveedor 'Anonymous' en Firebase Console → " +
+            "Authentication → Sign-in method.",
+        );
+      }
+      throw e;
+    }
+  }, [syncProfile]);
+
   const completeProfile = useCallback(
     async (nombre: string, telefono: string) => {
       if (!firebaseUser) throw new Error("Sin sesion.");
@@ -149,6 +177,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const needsProfile = useMemo(() => {
     if (!firebaseUser) return false;
+    // El invitado entra directo: sin nombre ni telefono obligatorios.
+    if (firebaseUser.isAnonymous) return false;
     if (!profile) return true;
     return !profile.is_profile_complete;
   }, [firebaseUser, profile]);
@@ -159,8 +189,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     firebaseUser,
     profile,
     needsProfile,
+    isGuest: firebaseUser?.isAnonymous ?? false,
     authError,
     loginWithGoogle,
+    loginAsGuest,
     switchAccount,
     completeProfile,
     refreshProfile,

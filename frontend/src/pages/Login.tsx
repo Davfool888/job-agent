@@ -8,6 +8,7 @@ export function Login() {
   const {
     configured,
     loginWithGoogle,
+    loginAsGuest,
     completeProfile,
     firebaseUser,
     profile,
@@ -55,6 +56,21 @@ export function Login() {
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "No se pudo iniciar sesion con Google.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doGuest = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await loginAsGuest();
+      navigate("/dashboard", { replace: true });
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "No se pudo entrar como invitado.",
       );
     } finally {
       setBusy(false);
@@ -164,6 +180,14 @@ export function Login() {
           onClick={doLogin}
         >
           <LogIn size={15} /> {busy ? "Conectando…" : "Continuar con Google"}
+        </button>
+        <button
+          className="btn btn-ghost auth-btn"
+          disabled={busy || !isFirebaseConfigured}
+          onClick={doGuest}
+          title="Sesión anónima para probar sin cuenta de Google"
+        >
+          <UserIcon size={15} /> {busy ? "Entrando…" : "Entrar como invitado"}
         </button>
         {!configured && (
           <p className="auth-hint">

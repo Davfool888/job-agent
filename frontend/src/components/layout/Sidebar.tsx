@@ -34,14 +34,16 @@ const LINKS = [
 
 export function Sidebar() {
   const [open, setOpen] = useState(false);
-  const { configured, firebaseUser, profile, logout, switchAccount } = useAuth();
+  const { configured, firebaseUser, isGuest, profile, logout, switchAccount } =
+    useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [menuError, setMenuError] = useState<string | null>(null);
 
-  const displayName =
-    profile?.nombre || firebaseUser?.displayName || "Usuario";
-  const email = profile?.email || firebaseUser?.email || "";
+  const displayName = isGuest
+    ? "Invitado"
+    : profile?.nombre || firebaseUser?.displayName || "Usuario";
+  const email = isGuest ? "" : profile?.email || firebaseUser?.email || "";
   const photo = firebaseUser?.photoURL ?? null;
   const initials = displayName
     .trim()
