@@ -1,0 +1,65 @@
+# Render configuration for Job Agent
+# Este archivo define los servicios para deploy automático en Render
+
+services:
+  # Backend API (FastAPI + Uvicorn) - usa Docker
+  - type: web
+    name: job-agent-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon  # o frankfurt, singapore, etc.
+    healthCheckPath: /health
+    envVars:
+      - key: APP_NAME
+        value: job-agent
+      - key: DB_BACKEND
+        value: firestore  # o sqlite (requiere Render Disk persistente)
+      - key: FIREBASE_PROJECT_ID
+        sync: false  # Configurar en Render Dashboard
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        sync: false  # Configurar en Render Dashboard (ruta al JSON)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_COMPAT_API_KEY
+        sync: false
+      - key: OPENAI_COMPAT_BASE_URL
+        value: https://api.openai.com/v1
+      - key: OPENAI_COMPAT_MODEL
+        value: gpt-4o-mini
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: FRONTEND_ORIGINS
+        value: "https://job-agent-puce-eight.vercel.app,http://localhost:5173"
+      - key: SCHEDULER_ENABLED
+        value: "true"
+      - key: SCHEDULER_INTERVAL_SECONDS
+        value: "60"
+      - key: SCHEDULER_CRON_SECRET
+        generateValue: true  # Secreto aleatorio para cron externo
+      - key: CV_GENERATION_THRESHOLD
+        value: "75"
+      - key: CV_REVIEW_THRESHOLD
+        value: "50"
+      - key: AI_PROVIDER_ORDER
+        value: "gemini,openai_compat,rule_based"
+      - key: COMPUTRABAJO_ENABLED
+        value: "true"
+      - key: LINKEDIN_ENABLED
+        value: "true"
+      - key: ADAPT_LLM_ENABLED
+        value: "false"
+
+  # Cron job externo para mantener vivo el scheduler (opcional, plan gratuito)
+  # Render duerme instancias gratis sin tráfico. Este cron llama /scheduler/tick cada 10 min.
+  - type: cron
+    name: job-agent-scheduler-tick
+    schedule: "*/10 * * * *"  # Cada 10 minutos
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    # No necesita command override, usa el mismo container pero solo hace el tick
+    # Para esto necesitaríamos un entrypoint separado. Mejor usar cron-job.org externo.
+    # Ver README sección "Búsqueda automática cada ~10 min"

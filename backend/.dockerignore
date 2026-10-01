@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.hypothesis/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Data (se crean en runtime, no en build)
+data/
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+
+# Frontend (no necesario en backend)
+../frontend/
+
+# Tests (opcional, ahorra espacio)
+tests/
+*.pytest_cache/
+
+# Documentación
+*.md
+!README.md
+
+# Env files (se configuran en Render Dashboard)
+.env
+.env.*
+!.env.example

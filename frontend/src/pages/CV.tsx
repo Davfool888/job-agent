@@ -148,23 +148,27 @@ export function CV() {
                         <a
                           className="btn btn-ghost btn-sm"
                           href={st.download_tex ?? cvDownloadUrl(j.id, "tex")}
+                          title="Descargar LaTeX (siempre disponible)"
                         >
                           <Download /> TEX
                         </a>
-                        <a
-                          className="btn btn-ghost btn-sm"
-                          href={st.download_pdf ?? cvDownloadUrl(j.id, "pdf")}
-                          onClick={(e) => {
-                            if (!st.pdf_path && !st.download_pdf) {
-                              e.preventDefault();
-                              setNotice(
-                                "PDF no disponible (pdflatex no instalado). Descarga el TEX.",
-                              );
-                            }
-                          }}
-                        >
-                          <Download /> PDF
-                        </a>
+                        {st.download_pdf || st.pdf_path ? (
+                          <a
+                            className="btn btn-primary btn-sm"
+                            href={st.download_pdf ?? cvDownloadUrl(j.id, "pdf")}
+                            title="Ver/descargar PDF"
+                          >
+                            <Download /> PDF
+                          </a>
+                        ) : (
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            disabled
+                            title="PDF no disponible (pdflatex no instalado en el servidor)"
+                          >
+                            <Download /> PDF
+                          </button>
+                        )}
                         <button
                           className="btn btn-ghost btn-sm"
                           disabled={busyId === j.id}
@@ -173,6 +177,11 @@ export function CV() {
                         >
                           <RefreshCw size={14} /> Regenerar
                         </button>
+                        {(!st.download_pdf && !st.pdf_path) && (
+                          <span className="badge badge-warning" style={{fontSize:11, marginLeft:8}}>
+                            Solo TEX
+                          </span>
+                        )}
                       </>
                     ) : (
                       <>

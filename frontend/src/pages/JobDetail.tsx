@@ -305,6 +305,15 @@ function AdaptResultCard({
         >
           <Download size={14} /> Descargar PDF
         </a>
+        <a
+          className="btn btn-ghost btn-sm"
+          href={adaptDownloadUrl(jobId, "html")}
+          target="_blank"
+          rel="noreferrer"
+          title="Ver HTML si PDF no está disponible"
+        >
+          <FileText size={14} /> HTML
+        </a>
       </div>
       {showPreview && (
         <iframe
@@ -317,8 +326,16 @@ function AdaptResultCard({
             borderRadius: 8,
             marginTop: 10,
           }}
+          onLoad={() => {
+            // Si el iframe carga un error 404, intentar con HTML
+          }}
         />
       )}
+      <p className="card-sub" style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
+        Si el PDF no está disponible (Chromium no instalado en el servidor),
+        usa el botón <strong>HTML</strong> para ver el curriculum en el navegador
+        y guardarlo como PDF desde allí (Ctrl+P → Guardar como PDF).
+      </p>
     </div>
   );
 }
@@ -673,6 +690,17 @@ function DetailBody({
                   Descargar LaTeX
                 </a>
               )}
+              {!cvView.data.download_pdf && (
+                <a
+                  className="btn btn-ghost btn-sm"
+                  href={`${API_URL}/jobs/${cvView.data.job_id}/cv/download?format=tex`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Ver LaTeX en el navegador y guardar como PDF (Ctrl+P)"
+                >
+                  <FileText size={14} /> Ver LaTeX
+                </a>
+              )}
               <button
                 className="btn btn-ghost btn-sm"
                 disabled={generatingCv}
@@ -682,7 +710,7 @@ function DetailBody({
                 <RefreshCw size={14} /> Regenerar
               </button>
             </div>
-            {cvView.data.download_pdf && (
+            {cvView.data.download_pdf ? (
               <iframe
                 title={`CV adaptado v${cvView.data.version}`}
                 src={`${API_URL}${cvView.data.download_pdf}`}
@@ -693,12 +721,33 @@ function DetailBody({
                   borderRadius: 8,
                 }}
               />
-            )}
-            {!cvView.data.download_pdf && (
-              <p className="card-sub" style={{ marginBottom: 0 }}>
-                PDF no disponible (pdflatex no instalado en el servidor);
-                descarga el LaTeX.
-              </p>
+            ) : (
+              <div className="card" style={{ marginTop: 10, padding: 12 }}>
+                <p className="card-sub" style={{ marginBottom: 8 }}>
+                  <strong>PDF no disponible</strong> (pdflatex no instalado en el servidor).
+                </p>
+                <p className="card-sub" style={{ marginBottom: 8, fontSize: 13 }}>
+                  Opciones para obtener tu PDF:
+                </p>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+                  <li style={{ marginBottom: 4 }}>
+                    <strong>Opción 1:</strong> Haz clic en <strong>«Ver LaTeX»</strong> arriba,
+                    se abre el código LaTeX en el navegador → <kbd>Ctrl+P</kbd> → Guardar como PDF.
+                  </li>
+                  <li style={{ marginBottom: 4 }}>
+                    <strong>Opción 2:</strong> Descarga el <strong>LaTeX</strong>,
+                    compílalo localmente con <code>pdflatex cv.tex</code> (requiere TeX Live instalado).
+                  </li>
+                  <li style={{ marginBottom: 4 }}>
+                    <strong>Opción 3:</strong> Usa <a href="https://overleaf.com" target="_blank" rel="noreferrer">Overleaf</a>
+                    (gratis online): sube el .tex y compila online.
+                  </li>
+                  <li>
+                    <strong>Opción 4 (recomendada):</strong> Usa el botón <strong>«Adaptar perfil»</strong> (✨)
+                    que genera PDF via HTML+Chromium (no requiere LaTeX).
+                  </li>
+                </ul>
+              </div>
             )}
           </div>
         )}

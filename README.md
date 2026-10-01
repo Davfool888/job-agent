@@ -70,6 +70,43 @@ El backend es stateless salvo SQLite: para servidor, usa Postgres
 `POST /jobs/analyze-pending`. PDFs requieren `pdflatex` (TeX Live)
 en el servidor; sin él se entrega el `.tex`.
 
+## Despliegue en Render con Docker (RECOMENDADO para PDFs)
+
+El proyecto incluye un `Dockerfile` en `backend/` que instala:
+- **TeX Live** (pdflatex) → para CVs LaTeX (`/jobs/{id}/cv`)
+- **Playwright + Chromium** → para "Adaptar perfil" (`/jobs/{id}/adapt-cv`)
+
+### Pasos en Render Dashboard:
+
+1. **New → Web Service** → Connect tu repo
+2. **Runtime**: `Docker`
+3. **Dockerfile Path**: `backend/Dockerfile`
+4. **Docker Context**: `backend`
+5. **Plan**: Free (o Starter para más RAM)
+6. **Environment Variables** (Settings → Environment):
+   ```
+   DB_BACKEND=firestore
+   FIREBASE_PROJECT_ID=tu-proyecto
+   GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/firebase-key.json  # Archivo secreto
+   GEMINI_API_KEY=...
+   OPENAI_COMPAT_API_KEY=...
+   ADMIN_EMAIL=tu@email.com
+   FRONTEND_ORIGINS=https://tu-frontend.vercel.app,http://localhost:5173
+   SCHEDULER_ENABLED=true
+   SCHEDULER_CRON_SECRET=  # Se auto-genera si dejas vacío
+   CV_GENERATION_THRESHOLD=75
+   CV_REVIEW_THRESHOLD=50
+   ```
+7. **Secret Files**: Sube tu `firebase-service-account.json` como `firebase-key.json`
+8. **Deploy**
+
+> **RAM en plan gratuito (512MB)**: Chromium + pdflatex pueden ser justos.
+> Si falla, usa plan **Starter (1GB)** o desactiva `ADAPT_LLM_ENABLED=false`.
+
+### Variables clave para PDFs:
+- `ADAPT_LLM_ENABLED=false` (ahorra RAM, usa resumen determinista)
+- `SCHEDULER_CRON_SECRET` = auto-generado (para cron externo)
+
 ## Búsqueda automática cada ~10 min
 
 Perfiles en la sección **Búsqueda** del frontend (`/search`) o vía API.
