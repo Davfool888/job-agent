@@ -101,6 +101,20 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def collapse_slashes(request: Request, call_next):
+    """Colapsa // intermedios del path (clientes que concatenan
+    API_URL con slash final + "/ruta"). FastAPI no lo hace solo y
+    devuelve 404 generico."""
+    import re
+
+    path = request.scope.get("path", "")
+    collapsed = re.sub(r"/{2,}", "/", path)
+    if collapsed != path:
+        request.scope["path"] = collapsed
+    return await call_next(request)
+
+
 @app.get("/")
 def root():
     return {"app": APP_NAME, "status": "running"}
