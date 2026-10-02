@@ -316,20 +316,39 @@ function AdaptResultCard({
         </a>
       </div>
       {showPreview && (
-        <iframe
-          title="CV personalizado"
-          src={adaptDownloadUrl(jobId, "pdf")}
-          style={{
-            width: "100%",
-            height: 560,
-            border: "1px solid var(--border)",
-            borderRadius: 8,
-            marginTop: 10,
-          }}
-          onLoad={() => {
-            // Si el iframe carga un error 404, intentar con HTML
-          }}
-        />
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <span className="card-sub" style={{ fontSize: 13, alignSelf: "center" }}>
+              Vista previa del PDF:
+            </span>
+            <a
+              className="btn btn-ghost btn-xs"
+              href={adaptDownloadUrl(jobId, "pdf")}
+              target="_blank"
+              rel="noreferrer"
+              title="Abrir en nueva pestaña"
+            >
+              <ExternalLink size={12} /> Abrir en pestaña nueva
+            </a>
+          </div>
+          <iframe
+            title="CV personalizado"
+            src={adaptDownloadUrl(jobId, "pdf")}
+            style={{
+              width: "100%",
+              height: 600,
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              backgroundColor: "var(--bg)",
+            }}
+            onLoad={() => {
+              // Si el iframe carga un error 404, intentar con HTML
+            }}
+          />
+          <p className="card-sub" style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
+            Si no se ve el PDF, usa <strong>«Abrir en pestaña nueva»</strong> o el botón <strong>HTML</strong> arriba.
+          </p>
+        </div>
       )}
       <p className="card-sub" style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
         Si el PDF no está disponible (Chromium no instalado en el servidor),

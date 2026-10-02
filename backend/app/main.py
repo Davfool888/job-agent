@@ -595,6 +595,7 @@ def download_search_profile_cv(
         path=str(target),
         filename=meta["filename"],
         media_type="application/pdf",
+        content_disposition_type="inline",
     )
 
 
@@ -868,10 +869,13 @@ def download_adapt_cv(
                 status_code=404,
                 detail="Aún no hay CV adaptado. Usa «Adaptar perfil».",
             )
+    # Para PDF: inline para visualizar en iframe; para HTML: inline también
+    # El parámetro content_disposition_type controla si descarga (attachment) o muestra (inline)
     return FileResponse(
         path=str(target),
         filename=f"cv_adaptado_job_{job.id}.{format}",
         media_type="application/pdf" if format == "pdf" else "text/html",
+        content_disposition_type="inline",
     )
 
 
@@ -1252,9 +1256,12 @@ def download_job_cv(
     from app.services.job_service import log_interaction
 
     log_interaction(db, "CV_DOWNLOADED", job.id, None, {"format": format})
+    # Para PDF: inline para visualizar en iframe/navegador; para TEX: attachment (descarga)
     return FileResponse(
         path=str(target),
         filename=f"cv_job_{job.id}.{format}",
+        media_type="application/pdf" if format == "pdf" else "text/x-tex",
+        content_disposition_type="inline" if format == "pdf" else "attachment",
     )
 
 
