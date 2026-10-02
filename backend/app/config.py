@@ -125,6 +125,24 @@ CVS_DIR = BASE_DIR / "data" / "cvs"
 PROFILES_DIR = BASE_DIR / "data" / "profiles"
 BASE_CV_PATH = PROFILES_DIR / "base_cv.json"
 
+# --- Render Secret Files support ---
+# En Render, los secret files se montan en /etc/secrets/<filename>.
+# Esta función copia el secret file a la ubicación esperada si existe.
+def _sync_render_secret_base_cv() -> None:
+    """Copia /etc/secrets/base_cv.json -> BASE_CV_PATH si existe."""
+    secret_path = Path("/etc/secrets/base_cv.json")
+    if secret_path.exists() and not BASE_CV_PATH.exists():
+        try:
+            PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(secret_path, BASE_CV_PATH)
+            print(f"[config] Copiado secret file: {secret_path} -> {BASE_CV_PATH}")
+        except Exception as e:
+            print(f"[config] Error copiando secret file: {e}")
+
+# Ejecutar sincronización al importar config (al arrancar la app)
+_sync_render_secret_base_cv()
+
 # --- CVs de referencia por perfil de busqueda (PDFs subidos en /search).
 # Un PDF por perfil: sirve de ejemplo de estilo para generar CVs
 # personalizados de las ofertas que ese perfil encuentre.
