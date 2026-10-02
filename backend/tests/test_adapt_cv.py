@@ -29,7 +29,7 @@ def test_guest_profile_shape():
     # full_name deriva de first + last del estructurado.
     assert profile["full_name"] == "Andrés Felipe Ramírez Torres"
     assert "Python" in profile["skills_technical"]
-    assert len(profile["experience"]) == 2
+    assert len(profile["experiences"]) == 2
     assert len(profile["projects"]) == 2
     assert len(profile["certifications"]) == 2
     assert len(profile["languages"]) == 2
@@ -108,6 +108,36 @@ def test_html_escapes_and_renders():
     assert "<script>alert(1)</script>" not in html_text
     assert "&lt;script&gt;" in html_text
     assert "Analista" in html_text
+
+
+def test_html_matches_example_format():
+    """Estructura del CV ejemplo: encabezado, reglas, bullets,
+    fechas 'Mar 2025', grupos de skills, certs en Otros Estudios."""
+    from app.adapt.test_jobs import TEST_JOBS
+
+    offer = dict(TEST_JOBS[0])
+    profile = _guest_profile()
+    matching = matcher.match_offer_profile(offer, profile)
+    content = selector.select_cv_content(profile, offer, matching)
+    # El servicio pega identidad/contacto antes de renderizar.
+    for key in ("full_name", "title", "email", "phone", "linkedin",
+                "github", "portfolio", "location"):
+        content[key] = profile.get(key, "")
+    html_text = html_renderer.render_cv_html(content, offer)
+    assert "{{" not in html_text  # sin tokens sin reemplazar
+    assert "Responsabilidad General:" in html_text
+    assert "<ul" in html_text and "<li>" in html_text
+    assert "Mar 2025" in html_text
+    assert "Dic 2025" in html_text or "2026" in html_text
+    assert "Habilidades Técnicas" in html_text
+    assert "Habilidades Blandas" in html_text
+    assert "Otros Estudios" in html_text
+    assert "Microsoft Power BI Data Analyst" in html_text
+    assert "target-block" not in html_text
+    assert "chip" not in html_text
+    # URLs sin esquema, como el ejemplo.
+    assert "https://linkedin.com" not in html_text
+    assert "linkedin.com/in/andres-ramirez-dev" in html_text
 
 
 def test_pdf_generates_valid_file(tmp_path):

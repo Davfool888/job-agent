@@ -20,16 +20,73 @@ def esc(value) -> str:
     return html.escape(str(value or ""), quote=True)
 
 
-def _contact_line(content: dict) -> str:
-    parts = [
-        content.get("location"),
-        content.get("phone"),
-        content.get("email"),
-        content.get("linkedin"),
-        content.get("github"),
-        content.get("portfolio"),
-    ]
-    return " | ".join(esc(p) for p in parts if str(p).strip())
+MESES = {"01": "Ene", "02": "Feb", "03": "Mar", "04": "Abr",
+         "05": "May", "06": "Jun", "07": "Jul", "08": "Ago",
+         "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dic"}
+
+
+def _fmt_month(value: str | None) -> str:
+    """'03/2025' o '2025-03-01' -> 'Mar 2025'. Ilegible se devuelve tal cual."""
+    import re as _re
+
+    text = str(value or "").strip()
+    match = _re.match(r"^(\d{4})-(\d{1,2})(?:-\d{1,2})?$", text)
+    if match:
+        return f"{MESES.get(match.group(2).zfill(2), match.group(2))} {match.group(1)}"
+    match = _re.match(r"^(\d{1,2})/(\d{4})$", text)
+    if match:
+        return f"{MESES.get(match.group(1).zfill(2), match.group(1))} {match.group(2)}"
+    return text
+
+
+def _fmt_day(value: str | None) -> str:
+    """'2026-07-15' -> '15 Jul 2026'."""
+    import re as _re
+
+    text = str(value or "").strip()
+    match = _re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", text)
+    if match:
+        return (f"{int(match.group(3))} "
+                f"{MESES.get(match.group(2).zfill(2), match.group(2))} "
+                f"{match.group(1)}")
+    return _fmt_month(text) if text else ""
+
+
+def _display_url(url: str | None) -> str:
+    """Quita esquema para mostrar (linkedin.com/...) como en el ejemplo."""
+    import re as _re
+
+    text = str(url or "").strip()
+    text = _re.sub(r"^https?://", "", text).rstrip("/")
+    return text
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Divide en oraciones sin inventar contenido (corta en '. ' + mayuscula)."""
+    import re as _re
+
+    parts = [_re.sub(r"\s+", " ", p).strip()
+             for p in _re.split(r"\.\s+(?=[A-ZÁÉÍÓÚÑ0-9])", str(text or ""))]
+    sentences = []
+    for i, part in enumerate(parts):
+        if not part:
+            continue
+        if i < len(parts) - 1 and not part.endswith("."):
+            part += "."
+        sentences.append(part)
+    return sentences
+
+
+def _contact_lines(content: dict) -> tuple[str, str]:
+    """Dos lineas como el ejemplo: ubicacion|tel|email y enlaces."""
+    line1 = [content.get("location"), content.get("phone"),
+             content.get("email")]
+    line2 = [_display_url(content.get("linkedin")),
+             _display_url(content.get("github")),
+             _display_url(content.get("portfolio"))]
+    first = " | ".join(esc(p) for p in line1 if str(p).strip())
+    second = " | ".join(esc(p) for p in line2 if str(p).strip())
+    return first, second
 
 
 def _section(title: str, inner: str) -> str:
@@ -38,30 +95,23 @@ def _section(title: str, inner: str) -> str:
     return f"<section><h2>{esc(title)}</h2>{inner}</section>"
 
 
-def _chips_html(items: list | None) -> str:
-    """Genera HTML para chips de tecnologías/habilidades."""
-    if not items:
-        return ""
-    valid_items = [str(t).strip() for t in items if str(t).strip()]
-    if not valid_items:
-        return ""
-    chip_template = '<span class="chip">{}</span>'
-    return '<div class="chips">' + "".join(chip_template.format(esc(t)) for t in valid_items) + "</div>"
-
-
 def _technical_skills_block(content: dict) -> str:
     """Genera bloque de competencias técnicas categorizadas."""
     skills_groups = content.get("skills_groups") or {}
-    # Mapeo de claves a títulos legibles
+    # Mapeo de claves a títulos legibles (acepta las claves del fixture
+    # demo y variantes de otros perfiles).
     category_map = {
         "analysis": "Análisis de Datos",
+        "data_analysis": "Análisis de Datos",
         "languages": "Lenguajes y Análisis",
+        "programming": "Lenguajes de Programación",
         "bi": "BI y Visualización",
         "databases": "Bases de Datos",
         "automation": "Automatización y APIs",
-        "backend": "Desarrollo Backend (proyectos personales)",
-        "ml": "Machine Learning / Computer Vision (proyectos personales)",
+        "backend": "Desarrollo Backend",
+        "ml": "Machine Learning / Computer Vision",
         "tools": "Herramientas",
+        "business": "Negocios e Inteligencia de Negocios",
     }
 
     blocks = []
@@ -93,7 +143,7 @@ def _technical_skills_block(content: dict) -> str:
     if not blocks:
         return ""
 
-    return _section("Competencias Técnicas", "".join(blocks))
+    return _section("Habilidades Técnicas", "".join(blocks))
 
 
 def _soft_skills_block(content: dict) -> str:
@@ -146,7 +196,9 @@ def _soft_skills_block(content: dict) -> str:
 
 
 def _experience_block(content: dict) -> str:
-    """Genera bloque de experiencia profesional con bullets."""
+    """Experiencia estilo ejemplo: cargo, fechas, empresa, Responsabilidad
+    General (primera oracion) + bullets con el resto. Sin chips: las
+    skills van en su seccion; aqui una linea discreta las conserva."""
     experiences = content.get("experiences") or []
     blocks = []
 
@@ -154,71 +206,55 @@ def _experience_block(content: dict) -> str:
         if not isinstance(exp, dict):
             continue
 
-        company = exp.get("company") or ""
         role = exp.get("title") or exp.get("role") or ""
+        company = exp.get("company") or ""
         city = exp.get("city") or exp.get("location") or ""
-        modality = exp.get("modality") or ""
-        start = exp.get("start") or exp.get("start_date") or ""
-        end = exp.get("end") or exp.get("end_date") or ""
-        is_current = exp.get("is_current") or False
-        description = exp.get("description") or ""
-        bullets = exp.get("bullets") or exp.get("achievements") or []
-        tech_skills = exp.get("technical_skills") or []
-        soft_skills = exp.get("soft_skills") or []
+        start = _fmt_month(exp.get("start") or exp.get("start_date") or "")
+        end_raw = exp.get("end") or exp.get("end_date") or ""
+        if exp.get("is_current"):
+            dates = f"{start} – Actualidad" if start else "Actualidad"
+        elif start and _fmt_month(end_raw):
+            dates = f"{start} – {_fmt_month(end_raw)}"
+        else:
+            dates = start or _fmt_month(end_raw)
 
-        # Header: role + company
-        head_parts = []
-        if role:
-            head_parts.append(f'<span class="item-role">{esc(role)}</span>')
-        if company:
-            head_parts.append(f'<span class="item-company">{esc(company)}</span>')
+        sentences = _split_sentences(exp.get("description") or "")
+        general = (f'<p class="item-p"><strong>Responsabilidad General:</strong> '
+                   f"{esc(sentences[0])}</p>") if sentences else ""
+        rest = sentences[1:] if len(sentences) > 1 else []
+        bullets = ""
+        if rest:
+            bullets = '<ul class="item-bullets">' + "".join(
+                f"<li>{esc(b)}</li>" for b in rest) + "</ul>"
 
-        # Meta: dates + location + modality
-        meta_parts = []
-        if start or end or is_current:
-            if is_current:
-                date_str = f"{esc(start)} – Actualidad"
-            else:
-                date_str = f"{esc(start)} – {esc(end)}" if start and end else (esc(start) or esc(end))
-            meta_parts.append(date_str)
-        if city:
-            meta_parts.append(esc(city))
-        if modality:
-            meta_parts.append(esc(modality))
+        entry_skills = list(exp.get("technical_skills") or []) + list(
+            exp.get("soft_skills") or [])
+        skills_line = ""
+        if entry_skills:
+            skills_line = (
+                '<p class="skills-line"><strong>Habilidades:</strong> '
+                + esc(", ".join(str(s) for s in entry_skills)) + "</p>")
 
-        # Bullets
-        bullet_items = ""
-        if bullets:
-            bullet_items = '<ul class="item-bullets">' + "".join(
-                f"<li>{esc(b)}</li>" for b in bullets if str(b).strip()
-            ) + "</ul>"
-
-        # Skills chips
-        all_skills = list(tech_skills) + list(soft_skills)
-        chips = ""
-        if all_skills:
-            chips = '<div class="chips">' + "".join(
-                f'<span class="chip">{esc(s)}</span>' for s in all_skills if str(s).strip()
-            ) + "</div>"
-
+        org = f"{esc(company)} – {esc(city)}" if company and city else (
+            esc(company or city))
         blocks.append(
             '<div class="item">'
-            f'<div class="item-head">{"".join(head_parts)}</div>'
-            + (f'<div class="item-meta">{" · ".join(meta_parts)}</div>' if meta_parts else "")
-            + (f'<p class="item-desc">{esc(description)}</p>' if description else "")
-            + bullet_items
-            + chips
+            + (f'<p class="item-title">{esc(role)}</p>' if role else "")
+            + (f'<p class="item-dates">{esc(dates)}</p>' if dates else "")
+            + (f'<p class="item-org">{org}</p>' if org else "")
+            + general + bullets + skills_line
             + "</div>"
         )
 
     if not blocks:
         return ""
 
-    return _section("Experiencia Profesional", "".join(blocks))
+    return _section("Experiencia Profesional / Professional Experience",
+                    "".join(blocks))
 
 
 def _projects_block(content: dict) -> str:
-    """Genera bloque de proyectos destacados."""
+    """Proyectos estilo ejemplo: nombre, parrafos y linea de tecnologias."""
     projects = content.get("projects") or []
     blocks = []
 
@@ -227,27 +263,22 @@ def _projects_block(content: dict) -> str:
             continue
 
         name = proj.get("name") or proj.get("title") or ""
-        description = proj.get("description") or ""
-        technologies = proj.get("technologies") or proj.get("technical_skills") or []
-        url = proj.get("url") or ""
-        repo = proj.get("repo") or ""
-        start = proj.get("start") or proj.get("start_date") or ""
-        end = proj.get("end") or proj.get("end_date") or ""
-
-        meta_parts = []
-        if start or end:
-            date_str = f"{esc(start)} – {esc(end)}" if start and end else (esc(start) or esc(end))
-            meta_parts.append(date_str)
-
-        links = " · ".join(esc(p) for p in [url, repo] if str(p).strip())
+        start = _fmt_month(proj.get("start") or proj.get("start_date") or "")
+        end = _fmt_month(proj.get("end") or proj.get("end_date") or "")
+        dates = f"{start} – {end}" if start and end else (start or end)
+        links = " · ".join(_display_url(p) for p in
+                           [proj.get("url"), proj.get("repo")] if str(p).strip())
+        techs = list(proj.get("technologies") or proj.get("technical_skills") or [])
 
         blocks.append(
             '<div class="item">'
-            f'<div class="item-head"><span class="item-role">{esc(name)}</span></div>'
-            + (f'<div class="item-meta">{" · ".join(meta_parts)}</div>' if meta_parts else "")
-            + (f'<p class="item-desc">{esc(description)}</p>' if description else "")
-            + (f'<p class="item-desc">{esc(links)}</p>' if links else "")
-            + _chips_html(technologies)
+            + (f'<p class="item-title">{esc(name)}</p>' if name else "")
+            + (f'<p class="item-dates">{esc(dates)}</p>' if dates else "")
+            + (f'<p class="item-p">{esc(proj.get("description"))}</p>'
+               if proj.get("description") else "")
+            + (f'<p class="item-p">{esc(links)}</p>' if links else "")
+            + (f'<p class="skills-line"><strong>Tecnologías:</strong> '
+               f'{esc(", ".join(str(t) for t in techs))}</p>' if techs else "")
             + "</div>"
         )
 
@@ -258,7 +289,7 @@ def _projects_block(content: dict) -> str:
 
 
 def _education_block(content: dict) -> str:
-    """Genera bloque de educación."""
+    """Educacion estilo ejemplo: titulo, fechas, institucion, parrafo."""
     education = content.get("education") or []
     blocks = []
 
@@ -268,52 +299,38 @@ def _education_block(content: dict) -> str:
 
         degree = edu.get("degree") or edu.get("title") or ""
         institution = edu.get("institution") or ""
-        level = edu.get("level") or ""
-        status = edu.get("status") or ""
-        start = edu.get("start") or edu.get("start_date") or ""
-        end = edu.get("end") or edu.get("end_date") or ""
-        description = edu.get("description") or ""
-
-        meta_parts = []
-        if institution:
-            meta_parts.append(esc(institution))
-        if level:
-            meta_parts.append(esc(level))
-        if status:
-            meta_parts.append(esc(status))
-        if start or end:
-            date_str = f"{esc(start)} – {esc(end)}" if start and end else (esc(start) or esc(end))
-            meta_parts.append(date_str)
+        start = _fmt_month(edu.get("start") or edu.get("start_date") or "")
+        end = _fmt_month(edu.get("end") or edu.get("end_date") or "")
+        dates = f"{start} – {end}" if start and end else (start or end)
 
         blocks.append(
-            '<div class="education-item">'
-            f'<div class="education-degree">{esc(degree)}</div>'
-            + (f'<div class="education-institution">{" · ".join(meta_parts)}</div>' if meta_parts else "")
-            + (f'<div class="education-dates">{esc(description)}</div>' if description else "")
+            '<div class="item">'
+            + (f'<p class="item-title">{esc(degree)}</p>' if degree else "")
+            + (f'<p class="item-dates">{esc(dates)}</p>' if dates else "")
+            + (f'<p class="item-org">{esc(institution)}</p>'
+               if institution else "")
+            + (f'<p class="item-p">{esc(edu.get("description"))}</p>'
+               if edu.get("description") else "")
             + "</div>"
         )
 
     if not blocks:
         return ""
 
-    return _section("Educación", "".join(blocks))
+    return _section("Educación / Education", "".join(blocks))
 
 
 def _other_studies_block(content: dict) -> str:
-    """Genera bloque de otros estudios/cursos complementarios."""
-    # Buscar en education items que parezcan cursos/otros estudios
-    # O en un campo específico si existe
+    """Otros Estudios estilo ejemplo: certificaciones + cursos sueltos.
+    Las certificaciones van aqui porque el ejemplo no trae seccion
+    separada para ellas."""
     other_studies = content.get("other_studies") or []
     if not other_studies:
-        # Intentar extraer de education items con level tipo "course"
         education = content.get("education") or []
         other_studies = [
             e for e in education
             if isinstance(e, dict) and str(e.get("level", "")).lower() in ("course", "certification", "other")
         ]
-
-    if not other_studies:
-        return ""
 
     blocks = []
     for study in other_studies:
@@ -322,18 +339,39 @@ def _other_studies_block(content: dict) -> str:
 
         title = study.get("title") or study.get("degree") or ""
         institution = study.get("institution") or study.get("academy") or ""
-        start = study.get("start") or study.get("start_date") or ""
-        end = study.get("end") or study.get("end_date") or ""
-
-        date_str = ""
-        if start or end:
-            date_str = f"{esc(start)} – {esc(end)}" if start and end else (esc(start) or esc(end))
+        start = _fmt_month(study.get("start") or study.get("start_date") or "")
+        end = _fmt_month(study.get("end") or study.get("end_date") or "")
+        dates = f"{start} – {end}" if start and end else (start or end)
 
         blocks.append(
             '<div class="study-item">'
-            f'<span class="study-title">{esc(title)}</span>'
-            + (f' <span class="study-institution">{esc(institution)}</span>' if institution else "")
-            + (f' <span class="study-dates">({date_str})</span>' if date_str else "")
+            + (f'<p class="item-title">{esc(title)}</p>' if title else "")
+            + (f'<p class="item-dates">{esc(dates)}</p>' if dates else "")
+            + (f'<p class="item-org">{esc(institution)}</p>'
+               if institution else "")
+            + (f'<p class="item-p">{esc(study.get("description"))}</p>'
+               if study.get("description") else "")
+            + "</div>"
+        )
+
+    for cert in content.get("certifications") or []:
+        if not isinstance(cert, dict):
+            continue
+        issued = _fmt_day(cert.get("issued") or cert.get("issued_date") or "")
+        expiry = _fmt_day(cert.get("expiry") or cert.get("expiry_date") or "")
+        dates = f"{issued} – {expiry}" if issued and expiry else (
+            issued or expiry)
+        cred = cert.get("credential_id") or ""
+        blocks.append(
+            '<div class="study-item">'
+            + (f'<p class="item-title">{esc(cert.get("name"))}</p>'
+               if cert.get("name") else "")
+            + (f'<p class="item-dates">{esc(dates)}</p>' if dates else "")
+            + (f'<p class="item-org">{esc(cert.get("institution"))}</p>'
+               if cert.get("institution") else "")
+            + (f'<p class="item-p">{esc(cert.get("description"))}</p>'
+               if cert.get("description") else "")
+            + (f'<p class="item-p">ID: {esc(cred)}</p>' if cred else "")
             + "</div>"
         )
 
@@ -418,20 +456,15 @@ def render_cv_html(content: dict, job: dict | None = None) -> str:
     template = (_templates_dir() / "cv.html").read_text(encoding="utf-8")
     css = (_templates_dir() / "cv.css").read_text(encoding="utf-8")
 
-    # Título profesional
-    professional_title = content.get("target_role") or content.get("title") or content.get("professional_title") or ""
-    if not professional_title and content.get("target_roles"):
-        professional_title = content["target_roles"][0]
+    # Linea de titulo estilo ejemplo: rol adaptado | titulo de la persona.
+    adapted = str(content.get("target_role") or "").strip()
+    own = str(content.get("title") or "").strip()
+    if adapted and own and adapted.lower() != own.lower():
+        professional_title = f"{adapted} | {own}"
+    else:
+        professional_title = adapted or own
 
-    # Target block
-    target = ""
-    if job and (job.get("title") or job.get("company")):
-        target = (
-            '<div class="target-block">CV adaptado para: '
-            f"<strong>{esc(job.get('title'))}</strong>"
-            + (f" · {esc(job.get('company'))}" if job.get("company") else "")
-            + "</div>"
-        )
+    line1, line2 = _contact_lines(content)
 
     # Summary
     summary = ""
@@ -444,9 +477,9 @@ def render_cv_html(content: dict, job: dict | None = None) -> str:
     titles = {
         "CSS": css,
         "FULL_NAME": esc(content.get("full_name")),
-        "PROFESSIONAL_TITLE": esc(professional_title),
-        "CONTACT_LINE": _contact_line(content),
-        "TARGET_BLOCK": target,
+        "TITLE_LINE": esc(professional_title),
+        "CONTACT_LINE_1": line1,
+        "CONTACT_LINE_2": line2,
         "SUMMARY_BLOCK": summary,
         "TECHNICAL_SKILLS_BLOCK": _technical_skills_block(content),
         "SOFT_SKILLS_BLOCK": _soft_skills_block(content),

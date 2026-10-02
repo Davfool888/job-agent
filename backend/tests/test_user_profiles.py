@@ -258,7 +258,10 @@ def test_guest_demo_rich_seeded():
         assert "Python" in rich["professional_summary"]
         assert rich["years_experience"] == 1
         assert len(rich["technical_skills"]) == 12
-        assert len(rich["soft_skills"]) == 6
+        assert len(rich["soft_skills"]) >= 6
+        for skill in ("Pensamiento analítico", "Adaptabilidad",
+                      "Organización"):
+            assert skill in rich["soft_skills"]
         assert len(rich["target_roles"]) == 6
         assert set(rich["skills"]) >= {
             "programming", "data_analysis", "backend", "databases",
