@@ -60,10 +60,24 @@ def get_firestore():
 
     inline = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
     key_path = _resolve_key_path(os.getenv("GOOGLE_APPLICATION_CREDENTIALS", ""))
+    inline_b64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
+    if inline_b64 and not inline:
+        # Robusto contra dashboards que rompen los saltos de linea del
+        # JSON multilinea: el base64 viaja en una sola linea.
+        try:
+            import base64
+
+            inline = base64.b64decode(inline_b64.strip()).decode("utf-8")
+        except Exception as error:
+            raise RuntimeError(
+                "FIREBASE_SERVICE_ACCOUNT_B64 invalido (no es base64 "
+                f"de un JSON): {error}"
+            )
     if not inline and not key_path:
         raise RuntimeError(
             "Firestore sin credenciales: define GOOGLE_APPLICATION_CREDENTIALS "
             "(ruta al JSON) o FIREBASE_SERVICE_ACCOUNT_JSON (inline) o "
+            "FIREBASE_SERVICE_ACCOUNT_B64 (base64, recomendado en Render) o "
             "FIRESTORE_EMULATOR_HOST. Ver database/.env.example"
         )
 

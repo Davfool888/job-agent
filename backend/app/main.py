@@ -128,13 +128,28 @@ def health():
 @app.get("/auth/status")
 def auth_status():
     """Dice si el backend puede verificar sesiones de Firebase."""
+    import os as _os
+
+    def _source() -> str:
+        if _os.getenv("FIRESTORE_EMULATOR_HOST"):
+            return "emulator"
+        if _os.getenv("FIREBASE_SERVICE_ACCOUNT_B64"):
+            return "b64"
+        if _os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON"):
+            return "inline"
+        if _os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+            return "file"
+        return "none"
+
     try:
         from app.database import firestore_client
 
         firestore_client.get_firestore()
-        return {"configured": True, "provider": "google"}
+        return {"configured": True, "provider": "google",
+                "source": _source()}
     except Exception as exc:
-        return {"configured": False, "provider": "google", "error": str(exc)}
+        return {"configured": False, "provider": "google",
+                "source": _source(), "error": str(exc)}
 
 
 @app.get("/auth/me")
