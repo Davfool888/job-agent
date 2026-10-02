@@ -18,7 +18,7 @@ from app.analysis.signals import norm
 from app.analysis.signals import phrases_found
 
 # Secciones del perfil que pueden tener items con perspectivas.
-SECTIONS = ("experience", "education", "projects", "certifications")
+SECTIONS = ("experience", "experiences", "education", "projects", "certifications")
 
 PERSPECTIVE_KEYS = (
     "id", "label", "description", "skills", "tools", "domains", "roles",

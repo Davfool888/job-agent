@@ -106,7 +106,7 @@ def match_offer_profile(offer: dict, profile: dict) -> dict:
         total = len(matched) + len(missing)
         percentage = round(100 * len(matched) / total) if total else 0
 
-    experiences = _ranked(profile.get("experience") or [], keywords)
+    experiences = _ranked((profile.get("experience") or profile.get("experiences") or []), keywords)
     projects = _ranked(profile.get("projects") or [], keywords)
     certifications = _ranked(profile.get("certifications") or [], keywords)
     education = _ranked(profile.get("education") or [], keywords)
@@ -139,6 +139,8 @@ def match_offer_profile(offer: dict, profile: dict) -> dict:
         "projects": projects,
         "certifications": certifications,
         "education": education,
+        "other_studies": profile.get("other_studies") or [],
+        "other_knowledge": profile.get("other_knowledge") or [],
         "modality_ok": modality_ok,
         "location_ok": location_ok,
         "target_roles_matched": target_hits,

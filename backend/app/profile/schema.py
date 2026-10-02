@@ -138,7 +138,7 @@ def normalize_entry(section: str, raw: dict | None, index: int = 0) -> tuple[dic
         if raw.get(legacy_key) is not None and legacy_key not in entry:
             entry[legacy_key] = raw.get(legacy_key)
 
-    if section == "experience":
+    if section == "experience" or section == "experiences":
         entry["company"] = _clean_str(
             raw.get("company") or raw.get("organization"), 200)
         entry["title"] = _clean_str(

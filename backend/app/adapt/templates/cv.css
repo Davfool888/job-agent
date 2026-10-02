@@ -1,80 +1,198 @@
 /* Plantilla de CV adaptado (A4, impresion). Sin dependencias externas:
-   todo va inline en el HTML para Chromium headless. */
+   todo va inline en el HTML para Chromium headless.
+   Estilo basado en el CV de ejemplo: limpio, profesional, tipografía consistente. */
 @page {
   size: A4;
-  margin: 16mm 15mm 16mm 15mm;
+  margin: 18mm 16mm 18mm 16mm;
 }
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
   padding: 0;
-  font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-size: 11pt;
-  line-height: 1.45;
-  color: #1c2530;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.5;
+  color: #1a1a2e;
   background: #fff;
 }
 .page { max-width: 100%; }
+
+/* Header */
 .header {
-  border-bottom: 2.5pt solid #1f6feb;
-  padding-bottom: 8pt;
-  margin-bottom: 10pt;
+  border-bottom: 2px solid #2c3e50;
+  padding-bottom: 10pt;
+  margin-bottom: 14pt;
 }
-.header h1 {
-  margin: 0 0 2pt 0;
-  font-size: 22pt;
-  color: #101828;
+.name {
+  margin: 0 0 3pt 0;
+  font-size: 24pt;
+  font-weight: 700;
+  color: #1a1a2e;
+  letter-spacing: -0.02em;
 }
-.title-line {
-  margin: 0;
+.professional-title {
+  margin: 0 0 6pt 0;
   font-size: 12pt;
-  font-weight: 600;
-  color: #1f6feb;
+  font-weight: 500;
+  color: #2c3e50;
 }
 .contact-line {
-  margin: 4pt 0 0 0;
+  margin: 0;
   font-size: 9.5pt;
-  color: #475569;
+  color: #4a5568;
+  line-height: 1.6;
 }
+
+/* Target block */
 .target-block {
-  background: #eef4ff;
-  border-left: 3pt solid #1f6feb;
-  padding: 6pt 10pt;
-  margin-bottom: 10pt;
-  font-size: 10pt;
+  background: #f0f4f8;
+  border-left: 4px solid #2c3e50;
+  padding: 8pt 12pt;
+  margin-bottom: 14pt;
+  font-size: 9.5pt;
+  color: #374151;
 }
-section { margin-bottom: 10pt; }
+.target-block strong { color: #1a1a2e; }
+
+/* Sections */
+section { margin-bottom: 14pt; }
 section h2 {
-  margin: 0 0 6pt 0;
-  font-size: 12.5pt;
+  margin: 0 0 8pt 0;
+  font-size: 11.5pt;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #101828;
-  border-bottom: 1pt solid #dbe3ec;
-  padding-bottom: 3pt;
+  letter-spacing: 0.08em;
+  color: #1a1a2e;
+  border-bottom: 1.5px solid #2c3e50;
+  padding-bottom: 4pt;
 }
-.item { margin-bottom: 8pt; page-break-inside: avoid; }
+
+/* Summary */
+.summary {
+  font-size: 10.5pt;
+  line-height: 1.6;
+  color: #2d3748;
+  text-align: justify;
+}
+
+/* Skills sections */
+.skills-category {
+  margin-bottom: 8pt;
+}
+.skills-category-title {
+  display: inline-block;
+  font-weight: 600;
+  font-size: 10pt;
+  color: #2c3e50;
+  margin-bottom: 3pt;
+}
+.skills-list {
+  margin: 0;
+  padding: 0;
+  font-size: 10pt;
+  color: #374151;
+  line-height: 1.6;
+}
+
+/* Soft skills */
+.soft-skills-list {
+  margin: 0;
+  padding: 0;
+  font-size: 10pt;
+  color: #374151;
+  line-height: 1.7;
+}
+.soft-skill-item {
+  margin-bottom: 4pt;
+}
+.soft-skill-label {
+  font-weight: 600;
+  color: #2c3e50;
+}
+.soft-skill-desc {
+  color: #4a5568;
+}
+
+/* Experience / Projects / Education items */
+.item { margin-bottom: 10pt; page-break-inside: avoid; }
 .item-head {
   display: flex;
   justify-content: space-between;
   gap: 8pt;
   align-items: baseline;
+  flex-wrap: wrap;
 }
-.item-head strong { font-size: 11pt; }
-.item-org { color: #475569; font-size: 10pt; }
-.item-meta { color: #64748b; font-size: 9.5pt; margin: 1pt 0 3pt 0; }
-.item p.desc { margin: 2pt 0 0 0; font-size: 10pt; }
-.chips { margin-top: 6pt; }
-.chip {
-  display: inline-block;
-  background: #eef1f4;
-  color: #1c2530;
-  border-radius: 999px;
-  padding: 2pt 8pt;
-  margin: 0 4pt 4pt 0;
-  font-size: 9.5pt;
+.item-role {
+  font-size: 11pt;
   font-weight: 600;
+  color: #1a1a2e;
 }
-ul.tight { margin: 3pt 0 0 16pt; padding: 0; font-size: 10pt; }
-.summary { font-size: 10.5pt; }
-.lang-line { font-size: 10pt; margin: 1pt 0; }
+.item-company {
+  font-size: 10.5pt;
+  font-weight: 500;
+  color: #2c3e50;
+}
+.item-dates {
+  font-size: 9.5pt;
+  color: #64748b;
+  white-space: nowrap;
+}
+.item-meta {
+  font-size: 9.5pt;
+  color: #64748b;
+  margin: 2pt 0 4pt 0;
+}
+.item-desc {
+  margin: 4pt 0 0 0;
+  font-size: 10pt;
+  color: #374151;
+  line-height: 1.55;
+}
+.item-bullets {
+  margin: 4pt 0 0 16pt;
+  padding: 0;
+  font-size: 10pt;
+  color: #374151;
+  line-height: 1.55;
+}
+.item-bullets li { margin-bottom: 2pt; }
+
+/* Education */
+.education-item { margin-bottom: 8pt; }
+.education-degree {
+  font-size: 10.5pt;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+.education-institution {
+  font-size: 10pt;
+  font-weight: 500;
+  color: #2c3e50;
+}
+.education-dates {
+  font-size: 9.5pt;
+  color: #64748b;
+}
+
+/* Other studies */
+.study-item { margin-bottom: 4pt; }
+.study-title { font-weight: 600; color: #1a1a2e; }
+.study-institution { color: #2c3e50; }
+.study-dates { color: #64748b; font-size: 9.5pt; }
+
+/* Other knowledge */
+.knowledge-text { font-size: 10pt; color: #374151; line-height: 1.6; }
+
+/* Languages */
+.lang-line {
+  margin: 2pt 0;
+  font-size: 10pt;
+  color: #374151;
+}
+.lang-line strong { color: #1a1a2e; }
+
+/* Print adjustments */
+@media print {
+  .header { border-bottom-color: #000; }
+  section h2 { border-bottom-color: #000; }
+}

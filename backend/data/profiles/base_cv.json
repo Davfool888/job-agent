@@ -1,0 +1,263 @@
+{
+  "_nota": "PERFIL BASE (fuente de verdad para matching y CV). Completa TUS datos reales. El sistema NUNCA inventa experiencia, tecnologias, cargos o logros: el CV solo usa lo que este aqui.",
+  "personal": {
+    "full_name": "David Santiago Herrera Reales",
+    "title": "",
+    "location": "",
+    "email": "davidsantiagoherrerareales@gmail.com",
+    "phone": "+57 319 565 2138",
+    "linkedin": "https://www.linkedin.com/in/david-herrera-reales",
+    "github": "https://github.com/Davfool888",
+    "portfolio": "https://davidherrera-dev.vercel.app"
+  },
+  "professional_summary": "Ingeniero de Software con experiencia en análisis y gestión de información en el sector financiero, orientado a Data Analytics y Business Intelligence. Experiencia consolidando y analizando bases de datos de más de 10.000 registros, utilizando Python, SQL, Power BI y Excel Avanzado para limpieza, transformación, segmentación, cruce y análisis de información proveniente de múltiples fuentes. He trabajado en la construcción de indicadores y reportes que apoyan la toma de decisiones, combinando capacidad técnica de programación con comprensión de negocio financiero y comercial.\n\nConocimientos en Python, Pandas, NumPy, SQL, Power BI, Power Query, DAX, bases de datos relacionales y APIs REST, con experiencia desarrollando soluciones de automatización para reducir tareas manuales y mejorar procesos de análisis de información. Inglés B1 en formación.",
+  "education": [
+    {
+      "degree": "Ingeniería de Software",
+      "institution": "",
+      "year": "",
+      "perspectives": []
+    },
+    {
+      "degree": "Politécnico Grancolombiano",
+      "institution": "",
+      "year": "",
+      "perspectives": []
+    },
+    {
+      "degree": "Técnico en Servicios Comerciales y Financieros",
+      "institution": "",
+      "year": "",
+      "perspectives": []
+    },
+    {
+      "degree": "Servicio Nacional de Aprendizaje (SENA)",
+      "institution": "",
+      "year": "",
+      "perspectives": []
+    },
+    {
+      "degree": "Platzi",
+      "institution": "",
+      "year": "2021 -- 2026",
+      "perspectives": []
+    },
+    {
+      "degree": "Smart Language Academy",
+      "institution": "",
+      "year": "2025 -- Actualidad",
+      "perspectives": []
+    },
+    {
+      "degree": "Politécnico Grancolombiano",
+      "institution": "",
+      "year": "2021 -- 2026",
+      "perspectives": []
+    },
+    {
+      "degree": "SENA",
+      "institution": "",
+      "year": "",
+      "perspectives": []
+    }
+  ],
+  "experience": [
+    {
+      "title": "Ejecutivo de Nómina para Empresas Cooperativas",
+      "company": "",
+      "period": "",
+      "bullets": [
+        "Analicé y consolidé bases de datos con más de \n10.000 registros utilizando \nExcel avanzado y Python para limpieza, validación, eliminación de duplicados, filtrado y segmentación de información.",
+        "Realicé cruces de información entre fuentes internas y externas (incluyendo fuentes institucionales) para analizar variables empresariales como tamaño de empresa, número de empleados, presupuesto y nivel de endeudamiento, generando indicadores para apoyar decisiones comerciales.",
+        "Desarrollé soluciones de automatización con \nPython y Google Apps Script para agilizar tareas de procesamiento, organización y consolidación de información",
+        "Consulté y realicé seguimiento a un volumen diario de empresas (más de 100 consultadas, cerca de 30 contactadas y entre 30-40 en seguimiento activo), aplicando criterios de análisis de datos para priorizar oportunidades.",
+        "Gestioné información relacionada con productos financieros (créditos, CDT, tarjetas de crédito, depósitos y fiducias) de acuerdo con el perfil de cada empresa/cliente, identificado mediante análisis de datos.",
+        "Gestioné procesos de apertura de cuentas de nómina para empresas y cooperativas, brindando acompañamiento comercial y operativo a clientes y áreas administrativas.",
+        "Utilicé herramientas como Excel, Power BI y plataformas bancarias para análisis y gestión de información financiera.",
+        "Desarrollé automatizaciones en Python y Google Apps Script para optimizar cálculos financieros, reduciendo tareas manuales repetitivas.",
+        "Implementé soluciones tecnológicas y herramientas de apoyo por iniciativa propia para mejorar procesos operativos y eficiencia del equipo."
+      ],
+      "perspectives": [
+        {
+          "id": "data-analytics",
+          "label": "Data Analytics",
+          "description": "Analicé y consolidé bases de datos con más de \n10.000 registros utilizando \nExcel avanzado y Python para limpieza, validación, eliminación de duplicados, filtrado y segmentación de información. Realicé cruces de información entre fuentes internas y externas (incluyendo fuentes institucionales) para analizar variables empresariales como tamaño de empresa, número de empleados, presupuesto y nivel de endeudamiento, generando indicadores para apoyar decisiones comerciales. Desarrollé soluciones de automatización con \nPython y Google Apps Script para agilizar tareas de procesamiento, organización y consolidación de información Consulté y realicé seguimiento a un volumen diario de empresas (más de 100 consultadas, cerca de 30 contactadas y entre 30-40 en seguimiento activo), aplicando criterios de análisis de datos para priorizar oportunidades. Gestioné información relacionada con productos financieros (créditos, CDT, tarjetas de crédito, depósitos y fiducias) de acuerdo con el perfil de cada empresa/cliente, identificado mediante análisis de datos. Utilicé herramientas como Excel, Power BI y plataformas bancarias para análisis y gestión de información financiera. Desarrollé automatizaciones en Python y Google Apps Script para optimizar cálculos financieros, reduciendo tareas manuales repetitivas. Implementé soluciones tecnológicas y herramientas de apoyo por iniciativa propia para mejorar procesos operativos y eficiencia del equipo.",
+          "skills": [],
+          "tools": [],
+          "domains": [],
+          "roles": [
+            "DATA_ANALYST",
+            "BI_ANALYST"
+          ]
+        },
+        {
+          "id": "comercial",
+          "label": "Comercial",
+          "description": "Realicé cruces de información entre fuentes internas y externas (incluyendo fuentes institucionales) para analizar variables empresariales como tamaño de empresa, número de empleados, presupuesto y nivel de endeudamiento, generando indicadores para apoyar decisiones comerciales. Consulté y realicé seguimiento a un volumen diario de empresas (más de 100 consultadas, cerca de 30 contactadas y entre 30-40 en seguimiento activo), aplicando criterios de análisis de datos para priorizar oportunidades. Gestioné información relacionada con productos financieros (créditos, CDT, tarjetas de crédito, depósitos y fiducias) de acuerdo con el perfil de cada empresa/cliente, identificado mediante análisis de datos. Gestioné procesos de apertura de cuentas de nómina para empresas y cooperativas, brindando acompañamiento comercial y operativo a clientes y áreas administrativas. Implementé soluciones tecnológicas y herramientas de apoyo por iniciativa propia para mejorar procesos operativos y eficiencia del equipo.",
+          "skills": [],
+          "tools": [],
+          "domains": [],
+          "roles": [
+            "BUSINESS_ANALYST"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Asesor Comercial (Prácticas)",
+      "company": "",
+      "period": "2022 -- 2023",
+      "bullets": [
+        "Gestioné y validé información de clientes y productos financieros mediante \nExcel y plataformas internas, realizando consulta y seguimiento de datos.",
+        "Atendí y gestioné clientes, adquiriendo experiencia en productos financieros, operaciones bancarias y procesos comerciales.",
+        "Verifiqué información y documentación de clientes, garantizando el cumplimiento de los procedimientos establecidos por la entidad.",
+        "Experiencia práctica en atención al cliente, productos financieros y operaciones bancarias desarrollada simultáneamente con formación técnica del SENA.",
+        "Uso de herramientas digitales, Excel y plataformas bancarias para análisis financiero, seguimiento comercial y gestión de clientes."
+      ],
+      "perspectives": [
+        {
+          "id": "data-analytics",
+          "label": "Data Analytics",
+          "description": "Gestioné y validé información de clientes y productos financieros mediante \nExcel y plataformas internas, realizando consulta y seguimiento de datos. Uso de herramientas digitales, Excel y plataformas bancarias para análisis financiero, seguimiento comercial y gestión de clientes.",
+          "skills": [],
+          "tools": [],
+          "domains": [],
+          "roles": [
+            "DATA_ANALYST",
+            "BI_ANALYST"
+          ]
+        },
+        {
+          "id": "comercial",
+          "label": "Comercial",
+          "description": "Gestioné y validé información de clientes y productos financieros mediante \nExcel y plataformas internas, realizando consulta y seguimiento de datos. Atendí y gestioné clientes, adquiriendo experiencia en productos financieros, operaciones bancarias y procesos comerciales. Verifiqué información y documentación de clientes, garantizando el cumplimiento de los procedimientos establecidos por la entidad. Experiencia práctica en atención al cliente, productos financieros y operaciones bancarias desarrollada simultáneamente con formación técnica del SENA. Uso de herramientas digitales, Excel y plataformas bancarias para análisis financiero, seguimiento comercial y gestión de clientes.",
+          "skills": [],
+          "tools": [],
+          "domains": [],
+          "roles": [
+            "BUSINESS_ANALYST"
+          ]
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Sistema de Análisis de Fluctuaciones USD/COP",
+      "description": "Desarrollé una aplicación en Python para consultar datos de la tasa de cambio USD/COP mediante APIs, procesar información financiera y analizar fluctuaciones, tendencias y escenarios de inversión. Implementé automatización de consultas, cálculos financieros, análisis estadístico y una interfaz de línea de comandos (CLI).",
+      "technologies": [],
+      "perspectives": []
+    },
+    {
+      "name": "Retail Intelligence -- Análisis de Inventario y Demanda",
+      "description": "(en desarrollo) Proyecto de análisis de datos orientado al sector retail, utilizando Python, Pandas y NumPy para limpieza, transformación, análisis exploratorio y generación de métricas sobre inventario, ventas, demanda, precios y promociones.",
+      "technologies": [],
+      "perspectives": []
+    },
+    {
+      "name": "Sistema de Detección de Estructuras con Inteligencia Artificial",
+      "description": "Desarrollo de sistema full stack para detección de estructuras utilizando modelos de visión por computadora entrenados con YOLOv8. Clasificación y preparación de más de 500 imágenes en Roboflow para entrenamiento y validación de modelos de inteligencia artificial. Implementación de inferencia en tiempo real utilizando Python, FastAPI y APIs REST para procesamiento de imágenes y comunicación backend. Desarrollo de frontend interactivo con React y Tailwind CSS para visualización dinámica de resultados. Tecnologías: React, JavaScript, Tailwind CSS, FastAPI, Python, YOLOv8, Google Colab, Roboflow.",
+      "technologies": [],
+      "perspectives": []
+    },
+    {
+      "name": "DevOps Inventory System",
+      "description": "Desarrollo de sistema CRUD para gestión de inventario utilizando Docker y arquitectura basada en contenedores. Implementación de integración continua con Jenkins y pipelines CI/CD para automatizar validaciones y despliegues. Desarrollo de backend REST API utilizando Flask y SQLAlchemy para manejo y persistencia de datos. Aplicación de buenas prácticas de desarrollo, control de versiones con Git y automatización de entornos. Tecnologías: Docker, Jenkins, Flask, Python, SQLAlchemy, GitHub.",
+      "technologies": [],
+      "perspectives": []
+    },
+    {
+      "name": "Portafolio Web 3D Interactivo",
+      "description": "Desarrollo de un portafolio web interactivo con gráficos 3D utilizando React y Three.js. Modelado desde cero de un cubo funcional inspirado en la lógica estructural y mecánica de un cubo Rubik real. Implementación de shaders, múltiples escenas y animaciones dinámicas para mejorar la experiencia visual e interacción del usuario. Aplicación de principios matemáticos y físicos incluyendo cuaterniones, vectores, matrices y cálculo vectorial para rotación precisa de estructuras tridimensionales. Tecnologías: React, Three.js, JavaScript, Tailwind CSS, GLSL Shaders.",
+      "technologies": [],
+      "perspectives": []
+    }
+  ],
+  "skills": {
+    "programming": [
+      "Python",
+      "SQL",
+      "JavaScript",
+      "Pandas",
+      "NumPy",
+      "Java",
+      "C #"
+    ],
+    "data": [
+      "EDA (análisis exploratorio de datos)",
+      "limpieza",
+      "transformación",
+      "segmentación",
+      "filtrado",
+      "consolidación",
+      "cruces de información",
+      "KPIs",
+      "indicadores",
+      "reportes y análisis comercial",
+      "SQL",
+      "MySQL",
+      "MariaDB",
+      "PostgreSQL",
+      "SQLite",
+      "MongoDB"
+    ],
+    "bi": [
+      "Power BI",
+      "Power Query",
+      "DAX",
+      "Excel avanzado",
+      "tablas dinámicas",
+      "dashboards",
+      "KPIs",
+      "indicadores",
+      "reportes y visualización de datos",
+      "YOLOv8",
+      "Visión por Computadora",
+      "Automatización",
+      "Workflows IA"
+    ],
+    "databases": [],
+    "tools": [
+      "Python",
+      "Google Apps Script",
+      "APIs REST",
+      "consumo de APIs",
+      "automatización de procesos y procesamiento de información",
+      "FastAPI",
+      "Flask",
+      "Git",
+      "GitHub",
+      "Docker",
+      "Linux",
+      "WSL",
+      "Google Colab",
+      "Visual Studio Code",
+      "Scikit-learn",
+      "YOLOv8",
+      "OpenCV",
+      "Roboflow",
+      "procesamiento de imágenes",
+      "Lógica de programación",
+      "programación orientada a objetos",
+      "estructuras de datos",
+      "algoritmos",
+      "Spring Boot (básico)",
+      "NET",
+      "Programación Orientada a Objetos",
+      "SOLID",
+      "MVC",
+      "React",
+      "Tailwind CSS",
+      "HTML",
+      "CSS",
+      "Docker Compose",
+      "Jenkins",
+      "Cisco Packet Tracer",
+      "Kali Linux",
+      "fundamentos de redes",
+      "automatización y seguridad informática básica"
+    ]
+  },
+  "languages": [],
+  "certifications": []
+}

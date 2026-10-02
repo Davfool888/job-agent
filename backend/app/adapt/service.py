@@ -127,6 +127,20 @@ def adapt_profile_for_job(db, job_id) -> dict:
                 for e in content["experiences"]],
             "projects": [p.get("name") or p.get("title") or ""
                          for p in content["projects"]],
+            "education": [
+                {"degree": e.get("degree") or e.get("title") or "",
+                 "institution": e.get("institution") or ""}
+                for e in content["education"]],
+            "languages": [
+                {"label": l.get("label") or l.get("language_label") or l.get("language") or "",
+                 "level": l.get("level") or ""}
+                for l in content["languages"]],
+            "skills_groups": content["skills_groups"],
+            "skills_soft": content["skills_soft"],
+            "other_studies": content["other_studies"],
+            "other_knowledge": content["other_knowledge"],
+            "projects": [p.get("name") or p.get("title") or ""
+                         for p in content["projects"]],
             "download_url": f"/jobs/{job.id}/adapt-cv/download?format=pdf",
             "preview_url": f"/jobs/{job.id}/adapt-cv/download?format=pdf",
         },

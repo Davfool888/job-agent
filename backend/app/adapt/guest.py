@@ -7,6 +7,7 @@ el resto del sistema no cambia.
 """
 from __future__ import annotations
 
+from app.services import job_service as jobs
 
 GUEST_USER_ID = None  # Fase 1: sin sesion, siempre invitado.
 
@@ -86,6 +87,8 @@ def to_display_profile(flat: dict, rich: dict) -> dict:
             "speaking": lang.get("speaking") or "",
         })
 
+    # Fallback a datos demo si el perfil rico no tiene estos campos
+    demo_rich = jobs.GUEST_DEMO_RICH
     return {
         "full_name": personal.get("full_name") or flat.get("full_name", ""),
         "title": (personal.get("title_label")
@@ -102,18 +105,21 @@ def to_display_profile(flat: dict, rich: dict) -> dict:
         "summary": rich.get("professional_summary") or "",
         "years_experience": rich.get("years_experience"),
         "skills_technical": list(rich.get("technical_skills") or []),
-        "skills_soft": list(rich.get("soft_skills") or []),
-        "skills_groups": dict(rich.get("skills") or {}),
+        "skills_soft": list(rich.get("skills_soft") or rich.get("soft_skills") or []),
+        "skills_groups": dict(rich.get("skills_groups") or rich.get("skills") or {}),
         "target_roles": list(rich.get("target_roles") or []),
         "languages": languages,
-        "experience": [entry_display("experience", e)
-                       for e in rich.get("experience") or []],
+        "experiences": [entry_display("experience", e)
+                        for e in (rich.get("experiences") or rich.get("experience") or [])],
         "education": [entry_display("education", e)
                       for e in rich.get("education") or []],
         "projects": [entry_display("projects", e)
                      for e in rich.get("projects") or []],
         "certifications": [entry_display("certifications", e)
                            for e in rich.get("certifications") or []],
+        # Nuevos campos para el template rediseñado (con fallback a datos demo)
+        "other_knowledge": rich.get("other_knowledge") or demo_rich.get("other_knowledge") or [],
+        "other_studies": rich.get("other_studies") or demo_rich.get("other_studies") or [],
     }
 
 

@@ -1,0 +1,55 @@
+{
+  "_nota": "EJEMPLO de perfil modular (NO lo carga el codigo; copia lo que necesites a base_cv.json). Estructura: cada item puede tener N perspectivas con descripcion, skills, tools, domains y roles afines. Todo debe ser REAL.",
+  "personal": {
+    "full_name": "Nombre Apellido",
+    "title": "Ejecutivo de Nómina | Aspirante a Data Analyst",
+    "location": "Bogotá, Colombia",
+    "email": "nombre@example.com",
+    "phone": "+57 300 000 0000",
+    "linkedin": "https://linkedin.com/in/usuario",
+    "github": "",
+    "portfolio": ""
+  },
+  "professional_summary": "Ejecutivo bancario con experiencia en gestión de empresas y análisis de información con Excel avanzado, Power BI y Python.",
+  "education": [],
+  "experience": [
+    {
+      "id": "exp-banco-1",
+      "title": "Ejecutivo de Nómina para Empresas Cooperativas",
+      "company": "Banco de Bogotá",
+      "period": "2021 - 2024",
+      "facts": "Atención a ~40 empresas cliente y sus empleados.",
+      "perspectives": [
+        {
+          "id": "comercial",
+          "label": "Comercial",
+          "description": "Contacto con empresas, gestión y fidelización de empresas y empleados, ofrecimiento de cuentas de nómina, créditos, CDT, tarjetas y depósitos, con seguimiento comercial.",
+          "skills": ["Gestión comercial", "Fidelización de clientes", "Seguimiento comercial"],
+          "tools": ["CRM", "Excel"],
+          "domains": ["banking", "finance", "retail"],
+          "roles": ["BUSINESS_ANALYST", "OPERATIONS_ANALYST"]
+        },
+        {
+          "id": "data",
+          "label": "Data Analytics",
+          "description": "Manejo de bases de datos con miles de registros en Excel avanzado: validación y depuración de información, detección y eliminación de duplicados, filtros, segmentación y cruces entre bases, análisis de variables empresariales y generación de información para decisiones, con procesos tipo ETL y automatización en Python.",
+          "skills": ["Data Analysis", "Data Cleaning", "ETL", "Excel avanzado", "Power BI", "DAX", "Power Query", "Python"],
+          "tools": ["Excel", "Power BI", "Python", "Power Query"],
+          "domains": ["banking", "finance"],
+          "roles": ["DATA_ANALYST", "BI_ANALYST", "REPORTING_ANALYST"]
+        }
+      ]
+    }
+  ],
+  "projects": [],
+  "skills": {
+    "programming": ["Python"],
+    "data": ["Data Analysis", "Data Cleaning", "ETL"],
+    "bi": ["Power BI", "DAX", "Power Query"],
+    "databases": ["SQL"],
+    "tools": ["Excel avanzado", "Excel"]
+  },
+  "target_roles": ["Data Analyst", "BI Analyst"],
+  "languages": [],
+  "certifications": []
+}
