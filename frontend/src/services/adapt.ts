@@ -19,6 +19,10 @@ export interface AdaptCvResult {
   error?: { code: string; message: string };
 }
 
+export type ProfileIncompleteError = Error & {
+  code: "PROFILE_INCOMPLETE";
+};
+
 export const ADAPT_STAGES = [
   "Analizando oferta…",
   "Personalizando perfil…",
@@ -31,7 +35,10 @@ export async function adaptCv(
   try {
     const { data } = await api.post<AdaptCvResult>(`/jobs/${jobId}/adapt-cv`);
     if (!data.success) {
-      throw new Error(data.error?.message ?? "No fue posible generar el CV.");
+      // Extraer el código de error si existe
+      const error = new Error(data.error?.message ?? "No fue posible generar el CV.") as ProfileIncompleteError;
+      error.code = (data.error?.code === "PROFILE_INCOMPLETE" ? "PROFILE_INCOMPLETE" : "UNKNOWN_ERROR") as "PROFILE_INCOMPLETE";
+      throw error;
     }
     return data;
   } catch (e) {

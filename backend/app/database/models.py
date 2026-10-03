@@ -505,17 +505,17 @@ class PDFConfig(Base):
     header_style = Column(String(50), nullable=False, default="classic")  # classic, modern, minimal
     section_divider = Column(String(50), nullable=False, default="line")  # line, double, dots, none
 
-    # Márgenes (en mm)
-    margin_top_mm = Column(Integer, nullable=False, default=18)
-    margin_bottom_mm = Column(Integer, nullable=False, default=18)
-    margin_left_mm = Column(Integer, nullable=False, default=15)
-    margin_right_mm = Column(Integer, nullable=False, default=15)
+    # Márgenes norma APA (25 mm, fijas)
+    margin_top_mm = Column(Integer, nullable=False, default=25)
+    margin_bottom_mm = Column(Integer, nullable=False, default=25)
+    margin_left_mm = Column(Integer, nullable=False, default=25)
+    margin_right_mm = Column(Integer, nullable=False, default=25)
 
     # Espaciado entre secciones (en pt)
     section_spacing_pt = Column(Integer, nullable=False, default=14)
 
-    # Color acento (hex)
-    accent_color = Column(String(7), nullable=False, default="#2c3e50")
+    # Color siempre negro (sin picker en la UI)
+    accent_color = Column(String(7), nullable=False, default="#000000")
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(

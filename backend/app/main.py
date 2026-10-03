@@ -323,6 +323,11 @@ def update_pdf_config(
     if payload.font_family is not None:
         cfg.font_family = payload.font_family
     if payload.font_size_pt is not None:
+        if payload.font_size_pt not in (10, 11, 12, 14, 16):
+            raise HTTPException(
+                status_code=400,
+                detail="font_size_pt debe ser uno de: 10, 11, 12, 14, 16.",
+            )
         cfg.font_size_pt = payload.font_size_pt
     if payload.section_order is not None:
         cfg.section_order = _json.dumps(payload.section_order)
@@ -336,18 +341,15 @@ def update_pdf_config(
         cfg.header_style = payload.header_style
     if payload.section_divider is not None:
         cfg.section_divider = payload.section_divider
-    if payload.margin_top_mm is not None:
-        cfg.margin_top_mm = payload.margin_top_mm
-    if payload.margin_bottom_mm is not None:
-        cfg.margin_bottom_mm = payload.margin_bottom_mm
-    if payload.margin_left_mm is not None:
-        cfg.margin_left_mm = payload.margin_left_mm
-    if payload.margin_right_mm is not None:
-        cfg.margin_right_mm = payload.margin_right_mm
+    # Margenes norma APA (25 mm) y color negro: siempre fijos,
+    # se ignora lo enviado para esos campos.
+    cfg.margin_top_mm = 25
+    cfg.margin_bottom_mm = 25
+    cfg.margin_left_mm = 25
+    cfg.margin_right_mm = 25
+    cfg.accent_color = "#000000"
     if payload.section_spacing_pt is not None:
         cfg.section_spacing_pt = payload.section_spacing_pt
-    if payload.accent_color is not None:
-        cfg.accent_color = payload.accent_color
 
     cfg.updated_at = datetime.utcnow()
     db.commit()

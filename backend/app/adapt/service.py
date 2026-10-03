@@ -75,9 +75,23 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None) -> dict:
     if not job:
         raise AdaptError("JOB_NOT_FOUND", "Oferta no encontrada.", http=404)
 
-    profile = guest.get_profile_for_cv(db)
-    if guest.profile_is_empty(profile):
-        raise AdaptError(
+    # Si hay UID (usuario autenticado), verificar que tenga perfil completo
+    if uid:
+        from app.services.job_service import get_rich_profile_for
+        profile = get_rich_profile_for(db, uid, "")
+        # Verificar que el perfil tenga datos mínimos requeridos
+        if not _is_profile_complete(profile):
+            raise AdaptError(
+                "PROFILE_INCOMPLETE",
+                "Debe completar su perfil antes de generar un CV adaptado. "
+                "Vaya a la sección de Perfil y complete los campos obligatorios.",
+                http=400
+            )
+    else:
+        # Usuario invitado: usar perfil demo
+        profile = guest.get_profile_for_cv(db)
+        if guest.profile_is_empty(profile):
+            raise AdaptError(
             "PROFILE_NOT_FOUND",
             "Perfil de invitado no disponible.", http=404)
 
@@ -174,3 +188,26 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None) -> dict:
 def error_body(error: AdaptError) -> dict:
     return {"success": False,
             "error": {"code": error.code, "message": str(error)}}
+
+
+def _is_profile_complete(profile: dict) -> bool:
+    """Verifica si el perfil tiene los campos mínimos requeridos."""
+    if not profile:
+        return False
+    
+    # Campos obligatorios: nombre completo, email, teléfono
+    personal = profile.get("personal") or {}
+    full_name = (personal.get("full_name") or "").strip()
+    email = (personal.get("email") or "").strip()
+    phone = (personal.get("phone") or "").strip()
+    
+    if not full_name or not email or not phone:
+        return False
+    
+    # Al menos una experiencia o educación
+    experiences = profile.get("experiences") or profile.get("experience") or []
+    education = profile.get("education") or []
+    if not experiences and not education:
+        return False
+    
+    return True

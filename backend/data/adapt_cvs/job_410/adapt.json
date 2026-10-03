@@ -1,23 +1,21 @@
 {
-  "job_id": "407",
-  "created_at": "2026-10-03T04:49:16.349373",
+  "job_id": "410",
+  "created_at": "2026-10-03T04:50:57.146891",
   "profile_source": "guest",
   "matching": {
-    "percentage": 64,
+    "percentage": 33,
     "matched_skills": [
-      "Python",
-      "SQL",
-      "Excel",
-      "transformación",
-      "indicadores",
-      "reportes",
-      "Excel avanzado"
+      "JavaScript",
+      "MongoDB",
+      "APIs"
     ],
     "missing_skills": [
-      "Análisis de datos",
-      "Análisis estadístico",
-      "Automatización",
-      "Bases de datos"
+      "Modelado de datos",
+      "Bases de datos",
+      "AWS",
+      "TypeScript",
+      "Java",
+      "Spring"
     ],
     "modality_ok": true,
     "location_ok": false,
@@ -25,22 +23,22 @@
     "years_experience": 1.0
   },
   "content": {
-    "target_role": "Analista BI",
-    "company": "SALESLAND",
+    "target_role": "Desarrollador/a Backend - Senior",
+    "company": "Nequi",
     "summary": "Ingeniero de Software con experiencia en análisis de datos, automatización de procesos y desarrollo de soluciones utilizando Python, SQL, Power BI y herramientas de procesamiento de información. Interesado en posiciones junior relacionadas con análisis de datos, Business Intelligence, ingeniería de datos y desarrollo backend con Python.",
     "skills": [
+      "JavaScript",
+      "MongoDB",
+      "APIs",
       "Python",
       "SQL",
-      "Excel",
-      "transformación",
-      "indicadores",
-      "reportes",
-      "Excel avanzado",
       "Power BI",
+      "Excel",
       "Pandas",
       "NumPy",
       "FastAPI",
-      "JavaScript"
+      "React",
+      "Git"
     ],
     "skills_groups": {
       "analysis": [
@@ -346,6 +344,59 @@
     ],
     "projects": [
       {
+        "name": "Currency Analytics API",
+        "url": "https://andresramirez.dev/projects/currency-api",
+        "repo": "https://github.com/andresramirez-dev/currency-analytics",
+        "technologies": [
+          "Python",
+          "FastAPI",
+          "REST API",
+          "Pandas",
+          "JSON"
+        ],
+        "start_date": "2026-05-01",
+        "end_date": "2026-06-01",
+        "description": "Aplicación para consultar y analizar la variación histórica de monedas mediante APIs externas, incluyendo cálculos de variación porcentual y generación de indicadores financieros.",
+        "technical_skills": [
+          "Python",
+          "APIs",
+          "Data Processing"
+        ],
+        "soft_skills": [
+          "Investigación",
+          "Pensamiento crítico"
+        ],
+        "perspectives": [
+          {
+            "id": "p1",
+            "label": "Automatización financiera",
+            "description": "Aplicación orientada al procesamiento automatizado de información financiera obtenida desde servicios externos.",
+            "skills": [
+              "Financial Analysis",
+              "Automation",
+              "API Integration"
+            ],
+            "tools": [
+              "Python",
+              "FastAPI",
+              "Pandas"
+            ],
+            "domains": [
+              "finance",
+              "fintech",
+              "data"
+            ],
+            "roles": [
+              "Python Developer",
+              "Data Analyst",
+              "Financial Data Analyst"
+            ]
+          }
+        ],
+        "start": "05/2026",
+        "end": "06/2026"
+      },
+      {
         "name": "Retail Intelligence Dashboard",
         "url": "https://andresramirez.dev/projects/retail-intelligence",
         "repo": "https://github.com/andresramirez-dev/retail-intelligence",
@@ -400,62 +451,30 @@
         ],
         "start": "02/2026",
         "end": "04/2026"
-      },
-      {
-        "name": "Currency Analytics API",
-        "url": "https://andresramirez.dev/projects/currency-api",
-        "repo": "https://github.com/andresramirez-dev/currency-analytics",
-        "technologies": [
-          "Python",
-          "FastAPI",
-          "REST API",
-          "Pandas",
-          "JSON"
-        ],
-        "start_date": "2026-05-01",
-        "end_date": "2026-06-01",
-        "description": "Aplicación para consultar y analizar la variación histórica de monedas mediante APIs externas, incluyendo cálculos de variación porcentual y generación de indicadores financieros.",
-        "technical_skills": [
-          "Python",
-          "APIs",
-          "Data Processing"
-        ],
-        "soft_skills": [
-          "Investigación",
-          "Pensamiento crítico"
-        ],
-        "perspectives": [
-          {
-            "id": "p1",
-            "label": "Automatización financiera",
-            "description": "Aplicación orientada al procesamiento automatizado de información financiera obtenida desde servicios externos.",
-            "skills": [
-              "Financial Analysis",
-              "Automation",
-              "API Integration"
-            ],
-            "tools": [
-              "Python",
-              "FastAPI",
-              "Pandas"
-            ],
-            "domains": [
-              "finance",
-              "fintech",
-              "data"
-            ],
-            "roles": [
-              "Python Developer",
-              "Data Analyst",
-              "Financial Data Analyst"
-            ]
-          }
-        ],
-        "start": "05/2026",
-        "end": "06/2026"
       }
     ],
     "certifications": [
+      {
+        "name": "Python for Data Analysis",
+        "institution": "DataCamp",
+        "issued_date": "2026-05-22",
+        "expiry_date": null,
+        "credential_id": "DC-PYDA-582941",
+        "credential_url": "https://credentials.example.com/DC-PYDA-582941",
+        "description": "Certificación de formación práctica en procesamiento, transformación y análisis de datos utilizando Python y librerías especializadas.",
+        "technical_skills": [
+          "Python",
+          "Pandas",
+          "NumPy"
+        ],
+        "soft_skills": [
+          "Pensamiento analítico",
+          "Resolución de problemas"
+        ],
+        "perspectives": [],
+        "issued": "22/05/2026",
+        "expiry": ""
+      },
       {
         "name": "Microsoft Power BI Data Analyst",
         "institution": "Microsoft",
@@ -501,27 +520,6 @@
         ],
         "issued": "15/07/2026",
         "expiry": "15/07/2028"
-      },
-      {
-        "name": "Python for Data Analysis",
-        "institution": "DataCamp",
-        "issued_date": "2026-05-22",
-        "expiry_date": null,
-        "credential_id": "DC-PYDA-582941",
-        "credential_url": "https://credentials.example.com/DC-PYDA-582941",
-        "description": "Certificación de formación práctica en procesamiento, transformación y análisis de datos utilizando Python y librerías especializadas.",
-        "technical_skills": [
-          "Python",
-          "Pandas",
-          "NumPy"
-        ],
-        "soft_skills": [
-          "Pensamiento analítico",
-          "Resolución de problemas"
-        ],
-        "perspectives": [],
-        "issued": "22/05/2026",
-        "expiry": ""
       }
     ],
     "languages": [
@@ -545,21 +543,19 @@
       }
     ],
     "matching": {
-      "percentage": 64,
+      "percentage": 33,
       "matched_skills": [
-        "Python",
-        "SQL",
-        "Excel",
-        "transformación",
-        "indicadores",
-        "reportes",
-        "Excel avanzado"
+        "JavaScript",
+        "MongoDB",
+        "APIs"
       ],
       "missing_skills": [
-        "Análisis de datos",
-        "Análisis estadístico",
-        "Automatización",
-        "Bases de datos"
+        "Modelado de datos",
+        "Bases de datos",
+        "AWS",
+        "TypeScript",
+        "Java",
+        "Spring"
       ]
     },
     "summary_provider": "none",

@@ -25,31 +25,79 @@ MESES = {"01": "Ene", "02": "Feb", "03": "Mar", "04": "Abr",
          "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dic"}
 
 
-def _fmt_month(value: str | None) -> str:
-    """'03/2025' o '2025-03-01' -> 'Mar 2025'. Ilegible se devuelve tal cual."""
+MESES_FULL = {"01": "Enero", "02": "Febrero", "03": "Marzo",
+              "04": "Abril", "05": "Mayo", "06": "Junio",
+              "07": "Julio", "08": "Agosto", "09": "Septiembre",
+              "10": "Octubre", "11": "Noviembre", "12": "Diciembre"}
+
+
+def _parse_ymd(value: str | None) -> tuple | None:
+    """(año, mes, dia|None) desde ISO, MM/YYYY, 'Mar 2025' o YYYY."""
     import re as _re
 
     text = str(value or "").strip()
-    match = _re.match(r"^(\d{4})-(\d{1,2})(?:-\d{1,2})?$", text)
+    match = _re.match(r"^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$", text)
     if match:
-        return f"{MESES.get(match.group(2).zfill(2), match.group(2))} {match.group(1)}"
+        return match.group(1), match.group(2).zfill(2), match.group(3)
     match = _re.match(r"^(\d{1,2})/(\d{4})$", text)
     if match:
-        return f"{MESES.get(match.group(1).zfill(2), match.group(1))} {match.group(2)}"
-    return text
-
-
-def _fmt_day(value: str | None) -> str:
-    """'2026-07-15' -> '15 Jul 2026'."""
-    import re as _re
-
-    text = str(value or "").strip()
-    match = _re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", text)
+        return match.group(2), match.group(1).zfill(2), None
+    match = _re.match(r"^([A-Za-zÁÉÍÓÚÑáéíóúñ]+)\s+(\d{4})$", text)
     if match:
-        return (f"{int(match.group(3))} "
-                f"{MESES.get(match.group(2).zfill(2), match.group(2))} "
-                f"{match.group(1)}")
-    return _fmt_month(text) if text else ""
+        inv = {v.lower(): k for k, v in list(MESES.items())
+               + [(v.lower(), k) for k, v in MESES_FULL.items()]}
+        month = inv.get(match.group(1).lower())
+        if month:
+            return match.group(2), month, None
+    match = _re.match(r"^(\d{4})$", text)
+    if match:
+        return match.group(1), None, None
+    return None
+
+
+def _fmt_month(value: str | None, fmt: str = "MMM YYYY") -> str:
+    """Formatea mes segun date_format ('Mar 2025' por defecto)."""
+    parsed = _parse_ymd(value)
+    if not parsed:
+        return str(value or "").strip()
+    year, month, _day = parsed
+    if month is None:
+        return year
+    if fmt == "MM/YYYY":
+        return f"{month}/{year}"
+    if fmt == "MM/YY":
+        return f"{month}/{year[2:]}"
+    if fmt == "MMMM YYYY":
+        return f"{MESES_FULL.get(month, month)} {year}"
+    if fmt == "YYYY-MM":
+        return f"{year}-{month}"
+    return f"{MESES.get(month, month)} {year}"
+
+
+def _fmt_day(value: str | None, fmt: str = "MMM YYYY") -> str:
+    """Formatea fecha con dia segun date_format."""
+    parsed = _parse_ymd(value)
+    if not parsed:
+        return str(value or "").strip()
+    year, month, day = parsed
+    if month is None:
+        return year
+    if fmt == "MM/YYYY":
+        return f"{month}/{year}" if not day else (
+            f"{day.zfill(2)}/{month}/{year}")
+    if fmt == "MM/YY":
+        short = year[2:]
+        return f"{month}/{short}" if not day else (
+            f"{day.zfill(2)}/{month}/{short}")
+    if fmt == "MMMM YYYY":
+        base = f"{MESES_FULL.get(month, month)} {year}"
+        return f"{int(day)} de {base}" if day else base
+    if fmt == "YYYY-MM":
+        return f"{year}-{month}" if not day else (
+            f"{year}-{month}-{day.zfill(2)}")
+    if day:
+        return f"{int(day)} {MESES.get(month, month)} {year}"
+    return f"{MESES.get(month, month)} {year}"
 
 
 def _display_url(url: str | None) -> str:
@@ -143,7 +191,7 @@ def _technical_skills_block(content: dict) -> str:
     if not blocks:
         return ""
 
-    return _section("Habilidades Técnicas", "".join(blocks))
+    return _section("Competencias Técnicas", "".join(blocks))
 
 
 def _soft_skills_block(content: dict) -> str:
@@ -195,7 +243,7 @@ def _soft_skills_block(content: dict) -> str:
     )
 
 
-def _experience_block(content: dict) -> str:
+def _experience_block(content: dict, fmt: str = "MMM YYYY") -> str:
     """Experiencia estilo ejemplo: cargo, fechas, empresa, Responsabilidad
     General (primera oracion) + bullets con el resto. Sin chips: las
     skills van en su seccion; aqui una linea discreta las conserva."""
@@ -209,14 +257,14 @@ def _experience_block(content: dict) -> str:
         role = exp.get("title") or exp.get("role") or ""
         company = exp.get("company") or ""
         city = exp.get("city") or exp.get("location") or ""
-        start = _fmt_month(exp.get("start") or exp.get("start_date") or "")
+        start = _fmt_month(exp.get("start") or exp.get("start_date") or "", fmt)
         end_raw = exp.get("end") or exp.get("end_date") or ""
         if exp.get("is_current"):
             dates = f"{start} – Actualidad" if start else "Actualidad"
-        elif start and _fmt_month(end_raw):
-            dates = f"{start} – {_fmt_month(end_raw)}"
+        elif start and _fmt_month(end_raw, fmt):
+            dates = f"{start} – {_fmt_month(end_raw, fmt)}"
         else:
-            dates = start or _fmt_month(end_raw)
+            dates = start or _fmt_month(end_raw, fmt)
 
         sentences = _split_sentences(exp.get("description") or "")
         general = (f'<p class="item-p"><strong>Responsabilidad General:</strong> '
@@ -259,7 +307,7 @@ def _experience_block(content: dict) -> str:
                     "".join(blocks))
 
 
-def _projects_block(content: dict) -> str:
+def _projects_block(content: dict, fmt: str = "MMM YYYY") -> str:
     """Proyectos estilo ejemplo: nombre, parrafos y linea de tecnologias."""
     projects = content.get("projects") or []
     blocks = []
@@ -269,8 +317,8 @@ def _projects_block(content: dict) -> str:
             continue
 
         name = proj.get("name") or proj.get("title") or ""
-        start = _fmt_month(proj.get("start") or proj.get("start_date") or "")
-        end = _fmt_month(proj.get("end") or proj.get("end_date") or "")
+        start = _fmt_month(proj.get("start") or proj.get("start_date") or "", fmt)
+        end = _fmt_month(proj.get("end") or proj.get("end_date") or "", fmt)
         dates = f"{start} – {end}" if start and end else (start or end)
         links = " · ".join(_display_url(p) for p in
                            [proj.get("url"), proj.get("repo")] if str(p).strip())
@@ -294,7 +342,7 @@ def _projects_block(content: dict) -> str:
     return _section("Proyectos Destacados", "".join(blocks))
 
 
-def _education_block(content: dict) -> str:
+def _education_block(content: dict, fmt: str = "MMM YYYY") -> str:
     """Educacion estilo ejemplo: titulo, fechas, institucion, parrafo."""
     education = content.get("education") or []
     blocks = []
@@ -305,8 +353,8 @@ def _education_block(content: dict) -> str:
 
         degree = edu.get("degree") or edu.get("title") or ""
         institution = edu.get("institution") or ""
-        start = _fmt_month(edu.get("start") or edu.get("start_date") or "")
-        end = _fmt_month(edu.get("end") or edu.get("end_date") or "")
+        start = _fmt_month(edu.get("start") or edu.get("start_date") or "", fmt)
+        end = _fmt_month(edu.get("end") or edu.get("end_date") or "", fmt)
         dates = f"{start} – {end}" if start and end else (start or end)
 
         blocks.append(
@@ -326,7 +374,7 @@ def _education_block(content: dict) -> str:
     return _section("Educación / Education", "".join(blocks))
 
 
-def _other_studies_block(content: dict) -> str:
+def _other_studies_block(content: dict, fmt: str = "MMM YYYY") -> str:
     """Otros Estudios estilo ejemplo: certificaciones + cursos sueltos.
     Las certificaciones van aqui porque el ejemplo no trae seccion
     separada para ellas."""
@@ -345,8 +393,8 @@ def _other_studies_block(content: dict) -> str:
 
         title = study.get("title") or study.get("degree") or ""
         institution = study.get("institution") or study.get("academy") or ""
-        start = _fmt_month(study.get("start") or study.get("start_date") or "")
-        end = _fmt_month(study.get("end") or study.get("end_date") or "")
+        start = _fmt_month(study.get("start") or study.get("start_date") or "", fmt)
+        end = _fmt_month(study.get("end") or study.get("end_date") or "", fmt)
         dates = f"{start} – {end}" if start and end else (start or end)
 
         blocks.append(
@@ -363,8 +411,8 @@ def _other_studies_block(content: dict) -> str:
     for cert in content.get("certifications") or []:
         if not isinstance(cert, dict):
             continue
-        issued = _fmt_day(cert.get("issued") or cert.get("issued_date") or "")
-        expiry = _fmt_day(cert.get("expiry") or cert.get("expiry_date") or "")
+        issued = _fmt_day(cert.get("issued") or cert.get("issued_date") or "", fmt)
+        expiry = _fmt_day(cert.get("expiry") or cert.get("expiry_date") or "", fmt)
         dates = f"{issued} – {expiry}" if issued and expiry else (
             issued or expiry)
         cred = cert.get("credential_id") or ""
@@ -482,18 +530,10 @@ def _apply_pdf_config_to_css(css: str, pdf_config: dict) -> str:
         css
     )
     
-    # Color acento
-    accent_color = pdf_config.get("accent_color", "#2c3e50")
-    css = re.sub(
-        r'#2c3e50',
-        accent_color,
-        css
-    )
-    css = re.sub(
-        r'#1f6feb',
-        accent_color,
-        css
-    )
+    # Color: siempre negro (sin picker en la UI). Se ignora cualquier
+    # valor guardado para garantizar formato uniforme.
+    css = re.sub(r'#[0-9a-fA-F]{6}', '#000000', css)
+    css = re.sub(r'#[0-9a-fA-F]{3}(?![0-9a-fA-F])', '#000', css)
     
     # Márgenes
     margin_top = pdf_config.get("margin_top_mm", 18)
@@ -592,71 +632,48 @@ def render_cv_html(content: dict, job: dict | None = None, pdf_config: dict | No
             f'<p class="summary">{esc(content.get("summary"))}</p>'
         )
 
-    # Orden de secciones desde pdf_config o default
-    section_order = pdf_config.get("section_order") if pdf_config else [
-        "summary", "experience", "education", "projects", "skills", "languages", "other_studies", "other_knowledge"
-    ]
+    # Orden de secciones desde pdf_config o default completo.
+    # Slugs desconocidos se ignoran; quitar un slug oculta la seccion.
+    # "certifications" vive dentro de "other_studies" (sin bloque propio).
+    default_order = ["summary", "experience", "education", "projects",
+                     "skills", "soft_skills", "languages", "other_studies",
+                     "other_knowledge"]
+    section_order = (pdf_config or {}).get("section_order") or default_order
+    if not isinstance(section_order, list):
+        section_order = default_order
 
-    # Construir bloques según el orden configurado
-    section_blocks = {}
-    section_blocks["CSS"] = css
-    section_blocks["FULL_NAME"] = esc(content.get("full_name"))
-    section_blocks["TITLE_LINE"] = esc(professional_title)
-    section_blocks["CONTACT_LINE_1"] = line1
-    section_blocks["CONTACT_LINE_2"] = line2
-    section_blocks["SUMMARY_BLOCK"] = summary
-    section_blocks["TECHNICAL_SKILLS_BLOCK"] = _technical_skills_block(content)
-    section_blocks["SOFT_SKILLS_BLOCK"] = _soft_skills_block(content)
-    section_blocks["EXPERIENCE_BLOCK"] = _experience_block(content)
-    section_blocks["PROJECTS_BLOCK"] = _projects_block(content)
-    section_blocks["EDUCATION_BLOCK"] = _education_block(content)
-    section_blocks["OTHER_STUDIES_BLOCK"] = _other_studies_block(content)
-    section_blocks["OTHER_KNOWLEDGE_BLOCK"] = _other_knowledge_block(content)
-    section_blocks["LANGUAGES_BLOCK"] = _languages_block(content)
+    fmt = str((pdf_config or {}).get("date_format") or "MMM YYYY")
+    blocks = {
+        "summary": summary,
+        "experience": _experience_block(content, fmt),
+        "education": _education_block(content, fmt),
+        "projects": _projects_block(content, fmt),
+        "skills": _technical_skills_block(content),
+        "soft_skills": _soft_skills_block(content),
+        "languages": _languages_block(content),
+        "other_studies": _other_studies_block(content, fmt),
+        "other_knowledge": _other_knowledge_block(content),
+    }
 
-    # Construir HTML final según el orden configurado
-    template = (_templates_dir() / "cv.html").read_text(encoding="utf-8")
-    # Reemplazar CSS primero
-    template = template.replace("{{CSS}}", css)
-    
-    # Reemplazar bloques fijos
-    for key, value in {
+    titles = {
+        "CSS": css,
         "FULL_NAME": esc(content.get("full_name")),
         "TITLE_LINE": esc(professional_title),
         "CONTACT_LINE_1": line1,
         "CONTACT_LINE_2": line2,
-        "SUMMARY_BLOCK": summary,
-    }.items():
-        template = template.replace("{{" + key + "}}", value)
-    
-    # Insertar secciones en el orden configurado
-    section_map = {
-        "summary": "SUMMARY_BLOCK",
-        "experience": "EXPERIENCE_BLOCK",
-        "education": "EDUCATION_BLOCK",
-        "projects": "PROJECTS_BLOCK",
-        "skills": "TECHNICAL_SKILLS_BLOCK",
-        "soft_skills": "SOFT_SKILLS_BLOCK",
-        "languages": "LANGUAGES_BLOCK",
-        "other_studies": "OTHER_STUDIES_BLOCK",
-        "other_knowledge": "OTHER_KNOWLEDGE_BLOCK",
+        "SECTIONS": "".join(
+            blocks.get(slug, "") for slug in section_order
+            if isinstance(slug, str)),
     }
-    
-    for section_slug in section_order:
-        block_key = section_map.get(section_slug)
-        if block_key and section_blocks.get(block_key):
-            template = template.replace("{{" + block_key + "}}", section_blocks[block_key])
-        else:
-            template = template.replace("{{" + block_key + "}}", "") if block_key else template
 
-    # Limpiar placeholders restantes
-    for block_key in section_map.values():
-        template = template.replace("{{" + block_key + "}}", "")
+    html_text = template
+    for key, value in titles.items():
+        html_text = html_text.replace("{{" + key + "}}", value)
 
-    if not content.get("full_name") and "<section>" not in template:
+    if not content.get("full_name") and "<section>" not in html_text:
         raise ValueError("Contenido insuficiente para generar el HTML.")
 
-    return template
+    return html_text
 
     # Linea de titulo estilo ejemplo: rol adaptado | titulo de la persona.
     adapted = str(content.get("target_role") or "").strip()
@@ -676,68 +693,45 @@ def render_cv_html(content: dict, job: dict | None = None, pdf_config: dict | No
             f'<p class="summary">{esc(content.get("summary"))}</p>'
         )
 
-    # Orden de secciones desde pdf_config o default
-    section_order = pdf_config.get("section_order") if pdf_config else [
-        "summary", "experience", "education", "projects", "skills", "languages", "other_studies", "other_knowledge"
-    ]
+    # Orden de secciones desde pdf_config o default completo.
+    # Slugs desconocidos se ignoran; quitar un slug oculta la seccion.
+    # "certifications" vive dentro de "other_studies" (sin bloque propio).
+    default_order = ["summary", "experience", "education", "projects",
+                     "skills", "soft_skills", "languages", "other_studies",
+                     "other_knowledge"]
+    section_order = (pdf_config or {}).get("section_order") or default_order
+    if not isinstance(section_order, list):
+        section_order = default_order
 
-    # Construir bloques según el orden configurado
-    section_blocks = {}
-    section_blocks["CSS"] = css
-    section_blocks["FULL_NAME"] = esc(content.get("full_name"))
-    section_blocks["TITLE_LINE"] = esc(professional_title)
-    section_blocks["CONTACT_LINE_1"] = line1
-    section_blocks["CONTACT_LINE_2"] = line2
-    section_blocks["SUMMARY_BLOCK"] = summary
-    section_blocks["TECHNICAL_SKILLS_BLOCK"] = _technical_skills_block(content)
-    section_blocks["SOFT_SKILLS_BLOCK"] = _soft_skills_block(content)
-    section_blocks["EXPERIENCE_BLOCK"] = _experience_block(content)
-    section_blocks["PROJECTS_BLOCK"] = _projects_block(content)
-    section_blocks["EDUCATION_BLOCK"] = _education_block(content)
-    section_blocks["OTHER_STUDIES_BLOCK"] = _other_studies_block(content)
-    section_blocks["OTHER_KNOWLEDGE_BLOCK"] = _other_knowledge_block(content)
-    section_blocks["LANGUAGES_BLOCK"] = _languages_block(content)
+    fmt = str((pdf_config or {}).get("date_format") or "MMM YYYY")
+    blocks = {
+        "summary": summary,
+        "experience": _experience_block(content, fmt),
+        "education": _education_block(content, fmt),
+        "projects": _projects_block(content, fmt),
+        "skills": _technical_skills_block(content),
+        "soft_skills": _soft_skills_block(content),
+        "languages": _languages_block(content),
+        "other_studies": _other_studies_block(content, fmt),
+        "other_knowledge": _other_knowledge_block(content),
+    }
 
-    # Construir HTML final según el orden configurado
-    template = (_templates_dir() / "cv.html").read_text(encoding="utf-8")
-    # Reemplazar CSS primero
-    template = template.replace("{{CSS}}", css)
-    
-    # Reemplazar bloques fijos
-    for key, value in {
+    titles = {
+        "CSS": css,
         "FULL_NAME": esc(content.get("full_name")),
         "TITLE_LINE": esc(professional_title),
         "CONTACT_LINE_1": line1,
         "CONTACT_LINE_2": line2,
-        "SUMMARY_BLOCK": summary,
-    }.items():
-        template = template.replace("{{" + key + "}}", value)
-    
-    # Insertar secciones en el orden configurado
-    section_map = {
-        "summary": "SUMMARY_BLOCK",
-        "experience": "EXPERIENCE_BLOCK",
-        "education": "EDUCATION_BLOCK",
-        "projects": "PROJECTS_BLOCK",
-        "skills": "TECHNICAL_SKILLS_BLOCK",
-        "soft_skills": "SOFT_SKILLS_BLOCK",
-        "languages": "LANGUAGES_BLOCK",
-        "other_studies": "OTHER_STUDIES_BLOCK",
-        "other_knowledge": "OTHER_KNOWLEDGE_BLOCK",
+        "SECTIONS": "".join(
+            blocks.get(slug, "") for slug in section_order
+            if isinstance(slug, str)),
     }
-    
-    for section_slug in section_order:
-        block_key = section_map.get(section_slug)
-        if block_key and section_blocks.get(block_key):
-            template = template.replace("{{" + block_key + "}}", section_blocks[block_key])
-        else:
-            template = template.replace("{{" + block_key + "}}", "") if block_key else template
 
-    # Limpiar placeholders restantes
-    for block_key in section_map.values():
-        template = template.replace("{{" + block_key + "}}", "")
+    html_text = template
+    for key, value in titles.items():
+        html_text = html_text.replace("{{" + key + "}}", value)
 
-    if not content.get("full_name") and "<section>" not in template:
+    if not content.get("full_name") and "<section>" not in html_text:
         raise ValueError("Contenido insuficiente para generar el HTML.")
 
-    return template
+    return html_text

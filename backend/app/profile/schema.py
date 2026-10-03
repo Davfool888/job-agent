@@ -162,13 +162,16 @@ def normalize_entry(section: str, raw: dict | None, index: int = 0) -> tuple[dic
             raw.get("company") or raw.get("organization"), 200)
         entry["title"] = _clean_str(
             raw.get("title") or raw.get("role") or raw.get("position"), 200)
-        entry["start_date"] = normalize_date(raw.get("start_date"))
+        # Acepta tanto start_date/end_date como start/end (compatibilidad)
+        start_raw = raw.get("start_date") or raw.get("start")
+        end_raw = raw.get("end_date") or raw.get("end")
+        entry["start_date"] = normalize_date(start_raw)
         entry["is_current"] = bool(raw.get("is_current"))
         if entry["is_current"]:
             # Actualmente trabaja aqui: end_date = null, jamas fecha ficticia.
             entry["end_date"] = None
         else:
-            entry["end_date"] = normalize_date(raw.get("end_date"))
+            entry["end_date"] = normalize_date(end_raw)
         entry["modality"] = catalogs.norm_modality(raw.get("modality"))
         if raw.get("modality") and not entry["modality"]:
             warnings.append("Modalidad no reconocida; usa el selector.")

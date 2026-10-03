@@ -31,6 +31,7 @@ import {
   adaptCv,
   adaptDownloadUrl,
   type AdaptCvResult,
+  type ProfileIncompleteError,
 } from "../services/adapt";
 import { API_URL } from "../services/api";
 import {
@@ -50,6 +51,7 @@ export function JobDetail() {
   const [discarding, setDiscarding] = useState<Job | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profileIncomplete, setProfileIncomplete] = useState<{ message: string } | null>(null);
 
   // Visualizar el detalle registra la vista: new -> opened (pasa a Vistas).
   // kept se conserva para no perder "guardadas".
@@ -145,6 +147,7 @@ export function JobDetail() {
     setAdapting(true);
     setAdaptStage(ADAPT_STAGES[0]);
     setError(null);
+    setProfileIncomplete(null);
     // Etapas visibles mientras el backend procesa (puede tardar).
     let stage = 0;
     const timer = window.setInterval(() => {
@@ -154,7 +157,11 @@ export function JobDetail() {
     try {
       setAdapt(await adaptCv(jobId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error inesperado");
+      if (e instanceof Error && "code" in e && (e as ProfileIncompleteError).code === "PROFILE_INCOMPLETE") {
+        setProfileIncomplete({ message: e.message });
+      } else {
+        setError(e instanceof Error ? e.message : "Error inesperado");
+      }
     } finally {
       window.clearInterval(timer);
       setAdapting(false);
@@ -173,6 +180,22 @@ export function JobDetail() {
         }
       />
       <div className="content">
+        {error && <div className="alert-error">{error}</div>}
+        {profileIncomplete && (
+          <div className="alert-warning" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16, padding: 16, borderRadius: 8, background: "var(--warning-bg)", border: "1px solid var(--warning-border)" }}>
+            <div style={{ flex: 1 }}>
+              <strong style={{ display: "block", marginBottom: 4 }}>Perfil incompleto</strong>
+              <span style={{ fontSize: 14 }}>{profileIncomplete.message}</span>
+            </div>
+            <Link
+              to="/profile"
+              className="btn btn-primary btn-sm"
+              style={{ whiteSpace: "nowrap" }}
+            >
+              Completar perfil
+            </Link>
+          </div>
+        )}
         {error && <div className="alert-error">{error}</div>}
         {!jobId ? (
           <EmptyState title="ID de oferta inválido." />

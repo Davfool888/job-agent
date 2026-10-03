@@ -31,6 +31,8 @@ const SECTION_DIVIDERS = [
   { value: "none", label: "Sin divisor" },
 ] as const;
 
+const FONT_SIZES = [10, 11, 12, 14, 16] as const;
+
 const AVAILABLE_SECTIONS = [
   { slug: "summary", label: "Perfil Profesional" },
   { slug: "experience", label: "Experiencia Profesional" },
@@ -45,21 +47,71 @@ const AVAILABLE_SECTIONS = [
 ] as const;
 
 function SectionOrderEditor({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
   const available = AVAILABLE_SECTIONS.filter(s => !value.includes(s.slug));
+
+  const move = (from: number, to: number) => {
+    if (from === to) return;
+    const next = [...value];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
+  };
+
   return (
     <div className="field">
       <label>Orden de secciones</label>
       <p className="card-sub" style={{ marginBottom: 8 }}>
-        Arrastra para reordenar. Secciones disponibles:
+        Arrastra para reordenar (o usa las flechas). Secciones disponibles:
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {value.map((slug, idx) => {
           const section = AVAILABLE_SECTIONS.find(s => s.slug === slug);
           if (!section) return null;
+          const dragging = dragIdx === idx;
           return (
-            <div key={slug} className="card" style={{ display: "flex", alignItems: "center", gap: 8, padding: 8 }}>
-              <span style={{ cursor: "grab", fontSize: 18 }}>⋮⋮</span>
+            <div
+              key={slug}
+              className="card"
+              draggable
+              onDragStart={e => {
+                setDragIdx(idx);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => {
+                e.preventDefault();
+                if (dragIdx !== null) move(dragIdx, idx);
+                setDragIdx(null);
+              }}
+              onDragEnd={() => setDragIdx(null)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: 8,
+                opacity: dragging ? 0.5 : 1,
+                cursor: "grab",
+              }}
+            >
+              <span style={{ cursor: "grab", fontSize: 18 }} title="Arrastra para mover">⋮⋮</span>
               <span style={{ flex: 1 }}>{section.label}</span>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={idx === 0}
+                onClick={() => move(idx, idx - 1)}
+                title="Subir"
+              >
+                ↑
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={idx === value.length - 1}
+                onClick={() => move(idx, idx + 1)}
+                title="Bajar"
+              >
+                ↓
+              </button>
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => {
@@ -275,15 +327,18 @@ export function Settings() {
                 </select>
               </div>
 
-              <NumberInput
-                label="Tamaño de fuente (pt)"
-                value={pdfConfig.font_size_pt}
-                onChange={v => handleUpdate({ font_size_pt: v })}
-                min={8}
-                max={16}
-                step={1}
-                suffix="pt"
-              />
+              <div className="field">
+                <label>Tamaño de fuente</label>
+                <select
+                  className="select"
+                  value={String(pdfConfig.font_size_pt)}
+                  onChange={e => handleUpdate({ font_size_pt: Number(e.target.value) })}
+                >
+                  {FONT_SIZES.map(size => (
+                    <option key={size} value={size}>{size} pt</option>
+                  ))}
+                </select>
+              </div>
 
               {/* Formato de fecha */}
               <div className="field">
@@ -351,36 +406,14 @@ export function Settings() {
                 </label>
               </div>
 
-              {/* Color acento */}
-              <div className="field">
-                <label>Color acento</label>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="color"
-                    value={pdfConfig.accent_color}
-                    onChange={e => handleUpdate({ accent_color: e.target.value })}
-                    style={{ width: 50, height: 36, border: "none", borderRadius: 4, cursor: "pointer" }}
-                  />
-                  <input
-                    type="text"
-                    className="select"
-                    value={pdfConfig.accent_color}
-                    onChange={e => handleUpdate({ accent_color: e.target.value })}
-                    style={{ maxWidth: 120, fontFamily: "monospace" }}
-                    placeholder="#2c3e50"
-                  />
-                </div>
-              </div>
+              {/* Color: siempre negro (sin selector) */}
 
-              {/* Márgenes */}
+              {/* Márgenes fijas norma APA (25 mm en los 4 lados) */}
               <div className="field">
-                <label>Márgenes (mm)</label>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-                  <NumberInput label="Superior" value={pdfConfig.margin_top_mm} onChange={v => handleUpdate({ margin_top_mm: v })} min={10} max={40} suffix="mm" />
-                  <NumberInput label="Inferior" value={pdfConfig.margin_bottom_mm} onChange={v => handleUpdate({ margin_bottom_mm: v })} min={10} max={40} suffix="mm" />
-                  <NumberInput label="Izquierdo" value={pdfConfig.margin_left_mm} onChange={v => handleUpdate({ margin_left_mm: v })} min={10} max={40} suffix="mm" />
-                  <NumberInput label="Derecho" value={pdfConfig.margin_right_mm} onChange={v => handleUpdate({ margin_right_mm: v })} min={10} max={40} suffix="mm" />
-                </div>
+                <label>Márgenes</label>
+                <p className="card-sub" style={{ margin: 0 }}>
+                  Fijas norma APA: 25 mm en los 4 lados.
+                </p>
               </div>
 
               {/* Espaciado entre secciones */}
@@ -394,72 +427,6 @@ export function Settings() {
                 suffix="pt"
               />
 
-              {/* Divisor de secciones */}
-              <div className="field">
-                <label>Divisor de secciones</label>
-                <select
-                  className="select"
-                  value={pdfConfig.section_divider}
-                  onChange={e => handleUpdate({ section_divider: e.target.value })}
-                >
-                  {SECTION_DIVIDERS.map(d => (
-                    <option key={d.value} value={d.value}>{d.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Chips de skills */}
-              <div className="field" style={{ display: "flex", alignItems: "flex-end" }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <input
-                    type="checkbox"
-                    checked={pdfConfig.show_skill_chips}
-                    onChange={e => handleUpdate({ show_skill_chips: e.target.checked })}
-                  />
-                  <span className="card-sub">Mostrar chips de skills en Competencias Técnicas</span>
-                </label>
-              </div>
-
-              {/* Modo compacto */}
-              <div className="field" style={{ display: "flex", alignItems: "flex-end" }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <input
-                    type="checkbox"
-                    checked={pdfConfig.compact_mode}
-                    onChange={e => handleUpdate({ compact_mode: e.target.checked })}
-                  />
-                  <span className="card-sub">Modo compacto (menos espaciado general)</span>
-                </label>
-              </div>
-
-              {/* Estilo de cabecera */}
-              <div className="field">
-                <label>Estilo de cabecera</label>
-                <select
-                  className="select"
-                  value={pdfConfig.header_style}
-                  onChange={e => handleUpdate({ header_style: e.target.value })}
-                >
-                  {HEADER_STYLES.map(h => (
-                    <option key={h.value} value={h.value}>{h.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Formato de fecha */}
-              <div className="field">
-                <label>Formato de fecha</label>
-                <select
-                  className="select"
-                  value={pdfConfig.date_format}
-                  onChange={e => handleUpdate({ date_format: e.target.value })}
-                >
-                  {DATE_FORMATS.map(f => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
-              </div>
-
               {/* Orden de secciones */}
               <SectionOrderEditor
                 value={pdfConfig.section_order}
@@ -468,18 +435,6 @@ export function Settings() {
             </div>
           </div>
         )}
-
-        <div className="card">
-          <h3 className="card-title">Estado de la conexión</h3>
-          <p className="card-sub">
-            La autenticación se gestiona via Firebase (Google). Si el backend
-            no tiene credenciales, funciona en modo local sin autenticación.
-          </p>
-          <button className="btn btn-ghost btn-sm" onClick={ping} disabled={checking}>
-            {checking ? "Comprobando…" : "Probar backend"}
-          </button>
-          <span style={{ marginLeft: 10, fontSize: 13 }}>{health}</span>
-        </div>
       </div>
     </>
   );
