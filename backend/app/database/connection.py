@@ -66,6 +66,7 @@ def ensure_columns():
         "search_profile_ids": "TEXT",
         "found_at": "DATETIME",
         "first_seen_at": "DATETIME",
+        "owner_uid": "VARCHAR(128)",
     }
     with engine.begin() as conn:
         tables = {

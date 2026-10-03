@@ -381,17 +381,19 @@ def reset_pdf_config(
 
 
 @app.get("/stats")
-def stats(db: Session = Depends(get_db)):
+def stats(request: Request, db: Session = Depends(get_db)):
     """Resumen agregado con datos reales (para el dashboard)."""
-    return get_stats(db)
+    uid, email = _profile_identity(request)
+    return get_stats(db, uid=uid, email=email)
 
 
 @app.get("/analytics")
-def analytics(db: Session = Depends(get_db)):
+def analytics(request: Request, db: Session = Depends(get_db)):
     """Analytics Agent: distribuciones, skills, fuentes, CVs (§19)."""
     from app.agents.analytics_agent import summarize
 
-    return summarize(db)
+    uid, email = _profile_identity(request)
+    return summarize(db, uid=uid, email=email)
 
 
 @app.get("/ai/status")
@@ -561,6 +563,7 @@ def list_jobs(
         description="Solo ofertas con found_at (o created_at) posterior a "
         "esta fecha ISO. Ej: 2026-09-30T10:00:00",
     ),
+    request: Request = None,
     db: Session = Depends(get_db),
 ):
     if status and status not in JOB_STATUSES:
@@ -577,7 +580,8 @@ def list_jobs(
                 status_code=400,
                 detail="since debe ser fecha ISO (YYYY-MM-DDTHH:MM:SS).",
             )
-    return get_all_jobs(db=db, limit=limit, status=status, since=since_dt)
+    uid, email = _profile_identity(request)
+    return get_all_jobs(db=db, limit=limit, status=status, since=since_dt, uid=uid, email=email)
 
 
 @app.get("/sources")
@@ -677,7 +681,8 @@ def run_search_profile_now(
     ):
         raise HTTPException(status_code=404, detail="Perfil no encontrado.")
     try:
-        return run_profile(profile_id, db=db)
+        uid, email = _profile_identity(request)
+        return run_profile(profile_id, db=db, uid=uid, email=email)
     except Exception as error:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Run fallo: {error}")
 
@@ -827,6 +832,7 @@ def discovery_packs():
 @app.post("/jobs/discover")
 def discover_jobs(
     payload: dict[str, Any],
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Descubrimiento por capas: ejecuta N queries (titulos +
@@ -845,6 +851,7 @@ def discover_jobs(
     try:
         pages = max(1, min(int(payload.get("pages") or 1), 5))
         max_details = max(0, min(int(payload.get("max_details", 15)), 60))
+        uid, email = _profile_identity(request)
         return discover(
             db,
             source=source,
@@ -852,6 +859,8 @@ def discover_jobs(
             queries=list(queries) if queries else None,
             pages=pages,
             max_details=max_details,
+            uid=uid,
+            email=email,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
@@ -1085,6 +1094,7 @@ def search_jobs(
         description="Antigüedad maxima en dias (0 = todas). "
         "Descarta ofertas con publicacion mas vieja antes de guardar.",
     ),
+    request: Request = None,
     db: Session = Depends(get_db),
 ):
     if not q.strip():
@@ -1116,7 +1126,8 @@ def search_jobs(
     found_total = len(jobs)
     jobs = filter_by_max_age(jobs, max_age_days)
 
-    saved_jobs = save_jobs(db=db, jobs=jobs, search_query=q)
+    uid, email = _profile_identity(request)
+    saved_jobs = save_jobs(db=db, jobs=jobs, search_query=q, uid=uid, email=email)
 
     # Analisis despues del scraping (no solo mostrar resultados):
     # trae detalle donde falta, clasifica rol por contenido y persiste
@@ -1131,7 +1142,7 @@ def search_jobs(
         stats = enrich_and_analyze(
             db,
             scraper=scraper,
-            profile=get_profile(db),
+            profile=get_profile(db, uid=uid, email=email),
             rows=saved_jobs,
             max_details=max_details,
             delay=0,
@@ -1196,6 +1207,7 @@ def search_jobs_stream(
         0, ge=0, le=60,
         description="Antigüedad maxima en dias (0 = todas).",
     ),
+    request: Request = None,
     db: Session = Depends(get_db),
 ):
     """Busqueda progresiva (Server-Sent Events): emite las ofertas a
@@ -1226,6 +1238,7 @@ def search_jobs_stream(
 
     events: queue.Queue = queue.Queue()
     source_name = scraper.source
+    uid, email = _profile_identity(request)
 
     def _worker() -> None:
         from app.scheduler import _close_db
@@ -1236,7 +1249,7 @@ def search_jobs_stream(
             def on_page(jobs: list, page: int) -> None:
                 batch = filter_by_location(jobs, location)
                 batch = filter_by_max_age(batch, max_age_days)
-                saved = save_jobs(db=handle, jobs=batch, search_query=q)
+                saved = save_jobs(db=handle, jobs=batch, search_query=q, uid=uid, email=email)
                 events.put(("jobs", {
                     "page": page,
                     "jobs": [
@@ -1326,7 +1339,11 @@ def search_jobs_stream(
 
 
 @app.get("/jobs/{job_id}", response_model=JobResponse)
-def get_job(job_id: str, db: Session = Depends(get_db)):
+def get_job(job_id: str, request: Request, db: Session = Depends(get_db)):
+    from app.services.job_service import can_view_job
+    uid, email = _profile_identity(request)
+    if not can_view_job(db, job_id, uid, email):
+        raise HTTPException(status_code=404, detail="Oferta no encontrada.")
     job = get_job_by_id(db=db, job_id=job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
@@ -1334,8 +1351,12 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/jobs/{job_id}/analysis")
-def get_job_analysis(job_id: str, db: Session = Depends(get_db)):
+def get_job_analysis(job_id: str, request: Request, db: Session = Depends(get_db)):
     """Analisis estructurado guardado (§5, §14)."""
+    from app.services.job_service import can_view_job
+    uid, email = _profile_identity(request)
+    if not can_view_job(db, job_id, uid, email):
+        raise HTTPException(status_code=404, detail="Oferta no encontrada.")
     job = get_job_by_id(db=db, job_id=job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
@@ -1595,9 +1616,13 @@ def download_job_cv(
 
 @app.patch("/jobs/{job_id}/status", response_model=JobResponse)
 def patch_job_status(
-    job_id: str, payload: JobStatusUpdate, db: Session = Depends(get_db)
+    job_id: str, payload: JobStatusUpdate, request: Request, db: Session = Depends(get_db)
 ):
     """Conservar / descartar / recuperar / marcar abierta o postulada."""
+    from app.services.job_service import can_view_job
+    uid, email = _profile_identity(request)
+    if not can_view_job(db, job_id, uid, email):
+        raise HTTPException(status_code=404, detail="Oferta no encontrada.")
     job = get_job_by_id(db=db, job_id=job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
@@ -1616,13 +1641,13 @@ def patch_job_status(
 
 @app.get("/applications")
 def list_applications_endpoint(
-    limit: int = 200, db: Session = Depends(get_db)
+    request: Request = None, limit: int = 200, db: Session = Depends(get_db)
 ):
     """Postulaciones con eventos. En sqlite se derivan de ofertas
     aplicadas (compatibilidad); en Firestore leen la coleccion."""
     from app.services.job_service import list_applications
-
-    return list_applications(db, limit=limit)
+    uid, email = _profile_identity(request)
+    return list_applications(db, limit=limit, uid=uid)
 
 
 @app.get("/applications/{app_id}")

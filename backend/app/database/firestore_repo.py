@@ -639,9 +639,14 @@ def _with_timestamps(items: list) -> list:
 # Postulaciones + eventos + CVs + interacciones
 # ---------------------------------------------------------------------------
 
-def find_application_by_job(db, job_id: str) -> dict | None:
+def find_application_by_job(
+    db, job_id: str, uid: str | None = None
+) -> dict | None:
     from google.cloud.firestore_v1.base_query import FieldFilter
-    query = _col(db, "applications").where(filter=FieldFilter("job_id", "==", str(job_id))).limit(1)
+    query = _col(db, "applications").where(filter=FieldFilter("job_id", "==", str(job_id)))
+    if uid:
+        query = query.where(filter=FieldFilter("uid", "==", str(uid)))
+    query = query.limit(1)
     for snap in query.stream():
         data = snap.to_dict()
         data["id"] = snap.id
@@ -703,10 +708,15 @@ def list_application_events(db, app_id: str) -> list[dict]:
     return events
 
 
-def list_applications(db, limit: int = 200) -> list[dict]:
+def list_applications(db, limit: int = 200, uid: str | None = None) -> list[dict]:
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
     limit = max(1, min(limit, 500))
     apps = []
-    for snap in _col(db, "applications").stream():
+    query = _col(db, "applications")
+    if uid:
+        query = query.where(filter=FieldFilter("uid", "==", str(uid)))
+    for snap in query.stream():
         data = snap.to_dict()
         data["id"] = snap.id
         for key in ("created_at", "updated_at", "applied_at"):
@@ -714,6 +724,56 @@ def list_applications(db, limit: int = 200) -> list[dict]:
         apps.append(data)
     apps.sort(key=lambda a: (a.get("updated_at") or datetime.min), reverse=True)
     return apps[:limit]
+
+
+# ---------------------------------------------------------------------------
+# Estados de oferta por usuario (subcoleccion users/{uid}/job_states).
+# ---------------------------------------------------------------------------
+
+_JOB_STATE_FIELDS = (
+    "status", "discard_reason", "discard_note", "application_status",
+    "decided_at", "applied_at",
+)
+
+
+def _states_col(db, uid: str):
+    return db.collection("users").document(str(uid)).collection("job_states")
+
+
+def get_user_job_state(db, uid: str, job_id) -> dict | None:
+    snap = _states_col(db, uid).document(str(job_id)).get()
+    if not snap.exists:
+        return None
+    data = dict(snap.to_dict() or {})
+    out = {key: data.get(key) for key in _JOB_STATE_FIELDS}
+    for key in ("decided_at", "applied_at"):
+        value = out.get(key)
+        out[key] = value.isoformat() if hasattr(value, "isoformat") else value
+    if not out.get("status"):
+        out["status"] = "new"
+    return out
+
+
+def save_user_job_state(db, uid: str, job_id, fields: dict) -> dict:
+    ref = _states_col(db, uid).document(str(job_id))
+    snap = ref.get()
+    current = dict(snap.to_dict() or {}) if snap.exists else {}
+    merged = {**current,
+              **{k: v for k, v in (fields or {}).items()
+                 if k in _JOB_STATE_FIELDS}}
+    merged.setdefault("status", "new")
+    merged["updated_at"] = utcnow_naive()
+    ref.set(merged, merge=True)
+    return get_user_job_state(db, uid, job_id) or dict(merged)
+
+
+def list_user_job_states(db, uid: str) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for snap in _states_col(db, uid).stream():
+        state = get_user_job_state(db, uid, snap.id)
+        if state:
+            out[str(snap.id)] = state
+    return out
 
 
 def register_cv_version(db, job_id: str, meta: dict) -> dict:

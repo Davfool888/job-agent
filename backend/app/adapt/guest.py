@@ -99,8 +99,6 @@ def to_display_profile(flat: dict, rich: dict) -> dict:
             "speaking": lang.get("speaking") or "",
         })
 
-    # Fallback a datos demo si el perfil rico no tiene estos campos
-    demo_rich = jobs.GUEST_DEMO_RICH
     return {
         "full_name": personal.get("full_name") or flat.get("full_name", ""),
         "title": (personal.get("title_label")
@@ -129,22 +127,35 @@ def to_display_profile(flat: dict, rich: dict) -> dict:
                      for e in rich.get("projects") or []],
         "certifications": [entry_display("certifications", e)
                            for e in rich.get("certifications") or []],
-        # Nuevos campos para el template rediseñado (con fallback a datos demo)
-        "other_knowledge": rich.get("other_knowledge") or demo_rich.get("other_knowledge") or [],
-        "other_studies": rich.get("other_studies") or demo_rich.get("other_studies") or [],
+        # Sin fallback a datos demo: usar arrays vacíos si no hay datos
+        "other_knowledge": rich.get("other_knowledge") or [],
+        "other_studies": rich.get("other_studies") or [],
     }
 
 
 def get_profile_for_cv(db=None, user_id=None) -> dict:
-    """Perfil para adaptar el CV. Fase 1: ficticio de invitado siempre.
-
-    Lee el demo sembrado (GUEST_DEMO_*) via job_service para no
-    duplicar datos. `user_id` reservado para la migracion a reales.
+    """Perfil para adaptar el CV.
+    
+    - Si user_id es None o "__guest__": usa datos demo de invitado
+    - Si hay user_id real: usa el perfil del usuario autenticado (sin fallback a demo)
     """
     from app.services import job_service as jobs
 
-    flat = jobs.get_profile_for(db, "__guest__", "")
-    rich = jobs.get_rich_profile_for(db, "__guest__", "")
+    # Determinar qué perfil usar
+    if user_id and user_id != "__guest__":
+        # Usuario autenticado: usar su perfil real (sin fallback a demo)
+        flat = jobs.get_profile_for(db, user_id, "")
+        rich = jobs.get_rich_profile_for(db, user_id, "")
+        # Para usuarios autenticados, asegurar que los campos opcionales sean arrays vacíos si no existen
+        # para evitar fallback a datos demo en to_display_profile
+        rich.setdefault("other_knowledge", [])
+        rich.setdefault("other_studies", [])
+        rich.setdefault("certifications", [])
+    else:
+        # Invitado: usar datos demo
+        flat = jobs.get_profile_for(db, "__guest__", "")
+        rich = jobs.get_rich_profile_for(db, "__guest__", "")
+    
     flat = {k: v for k, v in flat.items() if not k.startswith("_")}
     return to_display_profile(flat, rich)
 

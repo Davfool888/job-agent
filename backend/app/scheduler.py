@@ -76,7 +76,7 @@ def build_queries(profile: dict) -> list[str]:
     return queries[:MAX_QUERIES_PER_RUN]
 
 
-def run_profile(profile_id, *, db=None) -> dict:
+def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | None = None) -> dict:
     """Ejecuta un perfil: scraping + dedup + analisis. Devuelve resumen."""
     from app.analysis.discovery import enrich_and_analyze
     from app.scraper.registry import get_scraper
@@ -110,7 +110,7 @@ def run_profile(profile_id, *, db=None) -> dict:
             profiles.touch_run(
                 db, profile_id, status="running", now=started_at
             )
-            user_profile = jobs.get_profile(db)
+            user_profile = jobs.get_profile(db, uid=uid, email=email)
             queries = build_queries(profile)
             sources = profile.get("sources") or ["computrabajo"]
             location = profile.get("location")
@@ -148,6 +148,7 @@ def run_profile(profile_id, *, db=None) -> dict:
                         saved = jobs.save_jobs(
                             db, found, search_query=query,
                             search_profile_id=str(profile_id),
+                            uid=uid, email=email,
                         )
                     except Exception as error:  # noqa: BLE001
                         summary["errors"].append(
@@ -161,6 +162,7 @@ def run_profile(profile_id, *, db=None) -> dict:
                         stats = enrich_and_analyze(
                             db, scraper=scraper, profile=user_profile,
                             rows=rows, max_details=8, delay=0.5,
+                            uid=uid, email=email,
                         )
                         summary["analyzed"] += stats["analyzed"]
                         summary["relevant"] += stats["relevant"]
@@ -206,7 +208,18 @@ def run_due_profiles(*, db=None) -> dict:
                         continue
                 except ValueError:
                     pass
-            summary = run_profile(profile["id"], db=db)
+            # Obtener uid/email del dueño del perfil
+            owner_uid = profile.get("owner_uid")
+            is_demo = profile.get("is_demo")
+            # Para perfiles demo (invitados), usar GUEST_OWNER
+            if is_demo:
+                from app.services.search_profiles import GUEST_OWNER
+                uid = GUEST_OWNER
+                email = ""
+            else:
+                uid = owner_uid
+                email = ""  # No tenemos email en el perfil, se puede obtener si se necesita
+            summary = run_profile(profile["id"], db=db, uid=uid, email="")
             result["ran"].append({
                 "profile_id": profile["id"],
                 "name": profile.get("name"),

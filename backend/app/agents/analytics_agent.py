@@ -26,8 +26,30 @@ def _as_list(value) -> list:
     return []
 
 
-def summarize(db: Session) -> dict:
+def summarize(db: Session, uid: str | None = None, email: str | None = None) -> dict:
     rows = iter_all_jobs(db, limit=5000)
+    
+    # Filtrar por usuario si hay sesión
+    if uid:
+        from app.services.search_profiles import _is_guest, GUEST_OWNER
+        store_uid = GUEST_OWNER if _is_guest(uid, email) else uid
+        filtered_rows = []
+        for row in rows:
+            # Verificar si la oferta pertenece al usuario
+            if getattr(row, 'owner_uid', None) == store_uid:
+                filtered_rows.append(row)
+                continue
+            # Verificar si fue encontrada por un perfil del usuario
+            profile_ids = _as_list(getattr(row, 'search_profile_ids', None))
+            if profile_ids:
+                from app.services import search_profiles as profiles
+                for pid in profile_ids:
+                    profile = profiles.get_profile(db, pid)
+                    if profile and profile.get('owner_uid') == store_uid:
+                        filtered_rows.append(row)
+                        break
+        rows = filtered_rows
+    
     total = len(rows)
 
     by_status: Counter = Counter()

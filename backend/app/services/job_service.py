@@ -18,6 +18,7 @@ from app.database.firestore_client import is_firestore
 from app.database.models import JOB_STATUSES
 from app.database.models import Job
 from app.database.models import Profile
+from app.database.models import UserJobState
 from app.database.models import UserProfile
 from app.database.models import UserRichProfile
 from app.scraper.base import fingerprint_of
@@ -400,34 +401,98 @@ def get_all_jobs(
     limit: int = 50,
     status: str | None = None,
     since: datetime | None = None,
+    uid: str | None = None,
+    email: str | None = None,
 ) -> list[Record]:
+    """Ofertas visibles para la sesion, con estado efectivo del usuario.
+
+    Sin uid: comportamiento historico (todo global). Con uid: solo
+    ofertas del usuario (owner_uid) o encontradas por sus perfiles,
+    con su estado propio superpuesto (el global queda como legado).
+    """
+    if not uid:
+        if is_firestore(db):
+            from app.database import firestore_repo as fs
+
+            return fs.list_jobs(db, limit=limit, status=status, since=since)
+        limit = max(1, min(limit, 500))
+        query = db.query(Job).order_by(Job.id.desc())
+        if status:
+            query = query.filter(Job.status == status)
+        if since:
+            query = query.filter(
+                (Job.found_at.isnot(None) & (Job.found_at >= since))
+                | ((Job.found_at.is_(None)) & (Job.created_at >= since))
+            )
+        return [orm_to_record(row) for row in query.limit(limit).all()]
+
+    # Con uid: filtrar por owner_uid o por perfiles de búsqueda del usuario
+    from app.services.search_profiles import _is_guest, GUEST_OWNER
+    store_uid = GUEST_OWNER if _is_guest(uid, email) else uid
+
     if is_firestore(db):
         from app.database import firestore_repo as fs
 
-        return fs.list_jobs(db, limit=limit, status=status, since=since)
+        candidates = fs.list_jobs(db, limit=5000, status=None, since=since)
+    else:
+        query = db.query(Job).order_by(Job.id.desc())
+        if since:
+            query = query.filter(
+                (Job.found_at.isnot(None) & (Job.found_at >= since))
+                | ((Job.found_at.is_(None)) & (Job.created_at >= since))
+            )
+        candidates = [orm_to_record(row) for row in query.limit(5000).all()]
+
+    # Filtrar por owner_uid o por perfiles de búsqueda
+    visible = []
+    for record in candidates:
+        # Verificar si la oferta pertenece al usuario
+        if getattr(record, 'owner_uid', None) == store_uid:
+            visible.append(record)
+            continue
+        # Verificar si fue encontrada por un perfil del usuario
+        profile_ids = _parse_list(getattr(record, 'search_profile_ids', None))
+        if profile_ids:
+            from app.services import search_profiles as profiles
+            for pid in profile_ids:
+                profile = profiles.get_profile(db, pid)
+                if profile and profile.get('owner_uid') == store_uid:
+                    visible.append(record)
+                    break
+
+    # Aplicar estado del usuario
+    states = _all_user_states(db, store_uid)
+    out: list[Record] = []
+    for record in visible:
+        record = _apply_state(record, states.get(record.id))
+        if status and record.status != status:
+            continue
+        out.append(record)
     limit = max(1, min(limit, 500))
-    query = db.query(Job).order_by(Job.id.desc())
-    if status:
-        query = query.filter(Job.status == status)
-    if since:
-        query = query.filter(
-            (Job.found_at.isnot(None) & (Job.found_at >= since))
-            | ((Job.found_at.is_(None)) & (Job.created_at >= since))
-        )
-    return [orm_to_record(row) for row in query.limit(limit).all()]
+    return out[:limit]
 
 
-def get_job_by_id(db: Session, job_id) -> Record | None:
+def get_job_by_id(
+    db: Session, job_id, uid: str | None = None, email: str | None = None
+) -> Record | None:
     if is_firestore(db):
         from app.database import firestore_repo as fs
 
-        return fs.get_job(db, job_id)
-    try:
-        numeric = int(job_id)
-    except (TypeError, ValueError):
+        record = fs.get_job(db, job_id)
+    else:
+        try:
+            numeric = int(job_id)
+        except (TypeError, ValueError):
+            return None
+        row = db.query(Job).filter(Job.id == numeric).first()
+        record = orm_to_record(row) if row else None
+    if record is None or not uid:
+        return record
+    if record.id not in _visible_ids(db, uid, email):
         return None
-    row = db.query(Job).filter(Job.id == numeric).first()
-    return orm_to_record(row) if row else None
+    return _apply_state(
+        record,
+        get_user_job_state(db, _store_uid(uid, email), record.id))
 
 
 def get_job_by_url(db: Session, url: str) -> Record | None:
@@ -486,6 +551,8 @@ def save_jobs(
     jobs: list[dict],
     search_query: str | None = None,
     search_profile_id: str | None = None,
+    uid: str | None = None,
+    email: str | None = None,
 ) -> list[Record]:
     now = datetime.utcnow()
     saved: list[Record] = []
@@ -567,7 +634,7 @@ def save_jobs(
             touched_fps.add(new_fp)
             continue
 
-        job = create_job_row(db, {
+        job_data = {
             "title": title,
             "company": data.get("company") or "",
             "location": data.get("location") or "",
@@ -592,7 +659,13 @@ def save_jobs(
             "modality": data.get("modality") or "",
             "salary": data.get("salary") or "",
             "content_hash": content_hash,
-        })
+        }
+        # Asociar oferta con usuario (si hay sesión)
+        if uid:
+            from app.services.search_profiles import _is_guest, GUEST_OWNER
+            store_uid = GUEST_OWNER if _is_guest(uid, email) else uid
+            job_data["owner_uid"] = store_uid
+        job = create_job_row(db, job_data)
         saved.append(job)
         touched_fps.add(fingerprint)
 
@@ -706,34 +779,59 @@ def update_job_status(
     return updated
 
 
-def get_stats(db: Session) -> dict:
+def get_stats(db: Session, uid: str | None = None, email: str | None = None) -> dict:
     """Resumen honesto calculado solo con datos reales de la BD.
     Delega en el Analytics Agent (solo lectura)."""
     from app.agents.analytics_agent import summarize
 
-    return summarize(db)
+    return summarize(db, uid=uid, email=email)
 
 
-def get_profile(db: Session) -> dict:
-    if is_firestore(db):
-        from app.database import firestore_repo as fs
+def get_profile(db: Session, uid: str | None = None, email: str | None = None) -> dict:
+    """Perfil visible para la sesión.
+    
+    - Admin/sin sesión: perfil base global
+    - Invitado: datos demo de Andrés Felipe
+    - Usuario Google: solo su perfil (vacío si no ha guardado)
+    """
+    # Sin sesión o admin: perfil base global
+    if not uid or _is_admin(email):
+        if is_firestore(db):
+            from app.database import firestore_repo as fs
 
-        merged = fs.get_profile_doc(db)
+            merged = fs.get_profile_doc(db)
+            _merge_rich_profile(merged)
+            return merged
+        row = db.query(Profile).filter(Profile.id == 1).first()
+        if not row:
+            row = Profile(id=1, data=json.dumps(DEFAULT_PROFILE))
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+        try:
+            data = json.loads(row.data or "{}")
+        except ValueError:
+            data = {}
+        merged = {**DEFAULT_PROFILE, **data}
         _merge_rich_profile(merged)
         return merged
-    row = db.query(Profile).filter(Profile.id == 1).first()
-    if not row:
-        row = Profile(id=1, data=json.dumps(DEFAULT_PROFILE))
-        db.add(row)
-        db.commit()
-        db.refresh(row)
-    try:
-        data = json.loads(row.data or "{}")
-    except ValueError:
-        data = {}
-    merged = {**DEFAULT_PROFILE, **data}
-    _merge_rich_profile(merged)
-    return merged
+
+    # Invitado: datos demo de Andrés Felipe
+    from app.services.search_profiles import _is_guest, GUEST_OWNER
+    if _is_guest(uid, email):
+        _ensure_guest_demo_flat(db)
+        stored = _stored_user_flat(db, GUEST_OWNER)
+        out = {key: stored.get(key, DEFAULT_PROFILE[key])
+               for key in DEFAULT_PROFILE}
+        out["scope"] = "demo"
+        return out
+
+    # Usuario Google: solo su perfil (vacío si no ha guardado)
+    stored = _stored_user_flat(db, uid)
+    out = {key: stored.get(key, DEFAULT_PROFILE[key])
+           for key in DEFAULT_PROFILE}
+    out["scope"] = "own"
+    return out
 
 
 def _merge_rich_profile(merged: dict) -> None:
@@ -1366,6 +1464,109 @@ def _ensure_guest_demo_rich(db) -> None:
     _store_user_rich(db, GUEST_OWNER, normalized)
 
 
+# ---------------------------------------------------------------------------
+# Funciones auxiliares de visibilidad por usuario
+# ---------------------------------------------------------------------------
+
+def _store_uid(uid: str | None, email: str | None) -> str | None:
+    """Devuelve el uid a usar para almacenamiento (invitados comparten GUEST_OWNER)."""
+    from app.services.search_profiles import _is_guest, GUEST_OWNER
+    if not uid:
+        return None
+    if _is_guest(uid, email):
+        return GUEST_OWNER
+    return uid
+
+
+def _visible_ids(db: Session, uid: str | None, email: str | None) -> set[str]:
+    """IDs de ofertas visibles para el usuario (por owner_uid o perfiles)."""
+    if not uid:
+        return set()
+    store_uid = _store_uid(uid, email)
+    visible = set()
+    # Ofertas del usuario
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+        for snap in fs._col(db, "jobs").stream():
+            data = snap.to_dict()
+            if data.get("owner_uid") == store_uid:
+                visible.add(snap.id)
+    else:
+        rows = db.query(Job).filter(Job.owner_uid == store_uid).all()
+        for row in rows:
+            visible.add(str(row.id))
+    # Ofertas encontradas por perfiles del usuario
+    from app.services import search_profiles as profiles
+    for profile in profiles.list_profiles(db):
+        if profile.get("owner_uid") == store_uid:
+            pid = str(profile["id"])
+            if is_firestore(db):
+                from app.database import firestore_repo as fs
+                for snap in fs._col(db, "jobs").stream():
+                    data = snap.to_dict()
+                    pids = data.get("search_profile_ids") or []
+                    if pid in pids:
+                        visible.add(snap.id)
+            else:
+                rows = db.query(Job).all()
+                for row in rows:
+                    pids = _parse_list(getattr(row, "search_profile_ids", None))
+                    if pid in pids:
+                        visible.add(str(row.id))
+    return visible
+
+
+def _all_user_states(db: Session, store_uid: str | None) -> dict[str, dict]:
+    """Estados de oferta por usuario (subcoleccion users/{uid}/job_states)."""
+    if not store_uid:
+        return {}
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+        return fs.list_user_job_states(db, store_uid)
+    # SQLite: no hay tabla de estados por usuario
+    return {}
+
+
+def _apply_state(record: Record, state: dict | None) -> Record:
+    """Aplica el estado del usuario a un record (sin mutar el original)."""
+    if not state:
+        return record
+    record.status = state.get("status") or record.status
+    if state.get("discard_reason"):
+        record.discard_reason = state.get("discard_reason")
+    if state.get("discard_note"):
+        record.discard_note = state.get("discard_note")
+    if state.get("application_status"):
+        record.application_status = state.get("application_status")
+    if state.get("decided_at"):
+        record.decided_at = state.get("decided_at")
+    if state.get("applied_at"):
+        record.applied_at = state.get("applied_at")
+    return record
+
+
+def can_view_job(db: Session, job_id: str, uid: str | None, email: str | None) -> bool:
+    """Verifica si un usuario puede ver una oferta específica."""
+    if not uid:
+        return True  # Sin sesión: acceso legado
+    store_uid = _store_uid(uid, email)
+    job = get_job_by_id(db, job_id)
+    if not job:
+        return False
+    # Verificar si la oferta pertenece al usuario
+    if getattr(job, 'owner_uid', None) == store_uid:
+        return True
+    # Verificar si fue encontrada por un perfil del usuario
+    profile_ids = _parse_list(getattr(job, 'search_profile_ids', None))
+    if profile_ids:
+        from app.services import search_profiles as profiles
+        for pid in profile_ids:
+            profile = profiles.get_profile(db, pid)
+            if profile and profile.get('owner_uid') == store_uid:
+                return True
+    return False
+
+
 def _assemble_rich(base_rich: dict, flat: dict) -> dict:
     """Normaliza + valida un perfil estructurado y le pega su plano."""
     from app.profile.perspectives import SECTIONS
@@ -1536,19 +1737,19 @@ def analyze_pending(db: Session, limit: int = 50) -> dict:
     return {"analyzed": analyzed, "relevant": relevant}
 
 
-def list_applications(db, limit: int = 200) -> list[dict]:
+def list_applications(db, limit: int = 200, uid: str | None = None) -> list[dict]:
     """Postulaciones con su ultimo evento. En sqlite se derivan de las
     ofertas marcadas como aplicadas (compatibilidad)."""
     if is_firestore(db):
         from app.database import firestore_repo as fs
 
-        apps = fs.list_applications(db, limit=limit)
+        apps = fs.list_applications(db, limit=limit, uid=uid)
         for application in apps:
             events = fs.list_application_events(db, application["id"])
             application["events"] = events
             application["last_event"] = events[0] if events else None
         return apps
-    applied = get_all_jobs(db, limit=limit, status="applied")
+    applied = get_all_jobs(db, limit=limit, status="applied", uid=uid)
     return [
         {
             "id": f"job-{job.id}",

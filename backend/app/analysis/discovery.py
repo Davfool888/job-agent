@@ -113,6 +113,8 @@ def enrich_and_analyze(
     rows: list,
     max_details: int = 10,
     delay: float = 1.0,
+    uid: str | None = None,
+    email: str | None = None,
 ) -> dict:
     """Capa 4 reutilizable: trae detalle donde falta (priorizando
     señales baratas), analiza titulo+descripcion+requisitos contra el
@@ -190,6 +192,8 @@ def discover(
     pages: int = 1,
     max_details: int = 15,
     delay: float = 1.0,
+    uid: str | None = None,
+    email: str | None = None,
 ) -> dict:
     """Ejecuta descubrimiento por capas y devuelve resumen honesto."""
     from app.scraper.registry import get_scraper
@@ -222,7 +226,7 @@ def discover(
             errors.append({"query": query, "error": str(error)[:200]})
             logger.warning("Discovery fallo query %r: %s", query, error)
             continue
-        saved = jobs.save_jobs(db, found, search_query=query)
+        saved = jobs.save_jobs(db, found, search_query=query, uid=uid, email=email)
         ids = [job.id for job in saved]
         _tag_discovered(db, ids, slug)
         all_ids.update(ids)
@@ -241,6 +245,8 @@ def discover(
         rows=rows,
         max_details=max_details,
         delay=delay,
+        uid=uid,
+        email=email,
     )
     analyzed = stats["analyzed"]
     relevant = stats["relevant"]

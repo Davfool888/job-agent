@@ -247,6 +247,13 @@ class Job(Base):
         nullable=True,
     )
 
+    # Dueño de la oferta (uid Firebase). None = legado/global.
+    owner_uid = Column(
+        String(128),
+        nullable=True,
+        index=True,
+    )
+
     found_at = Column(
         DateTime,
         nullable=True,
@@ -448,6 +455,36 @@ class UserRichProfile(Base):
     uid = Column(String(128), primary_key=True, index=True)
 
     data = Column(Text, nullable=False, default="{}")
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
+class UserJobState(Base):
+    """Estado de una oferta PARA un usuario (visto/guardado/descartado/
+    postulado). Las ofertas son un catalogo global con dedup; las
+    DECISIONES son por usuario y jamas se mezclan."""
+
+    __tablename__ = "user_job_states"
+
+    uid = Column(String(128), primary_key=True, index=True)
+
+    job_id = Column(String(64), primary_key=True, index=True)
+
+    status = Column(String(50), nullable=False, default="new")
+
+    discard_reason = Column(String(200), nullable=True)
+
+    discard_note = Column(Text, nullable=True)
+
+    application_status = Column(String(50), nullable=True)
+
+    decided_at = Column(DateTime, nullable=True)
+
+    applied_at = Column(DateTime, nullable=True)
 
     updated_at = Column(
         DateTime,
