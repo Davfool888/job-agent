@@ -15,6 +15,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import Callable
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -200,6 +201,7 @@ class ElEmpleoScraper(BaseScraper):
         max_pages: int = 1,
         include_details: bool = False,
         location: str | None = None,
+        on_page: Callable[[list[dict], int], None] | None = None,
     ) -> list[dict]:
         max_pages = max(1, min(max_pages, 10))
         all_jobs: list[dict] = []
@@ -216,6 +218,8 @@ class ElEmpleoScraper(BaseScraper):
             for job in fresh:
                 seen.add(job["url"])
             all_jobs.extend(fresh)
+            if on_page is not None:
+                on_page(list(fresh), page)
             if len(jobs) < 5:
                 break
             if page < max_pages:

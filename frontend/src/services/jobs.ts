@@ -1,10 +1,11 @@
-import { api } from "./api";
+import { API_URL, api } from "./api";
 import type {
   Job,
   JobDetailExtra,
   SearchResult,
   StatsSummary,
   StatusUpdatePayload,
+  StreamEvent,
 } from "../types/job";
 
 export async function fetchJobs(
@@ -48,6 +49,60 @@ export async function searchJobs(
     },
   });
   return data;
+}
+
+export interface StreamSearchParams {
+  q: string;
+  pages?: number;
+  source?: string;
+  location?: string;
+  maxAgeDays?: number;
+}
+
+// Busqueda progresiva (SSE): llama onEvent por cada pagina guardada.
+// Devuelve funcion para cancelar. Al cerrar limpio tras "done" no hay
+// error; si el servidor corta antes, llega error de conexion.
+export function streamSearchJobs(
+  params: StreamSearchParams,
+  onEvent: (event: StreamEvent | { type: "connection-error" }) => void,
+): () => void {
+  const query = new URLSearchParams({
+    q: params.q,
+    pages: String(params.pages ?? 1),
+    source: params.source ?? "computrabajo",
+    ...(params.location?.trim()
+      ? { location: params.location.trim() }
+      : {}),
+    ...(params.maxAgeDays && params.maxAgeDays > 0
+      ? { max_age_days: String(params.maxAgeDays) }
+      : {}),
+  });
+  const source = new EventSource(
+    `${API_URL}/jobs/search/stream?${query.toString()}`,
+  );
+  let finished = false;
+  source.onmessage = (message) => {
+    try {
+      const event = JSON.parse(message.data) as StreamEvent;
+      if (event.type === "done" || event.type === "error") {
+        finished = true;
+        source.close();
+      }
+      onEvent(event);
+    } catch {
+      // Linea no-JSON (ping ": ..."): se ignora.
+    }
+  };
+  source.onerror = () => {
+    source.close();
+    if (!finished) {
+      onEvent({ type: "connection-error" });
+    }
+  };
+  return () => {
+    finished = true;
+    source.close();
+  };
 }
 
 export async function fetchSources(): Promise<string[]> {

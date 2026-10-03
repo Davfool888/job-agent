@@ -110,7 +110,8 @@ def test_upload_download_replace_delete():
             dl = client.get(f"/search-profiles/{pid}/cv/download")
             assert dl.status_code == 200
             assert dl.content.startswith(b"%PDF-")
-            assert "attachment" in dl.headers.get("content-disposition", "")
+            # inline: se previsualiza en el navegador (también descargable).
+            assert "inline" in dl.headers.get("content-disposition", "")
 
             # Reemplazo: segundo PDF pisa al primero.
             pdf2 = make_pdf("Segunda version del CV")

@@ -14,6 +14,7 @@ Cada fuente (computrabajo, magneto, elempleo, ...) implementa
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from datetime import timedelta
 import hashlib
@@ -294,9 +295,16 @@ class BaseScraper:
         max_pages: int = 1,
         include_details: bool = False,
         location: str | None = None,
+        on_page: Callable[[list[dict], int], None] | None = None,
     ) -> list[dict]:
         """Busca ofertas. `location` filtra por ciudad (algunas fuentes
-        lo aplican en el sitio; el resto filtra por texto)."""
+        lo aplican en el sitio; el resto filtra por texto).
+
+        `on_page` (opcional): callable(fresh: list[dict], page: int)
+        invocado por cada pagina scrapeada con las ofertas NUEVAS de
+        esa pagina (antes de filtros finales como relevancia/ciudad en
+        algunas fuentes). Sirve para streaming progresivo; los errores
+        del callback abortan la busqueda (el llamador los reporta)."""
         raise NotImplementedError
 
     def get_job_detail(self, url: str) -> dict:

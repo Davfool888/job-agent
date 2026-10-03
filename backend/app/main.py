@@ -882,6 +882,8 @@ def download_adapt_cv(
 
 # IMPORTANTE: /jobs/search debe ir ANTES de /jobs/{job_id},
 # si no FastAPI interpreta "search" como un job_id.
+# si no FastAPI interpreta "search" como un job_id.
+# si no FastAPI interpreta "search" como un job_id.
 @app.get("/jobs/search")
 def search_jobs(
     q: str = Query(..., min_length=2, description="Ej: desarrollador python"),
@@ -995,6 +997,158 @@ def search_jobs(
             for job in saved_jobs
         ],
     }
+
+
+@app.get("/jobs/search/stream")
+def search_jobs_stream(
+    q: str = Query(..., min_length=2, description="Ej: desarrollador python"),
+    pages: int = Query(1, ge=1, le=10),
+    source: str = Query(
+        "computrabajo", description="Fuente: computrabajo | magneto | ..."
+    ),
+    analyze: bool = Query(
+        True,
+        description="Analizar ofertas al final (match_score, "
+        "detected_role, evidence).",
+    ),
+    max_details: int = Query(
+        10, ge=0, le=30, description="Detalles a traer para ofertas sin descripcion"
+    ),
+    location: str | None = Query(
+        None,
+        description="Filtrar por ciudad antes de guardar.",
+    ),
+    max_age_days: int = Query(
+        0, ge=0, le=60,
+        description="Antigüedad maxima en dias (0 = todas).",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Busqueda progresiva (Server-Sent Events): emite las ofertas a
+    medida que cada pagina se scrapea y guarda, sin esperar al final.
+
+    Eventos: started, jobs{page, jobs[]}, analyzing, done{...}, error.
+    El scraping corre en un hilo con su propia sesion de BD; al
+    cerrar el cliente se deja de emitir (lo ya guardado persiste).
+    Misma deduplicacion y filtros que GET /jobs/search.
+    """
+    import json as _json
+    import queue
+    import threading
+
+    from fastapi.responses import StreamingResponse
+
+    from app.scraper.base import filter_by_max_age
+    from app.scraper.base import filter_by_location
+
+    if not q.strip():
+        raise HTTPException(
+            status_code=400, detail="La consulta no puede estar vacia."
+        )
+    try:
+        scraper = get_scraper(source)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    events: queue.Queue = queue.Queue()
+    source_name = scraper.source
+
+    def _worker() -> None:
+        from app.scheduler import _close_db
+        from app.scheduler import _new_db
+
+        handle, needs_close = _new_db()
+        try:
+            def on_page(jobs: list, page: int) -> None:
+                batch = filter_by_location(jobs, location)
+                batch = filter_by_max_age(batch, max_age_days)
+                saved = save_jobs(db=handle, jobs=batch, search_query=q)
+                events.put(("jobs", {
+                    "page": page,
+                    "jobs": [
+                        {"id": job.id, "title": job.title,
+                         "company": job.company,
+                         "location": job.location, "url": job.url,
+                         "source": job.source}
+                        for job in saved
+                    ],
+                }))
+
+            found = scraper.search(
+                q, max_pages=pages, include_details=False,
+                location=location, on_page=on_page)
+            events.put(("finished", {"found": len(found)}))
+        except Exception as error:  # noqa: BLE001
+            events.put(("error", str(error)[:300]))
+        finally:
+            _close_db(handle, needs_close)
+
+    def _event(payload: dict) -> str:
+        return f"data: {_json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    def gen():
+        yield _event({"type": "started", "query": q, "pages": pages,
+                      "source": source_name, "location": location,
+                      "max_age_days": max_age_days})
+        thread = threading.Thread(target=_worker, daemon=True)
+        thread.start()
+        saved_ids: list[str] = []
+        found_total = 0
+        while True:
+            try:
+                kind, payload = events.get(timeout=15)
+            except queue.Empty:
+                yield ": ping\n\n"
+                if not thread.is_alive():
+                    yield _event({"type": "error", "message":
+                                  "Busqueda interrumpida."})
+                    return
+                continue
+            if kind == "jobs":
+                for job in payload.get("jobs", []):
+                    if job.get("id") not in saved_ids:
+                        saved_ids.append(job["id"])
+                yield _event({"type": "jobs", **payload})
+            elif kind == "finished":
+                found_total = int(payload.get("found", 0))
+                break
+            elif kind == "error":
+                yield _event({"type": "error",
+                              "message": payload})
+                return
+        analyzed = 0
+        relevant = 0
+        details_fetched = 0
+        if analyze and saved_ids:
+            yield _event({"type": "analyzing",
+                          "count": len(saved_ids)})
+            try:
+                from app.analysis.discovery import enrich_and_analyze
+                from app.services.job_service import get_jobs_by_ids
+                from app.services.job_service import get_profile
+
+                rows = get_jobs_by_ids(db, saved_ids)
+                stats = enrich_and_analyze(
+                    db, scraper=scraper, profile=get_profile(db),
+                    rows=rows, max_details=max_details, delay=0)
+                analyzed = stats["analyzed"]
+                relevant = stats["relevant"]
+                details_fetched = stats["details_fetched"]
+            except Exception as error:  # noqa: BLE001
+                yield _event({"type": "error",
+                              "message": f"Analisis fallo: {error}"[:300]})
+                return
+        yield _event({"type": "done", "query": q, "pages": pages,
+                      "source": source_name, "location": location,
+                      "max_age_days": max_age_days, "found": found_total,
+                      "saved_unique": len(saved_ids), "analyzed": analyzed,
+                      "relevant": relevant,
+                      "details_fetched": details_fetched})
+
+    return StreamingResponse(
+        gen(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/jobs/{job_id}", response_model=JobResponse)

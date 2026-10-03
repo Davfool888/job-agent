@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Header } from "../components/layout/Header";
 import { ErrorState, LoadingState } from "../components/jobs/States";
-import { useJobs, useJobSearch, useSources, useStats } from "../hooks/useApi";
+import { useJobs, useJobSearchStream, useSources, useStats } from "../hooks/useApi";
 import { useSearchSession } from "../context/SearchSessionContext";
 import { discoverJobs } from "../services/jobs";
 import { fetchSchedulerStatus } from "../services/searchProfiles";
@@ -35,7 +35,7 @@ export function Dashboard() {
   const [refreshKey, setRefreshKey] = useState(0);
   const jobs = useJobs();
   const stats = useStats(refreshKey);
-  const search = useJobSearch();
+  const search = useJobSearchStream();
   const { sources } = useSources();
   // Antigüedad maxima por defecto (se guarda en este navegador).
   const [maxAge, setMaxAge] = useState<number>(() =>
@@ -96,13 +96,23 @@ export function Dashboard() {
     setResult(null);
     try {
       if (source === "all" && sources.length > 0) {
-        // Todas las fuentes, una por una (cada scraper tarda segundos).
+        // Todas las fuentes, una por una en streaming: las ofertas se
+        // acumulan en vivo a medida que cada fuente las entrega.
         const summaries: SourceSummary[] = [];
+        let first = true;
         for (const src of sources) {
           try {
-            const r = await search.run(query.trim(), pages, false, src, city, maxAge);
-            summaries.push({ source: src, found: r.found, saved: r.saved });
+            const last = await search.run(
+              query.trim(), pages, src, city, maxAge, !first,
+            );
+            first = false;
+            summaries.push({
+              source: src,
+              found: last?.found ?? 0,
+              saved: last?.saved ?? 0,
+            });
           } catch {
+            first = false;
             summaries.push({
               source: src,
               found: 0,
@@ -113,8 +123,18 @@ export function Dashboard() {
         }
         setMulti(summaries);
       } else {
-        const r = await search.run(query.trim(), pages, false, source, city, maxAge);
-        setResult(r);
+        const last = await search.run(query.trim(), pages, source, city, maxAge);
+        if (last) {
+          setResult({
+            query: query.trim(),
+            pages,
+            source,
+            location: city || null,
+            found: last.found,
+            saved: last.saved,
+            jobs: [],
+          });
+        }
       }
       jobs.reload();
       setRefreshKey((k) => k + 1);
@@ -249,6 +269,77 @@ export function Dashboard() {
       <div className="content">
         {search.searchError && (
           <div className="alert-error">{search.searchError}</div>
+        )}
+        {(search.searching || search.jobs.length > 0) && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
+              <p style={{ margin: 0, fontSize: 13, flex: 1 }}>
+                {search.analyzing ? (
+                  <>
+                    Analizando <strong>{search.found}</strong> ofertas…
+                  </>
+                ) : search.searching ? (
+                  <>
+                    Buscando <strong>“{query}”</strong>
+                    {search.pages > 1 && (
+                      <>
+                        {" "}· página {Math.max(search.page, 1)}/{search.pages}
+                      </>
+                    )}{" "}
+                    · <strong>{search.found}</strong> encontradas hasta ahora
+                  </>
+                ) : search.cancelled ? (
+                  <>
+                    Búsqueda detenida con <strong>{search.found}</strong>{" "}
+                    ofertas (lo guardado persiste).{" "}
+                    <Link to="/jobs">Ver ofertas</Link>
+                  </>
+                ) : (
+                  <>
+                    <strong>{search.found}</strong> ofertas encontradas.{" "}
+                    <Link to="/jobs">Ver ofertas</Link>
+                  </>
+                )}
+              </p>
+              {search.searching && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={search.cancel}
+                >
+                  Detener
+                </button>
+              )}
+            </div>
+            {search.jobs.length > 0 && (
+              <ul
+                style={{
+                  margin: "8px 0 0",
+                  paddingLeft: 18,
+                  fontSize: 13,
+                  maxHeight: 300,
+                  overflowY: "auto",
+                }}
+              >
+                {search.jobs.map((j) => (
+                  <li key={j.id} style={{ marginBottom: 4 }}>
+                    <Link to={`/jobs/${j.id}`}>{j.title}</Link>{" "}
+                    <span style={{ color: "var(--text-muted)" }}>
+                      · {j.company || "Empresa no indicada"}
+                      {j.location ? ` · ${j.location}` : ""} ·{" "}
+                      {sourceLabel(j.source)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
         {discoveryError && (
           <div className="alert-error">{discoveryError}</div>

@@ -264,8 +264,8 @@ def test_guest_demo_rich_seeded():
             assert skill in rich["soft_skills"]
         assert len(rich["target_roles"]) == 6
         assert set(rich["skills"]) >= {
-            "programming", "data_analysis", "backend", "databases",
-            "tools", "business"}
+            "analysis", "languages", "bi", "databases", "automation",
+            "backend", "ml", "tools"}
         assert len(rich["languages"]) == 2
         assert rich["languages"][0]["language"] == "en"
         assert rich["languages"][1]["level"] == "A2"
@@ -274,12 +274,13 @@ def test_guest_demo_rich_seeded():
         assert len(rich["projects"]) == 2
         assert len(rich["certifications"]) == 2
         exp1 = rich["experience"][0]
-        assert exp1["company"] == "FinanRed S.A.S."
+        assert exp1["company"] == "Banco de Bogotá"
         assert exp1["start_date"] == "2025-03-01"
+        assert exp1["end_date"] == "2025-12-01"
         assert exp1["modality"] == "HYBRID"
         assert exp1["city"]["id"] == "bogota"
-        assert exp1["contract_type"] == "indefinite"
-        assert len(exp1["perspectives"]) == 1
+        assert exp1["contract_type"] is None  # el fixture no lo trae
+        assert exp1["technical_skills"][:3] == ["Python", "SQL", "Power BI"]
         assert rich["certifications"][0]["issued_date"] == "2026-07-15"
         assert rich["certifications"][1]["expiry_date"] is None
         # El dataset mezcla ingles en perspectivas con base en ambos

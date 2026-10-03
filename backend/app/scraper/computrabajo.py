@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 
 from app.config import COMPUTRABAJO_BASE_URL
 from app.config import USER_AGENT
@@ -39,6 +40,7 @@ class ComputrabajoScraper(BaseScraper):
         max_pages: int = 1,
         include_details: bool = False,
         location: str | None = None,
+        on_page: Callable[[list[dict], int], None] | None = None,
     ) -> list[dict]:
         """Busca ofertas. Pagina con ?p=2, ?p=3... hasta max_pages."""
         max_pages = max(1, min(max_pages, 10))
@@ -63,6 +65,8 @@ class ComputrabajoScraper(BaseScraper):
             for job in fresh:
                 seen.add(job["url"])
             all_jobs.extend(fresh)
+            if on_page is not None:
+                on_page(list(fresh), page)
 
             # Si una pagina trae menos de ~15 resultados, no hay mas paginas.
             if len(jobs) < 5:

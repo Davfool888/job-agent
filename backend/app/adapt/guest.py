@@ -20,12 +20,24 @@ def _label(items: list[dict], value: str | None, fallback: str = "") -> str:
 
 
 def _display_date(iso: str | None, day: bool = False) -> str:
-    """'2025-03-01' -> '03/2025'; con day=True '15/07/2026'."""
+    """ISO '2025-03-01' -> '03/2025'; con day=True '15/07/2026'.
+
+    Tolera valores ya-display ('Mar 2025', '2021', 'Actualidad'):
+    los devuelve tal cual en vez de vaciarlos."""
+    import re as _re
+
     if not iso:
         return ""
-    parts = str(iso).split("-")
+    text = str(iso).strip()
+    if _re.match(r"^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2} \d{4}$", text):
+        return text
+    if _re.match(r"^\d{4}$", text):
+        return text
+    if text.lower() == "actualidad":
+        return "Actualidad"
+    parts = text.split("-")
     if len(parts) < 2:
-        return ""
+        return text
     if day and len(parts) >= 3:
         return f"{parts[2]}/{parts[1]}/{parts[0]}"
     return f"{parts[1]}/{parts[0]}"

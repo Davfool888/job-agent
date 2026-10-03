@@ -14,6 +14,27 @@ def _ensure_tables():
     Base.metadata.create_all(bind=engine)
 
 
+@pytest.fixture(autouse=True)
+def _fresh_guest_demo():
+    """Demo de invitado siempre recien sembrada (la BD de desarrollo
+    puede traer semillas viejas de otras versiones del fixture)."""
+    from app.services.search_profiles import GUEST_OWNER
+
+    db = _db()
+    try:
+        from app.database.models import UserProfile, UserRichProfile
+
+        db.query(UserProfile).filter(
+            UserProfile.uid == GUEST_OWNER).delete(
+                synchronize_session=False)
+        db.query(UserRichProfile).filter(
+            UserRichProfile.uid == GUEST_OWNER).delete(
+                synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
+
 def _db():
     from app.database.connection import SessionLocal
 
@@ -44,7 +65,8 @@ def test_matcher_offer_a_data_role():
     for skill in ("Python", "SQL", "Power BI", "Excel"):
         assert skill in result["matched_skills"]
     top_exp = result["experiences"][0]["item"]
-    assert top_exp["company"] == "FinanRed S.A.S."
+    assert top_exp["company"] == "Banco de Bogotá"
+    assert "Nómina" in top_exp["title"] or "Datos" in top_exp["title"]
 
 
 def test_matcher_offer_b_backend_role():
@@ -54,8 +76,10 @@ def test_matcher_offer_b_backend_role():
     result = matcher.match_offer_profile(offer, _guest_profile())
     assert "Python" in result["matched_skills"]
     assert "FastAPI" in result["matched_skills"]
+    # El fixture actual no trae experiencia backend pura: gana la
+    # entrada con mas overlap (datos), no una inventada.
     top_exp = result["experiences"][0]["item"]
-    assert top_exp["company"] == "TechNova Solutions"
+    assert top_exp["company"] == "Banco de Bogotá"
 
 
 def test_matcher_offer_c_prioritizes_retail_project():
@@ -79,7 +103,7 @@ def test_selector_compact_and_coherent():
     assert len(content["experiences"]) <= 3
     assert len(content["skills"]) <= 12
     assert "Python" in content["skills"]
-    assert content["experiences"][0]["company"] == "FinanRed S.A.S."
+    assert content["experiences"][0]["company"] == "Banco de Bogotá"
 
 
 def test_llm_off_by_default():

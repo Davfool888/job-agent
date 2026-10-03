@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -243,6 +244,7 @@ class MagnetoScraper(BaseScraper):
         max_pages: int = 1,
         include_details: bool = False,
         location: str | None = None,
+        on_page: Callable[[list[dict], int], None] | None = None,
     ) -> list[dict]:
         max_pages = max(1, min(max_pages, 10))
         all_jobs: list[dict] = []
@@ -270,6 +272,10 @@ class MagnetoScraper(BaseScraper):
             for job in fresh:
                 seen.add(job["url"])
             all_jobs.extend(fresh)
+            # Hook progresivo: emite ANTES del filtro de relevancia
+            # final (el endpoint vuelve a filtrar/ahorrar por pagina).
+            if on_page is not None:
+                on_page(list(fresh), page)
             if len(jobs) < 5:
                 break
             if page < max_pages:

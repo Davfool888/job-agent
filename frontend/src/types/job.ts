@@ -73,6 +73,27 @@ export interface SearchResult {
   }>;
 }
 
+// Eventos de GET /jobs/search/stream (Server-Sent Events).
+export interface StreamJobItem {
+  id: string;
+  title: string;
+  company: string | null;
+  location: string | null;
+  url: string;
+  source: string;
+}
+
+export type StreamEvent =
+  | { type: "started"; query: string; pages: number; source: string;
+      location?: string | null; max_age_days?: number }
+  | { type: "jobs"; page: number; jobs: StreamJobItem[] }
+  | { type: "analyzing"; count: number }
+  | { type: "done"; query: string; pages: number; source: string;
+      location?: string | null; max_age_days?: number; found: number;
+      saved_unique: number; analyzed: number; relevant: number;
+      details_fetched: number }
+  | { type: "error"; message: string };
+
 export interface JobDetailExtra {
   id: string;
   title: string;

@@ -221,11 +221,17 @@ def _experience_block(content: dict) -> str:
         sentences = _split_sentences(exp.get("description") or "")
         general = (f'<p class="item-p"><strong>Responsabilidad General:</strong> '
                    f"{esc(sentences[0])}</p>") if sentences else ""
+        # Bullets del autor si existen; si no, se derivan del resto de
+        # oraciones sin inventar contenido.
+        explicit = [str(b).strip() for b in
+                    (exp.get("bullets") or exp.get("achievements") or [])
+                    if str(b).strip()]
         rest = sentences[1:] if len(sentences) > 1 else []
+        items = explicit or rest
         bullets = ""
-        if rest:
+        if items:
             bullets = '<ul class="item-bullets">' + "".join(
-                f"<li>{esc(b)}</li>" for b in rest) + "</ul>"
+                f"<li>{esc(b)}</li>" for b in items) + "</ul>"
 
         entry_skills = list(exp.get("technical_skills") or []) + list(
             exp.get("soft_skills") or [])

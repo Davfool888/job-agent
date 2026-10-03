@@ -15,9 +15,19 @@ from app.profile import catalogs
 from app.profile.perspectives import normalize_entry as normalize_perspectives
 
 
+MESES_ES = {
+    "ene": 1, "enero": 1, "feb": 2, "febrero": 2, "mar": 3, "marzo": 3,
+    "abr": 4, "abril": 4, "may": 5, "mayo": 5, "jun": 6, "junio": 6,
+    "jul": 7, "julio": 7, "ago": 8, "agosto": 8, "sep": 9, "septiembre": 9,
+    "oct": 10, "octubre": 10, "nov": 11, "noviembre": 11, "dic": 12,
+    "diciembre": 12,
+}
+
+
 def normalize_date(value) -> str | None:
-    """Fecha -> 'YYYY-MM-DD'. Acepta date/datetime, 'YYYY-MM-DD' y
-    'YYYY-MM'. Todo lo demas -> None (jamas strings como 'abril 2022')."""
+    """Fecha -> 'YYYY-MM-DD'. Acepta date/datetime, 'YYYY-MM-DD',
+    'YYYY-MM', 'Mar 2025'/'marzo 2025' (es) y 'YYYY' (-> 1 de enero).
+    Todo lo demas -> None (jamas strings como 'abril 2022' sueltos)."""
     if value is None or value == "":
         return None
     if isinstance(value, datetime):
@@ -39,6 +49,15 @@ def normalize_date(value) -> str | None:
             return date(year, month, 1).isoformat()
         except ValueError:
             return None
+    match_year = re.match(r"^(\d{4})$", text)
+    if match_year:
+        return date(int(match_year.group(1)), 1, 1).isoformat()
+    match_es = re.match(
+        r"^([a-záéíóúñ]+)\s+(\d{4})$", text.lower())
+    if match_es:
+        month = MESES_ES.get(match_es.group(1))
+        if month:
+            return date(int(match_es.group(2)), month, 1).isoformat()
     return None
 
 

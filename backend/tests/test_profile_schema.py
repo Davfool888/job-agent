@@ -61,7 +61,9 @@ def test_normalize_date():
     assert profile_schema.normalize_date("2022-4") == "2022-04-01"
     assert profile_schema.normalize_date("abril de 2022") is None
     assert profile_schema.normalize_date("2022-2026") is None
-    assert profile_schema.normalize_date("Sep 2026") is None
+    # Meses en español si se aceptan (fixture del perfil demo los usa).
+    assert profile_schema.normalize_date("Sep 2026") == "2026-09-01"
+    assert profile_schema.normalize_date("marzo 2025") == "2025-03-01"
     assert profile_schema.normalize_date("") is None
     assert profile_schema.normalize_date(None) is None
     assert profile_schema.normalize_date("2022-13-01") is None

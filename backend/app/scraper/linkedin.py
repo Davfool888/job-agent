@@ -18,6 +18,7 @@ import logging
 import re
 import time
 import urllib.parse
+from collections.abc import Callable
 
 from bs4 import BeautifulSoup
 
@@ -153,6 +154,7 @@ class LinkedinScraper(BaseScraper):
         max_pages: int = 1,
         include_details: bool = False,
         location: str | None = None,
+        on_page: Callable[[list[dict], int], None] | None = None,
     ) -> list[dict]:
         max_pages = max(1, min(max_pages, 10))
         all_jobs: list[dict] = []
@@ -169,6 +171,8 @@ class LinkedinScraper(BaseScraper):
             for job in fresh:
                 seen.add(job["url"])
             all_jobs.extend(fresh)
+            if on_page is not None:
+                on_page(list(fresh), page)
             if len(jobs) < 5:
                 break
             if page < max_pages:
