@@ -10,6 +10,7 @@ from fastapi import Query
 from fastapi import Request
 from fastapi import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,7 @@ from app.database.connection import ensure_columns
 from app.database.connection import get_db
 from app.database.models import JOB_STATUSES
 from app.database.models import Job  # noqa: F401  (registra el modelo)
+from app.database.models import PDFConfig  # noqa: F401
 from app.database.models import Profile  # noqa: F401
 from app.database.models import ProfileCV  # noqa: F401
 from app.database.models import User  # noqa: F401
@@ -215,6 +217,165 @@ def auth_update_me(
         "is_profile_complete": bool((user.get("nombre") or "").strip())
         and bool((user.get("telefono") or "").strip()),
     }
+
+
+# ============================================================
+# PDF Config endpoints
+# ============================================================
+
+class PDFConfigOut(BaseModel):
+    font_family: str
+    font_size_pt: int
+    section_order: list[str]
+    date_format: str
+    show_skill_chips: bool
+    compact_mode: bool
+    header_style: str
+    section_divider: str
+    margin_top_mm: int
+    margin_bottom_mm: int
+    margin_left_mm: int
+    margin_right_mm: int
+    section_spacing_pt: int
+    accent_color: str
+
+    class Config:
+        from_attributes = True
+
+
+class PDFConfigIn(BaseModel):
+    font_family: str | None = None
+    font_size_pt: int | None = None
+    section_order: list[str] | None = None
+    date_format: str | None = None
+    show_skill_chips: bool | None = None
+    compact_mode: bool | None = None
+    header_style: str | None = None
+    section_divider: str | None = None
+    margin_top_mm: int | None = None
+    margin_bottom_mm: int | None = None
+    margin_left_mm: int | None = None
+    margin_right_mm: int | None = None
+    section_spacing_pt: int | None = None
+    accent_color: str | None = None
+
+
+def _pdf_config_to_out(cfg: PDFConfig) -> PDFConfigOut:
+    import json
+    return PDFConfigOut(
+        font_family=cfg.font_family,
+        font_size_pt=cfg.font_size_pt,
+        section_order=json.loads(cfg.section_order) if cfg.section_order else [],
+        date_format=cfg.date_format,
+        show_skill_chips=bool(cfg.show_skill_chips),
+        compact_mode=bool(cfg.compact_mode),
+        header_style=cfg.header_style,
+        section_divider=cfg.section_divider,
+        margin_top_mm=cfg.margin_top_mm,
+        margin_bottom_mm=cfg.margin_bottom_mm,
+        margin_left_mm=cfg.margin_left_mm,
+        margin_right_mm=cfg.margin_right_mm,
+        section_spacing_pt=cfg.section_spacing_pt,
+        accent_color=cfg.accent_color,
+    )
+
+
+@app.get("/pdf-config", response_model=PDFConfigOut)
+def get_pdf_config(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Obtiene la configuración de PDF del usuario autenticado."""
+    from app.auth import verify_bearer_token
+
+    claims = verify_bearer_token(request.headers.get("authorization"))
+    uid = claims["uid"]
+
+    cfg = db.query(PDFConfig).filter(PDFConfig.uid == uid).first()
+    if not cfg:
+        # Crear configuración por defecto
+        cfg = PDFConfig(uid=uid)
+        db.add(cfg)
+        db.commit()
+        db.refresh(cfg)
+    return _pdf_config_to_out(cfg)
+
+
+@app.put("/pdf-config", response_model=PDFConfigOut)
+def update_pdf_config(
+    payload: PDFConfigIn,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Actualiza la configuración de PDF del usuario autenticado."""
+    from app.auth import verify_bearer_token
+
+    claims = verify_bearer_token(request.headers.get("authorization"))
+    uid = claims["uid"]
+
+    cfg = db.query(PDFConfig).filter(PDFConfig.uid == uid).first()
+    if not cfg:
+        cfg = PDFConfig(uid=uid)
+        db.add(cfg)
+
+    import json as _json
+
+    if payload.font_family is not None:
+        cfg.font_family = payload.font_family
+    if payload.font_size_pt is not None:
+        cfg.font_size_pt = payload.font_size_pt
+    if payload.section_order is not None:
+        cfg.section_order = _json.dumps(payload.section_order)
+    if payload.date_format is not None:
+        cfg.date_format = payload.date_format
+    if payload.show_skill_chips is not None:
+        cfg.show_skill_chips = 1 if payload.show_skill_chips else 0
+    if payload.compact_mode is not None:
+        cfg.compact_mode = 1 if payload.compact_mode else 0
+    if payload.header_style is not None:
+        cfg.header_style = payload.header_style
+    if payload.section_divider is not None:
+        cfg.section_divider = payload.section_divider
+    if payload.margin_top_mm is not None:
+        cfg.margin_top_mm = payload.margin_top_mm
+    if payload.margin_bottom_mm is not None:
+        cfg.margin_bottom_mm = payload.margin_bottom_mm
+    if payload.margin_left_mm is not None:
+        cfg.margin_left_mm = payload.margin_left_mm
+    if payload.margin_right_mm is not None:
+        cfg.margin_right_mm = payload.margin_right_mm
+    if payload.section_spacing_pt is not None:
+        cfg.section_spacing_pt = payload.section_spacing_pt
+    if payload.accent_color is not None:
+        cfg.accent_color = payload.accent_color
+
+    cfg.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(cfg)
+    return _pdf_config_to_out(cfg)
+
+
+@app.post("/pdf-config/reset", response_model=PDFConfigOut)
+def reset_pdf_config(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Resetea la configuración de PDF a valores por defecto."""
+    from app.auth import verify_bearer_token
+
+    claims = verify_bearer_token(request.headers.get("authorization"))
+    uid = claims["uid"]
+
+    cfg = db.query(PDFConfig).filter(PDFConfig.uid == uid).first()
+    if cfg:
+        db.delete(cfg)
+        db.commit()
+    # Crear nueva con defaults
+    cfg = PDFConfig(uid=uid)
+    db.add(cfg)
+    db.commit()
+    db.refresh(cfg)
+    return _pdf_config_to_out(cfg)
 
 
 @app.get("/stats")
@@ -802,7 +963,7 @@ def tailor_job_profile(job_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/jobs/{job_id}/adapt-cv")
-def adapt_job_cv(job_id: str, db: Session = Depends(get_db)):
+def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db)):
     """Adaptar-perfil: matching deterministico + seleccion + HTML/CSS
     + PDF (Chromium) con el perfil ficticio de invitado. Sin LaTeX,
     sin LLM obligatorio. Errores controlados {success, error}."""
@@ -810,8 +971,19 @@ def adapt_job_cv(job_id: str, db: Session = Depends(get_db)):
 
     from app.adapt.service import adapt_profile_for_job, AdaptError, error_body
 
+    # Obtener UID del usuario autenticado (opcional, para config de PDF)
+    uid = None
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        try:
+            from app.auth import verify_bearer_token
+            claims = verify_bearer_token(auth_header)
+            uid = claims.get("uid")
+        except Exception:
+            pass  # Sin auth válido, usar defaults
+
     try:
-        return adapt_profile_for_job(db, job_id)
+        return adapt_profile_for_job(db, job_id, uid)
     except AdaptError as error:
         return JSONResponse(
             status_code=error.http, content=error_body(error))

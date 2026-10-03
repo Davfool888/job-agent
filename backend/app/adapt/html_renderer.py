@@ -457,10 +457,122 @@ def _languages_block(content: dict) -> str:
     return _section("Idiomas", "".join(lines))
 
 
-def render_cv_html(content: dict, job: dict | None = None) -> str:
+def _apply_pdf_config_to_css(css: str, pdf_config: dict) -> str:
+    """Aplica la configuración de PDF al CSS."""
+    import re
+    
+    # Fuente
+    font_family = pdf_config.get("font_family", "georgia")
+    font_map = {
+        "georgia": '"Georgia", "Times New Roman", serif',
+        "times": '"Times New Roman", Georgia, serif',
+        "arial": '"Arial", "Helvetica Neue", Helvetica, sans-serif',
+    }
+    css = re.sub(
+        r'font-family:\s*[^;]+;',
+        f'font-family: {font_map.get(font_family, font_map["georgia"])};',
+        css
+    )
+    
+    # Tamaño de fuente base
+    font_size = pdf_config.get("font_size_pt", 11)
+    css = re.sub(
+        r'font-size:\s*[\d.]+pt;',
+        f'font-size: {font_size}pt;',
+        css
+    )
+    
+    # Color acento
+    accent_color = pdf_config.get("accent_color", "#2c3e50")
+    css = re.sub(
+        r'#2c3e50',
+        accent_color,
+        css
+    )
+    css = re.sub(
+        r'#1f6feb',
+        accent_color,
+        css
+    )
+    
+    # Márgenes
+    margin_top = pdf_config.get("margin_top_mm", 18)
+    margin_bottom = pdf_config.get("margin_bottom_mm", 18)
+    margin_left = pdf_config.get("margin_left_mm", 15)
+    margin_right = pdf_config.get("margin_right_mm", 15)
+    css = re.sub(
+        r'margin:\s*[\d.]+mm\s+[\d.]+mm\s+[\d.]+mm\s+[\d.]+mm;',
+        f'margin: {margin_top}mm {margin_right}mm {margin_bottom}mm {margin_left}mm;',
+        css
+    )
+    
+    # Espaciado entre secciones
+    spacing = pdf_config.get("section_spacing_pt", 14)
+    css = re.sub(
+        r'section\s*\{\s*margin-bottom:\s*[\d.]+pt;',
+        f'section {{ margin-bottom: {spacing}pt;',
+        css
+    )
+    
+    # Modo compacto
+    if pdf_config.get("compact_mode"):
+        css = css.replace(
+            'line-height: 1.5;',
+            'line-height: 1.3;'
+        )
+        css = re.sub(
+            r'margin-bottom:\s*[\d.]+pt;',
+            'margin-bottom: 8pt;',
+            css
+        )
+    
+    # Divisor de secciones
+    divider = pdf_config.get("section_divider", "line")
+    if divider == "none":
+        css = re.sub(
+            r'section h2\s*\{[^}]*border-bottom:[^}]*\}',
+            'section h2 { border-bottom: none; }',
+            css
+        )
+    elif divider == "double":
+        css = re.sub(
+            r'border-bottom:\s*[\d.]+pt\s+solid\s+[^;]+;',
+            'border-bottom: 3pt double;',
+            css
+        )
+    elif divider == "dots":
+        css = re.sub(
+            r'border-bottom:\s*[\d.]+pt\s+solid\s+[^;]+;',
+            'border-bottom: 2pt dotted;',
+            css
+        )
+    
+    # Estilo de cabecera
+    header_style = pdf_config.get("header_style", "classic")
+    if header_style == "minimal":
+        css = re.sub(
+            r'\.header\s*\{[^}]*\}',
+            '.header { border-bottom: none; padding-bottom: 4pt; margin-bottom: 8pt; }',
+            css
+        )
+    elif header_style == "modern":
+        css = re.sub(
+            r'\.header\s*\{[^}]*\}',
+            '.header { text-align: center; border-bottom: none; padding-bottom: 8pt; margin-bottom: 12pt; }',
+            css
+        )
+    
+    return css
+
+
+def render_cv_html(content: dict, job: dict | None = None, pdf_config: dict | None = None) -> str:
     """Construye el HTML final. Lanza ValueError si queda vacio."""
     template = (_templates_dir() / "cv.html").read_text(encoding="utf-8")
     css = (_templates_dir() / "cv.css").read_text(encoding="utf-8")
+
+    # Aplicar configuración de PDF si existe
+    if pdf_config:
+        css = _apply_pdf_config_to_css(css, pdf_config)
 
     # Linea de titulo estilo ejemplo: rol adaptado | titulo de la persona.
     adapted = str(content.get("target_role") or "").strip()
@@ -480,28 +592,152 @@ def render_cv_html(content: dict, job: dict | None = None) -> str:
             f'<p class="summary">{esc(content.get("summary"))}</p>'
         )
 
-    titles = {
-        "CSS": css,
+    # Orden de secciones desde pdf_config o default
+    section_order = pdf_config.get("section_order") if pdf_config else [
+        "summary", "experience", "education", "projects", "skills", "languages", "other_studies", "other_knowledge"
+    ]
+
+    # Construir bloques según el orden configurado
+    section_blocks = {}
+    section_blocks["CSS"] = css
+    section_blocks["FULL_NAME"] = esc(content.get("full_name"))
+    section_blocks["TITLE_LINE"] = esc(professional_title)
+    section_blocks["CONTACT_LINE_1"] = line1
+    section_blocks["CONTACT_LINE_2"] = line2
+    section_blocks["SUMMARY_BLOCK"] = summary
+    section_blocks["TECHNICAL_SKILLS_BLOCK"] = _technical_skills_block(content)
+    section_blocks["SOFT_SKILLS_BLOCK"] = _soft_skills_block(content)
+    section_blocks["EXPERIENCE_BLOCK"] = _experience_block(content)
+    section_blocks["PROJECTS_BLOCK"] = _projects_block(content)
+    section_blocks["EDUCATION_BLOCK"] = _education_block(content)
+    section_blocks["OTHER_STUDIES_BLOCK"] = _other_studies_block(content)
+    section_blocks["OTHER_KNOWLEDGE_BLOCK"] = _other_knowledge_block(content)
+    section_blocks["LANGUAGES_BLOCK"] = _languages_block(content)
+
+    # Construir HTML final según el orden configurado
+    template = (_templates_dir() / "cv.html").read_text(encoding="utf-8")
+    # Reemplazar CSS primero
+    template = template.replace("{{CSS}}", css)
+    
+    # Reemplazar bloques fijos
+    for key, value in {
         "FULL_NAME": esc(content.get("full_name")),
         "TITLE_LINE": esc(professional_title),
         "CONTACT_LINE_1": line1,
         "CONTACT_LINE_2": line2,
         "SUMMARY_BLOCK": summary,
-        "TECHNICAL_SKILLS_BLOCK": _technical_skills_block(content),
-        "SOFT_SKILLS_BLOCK": _soft_skills_block(content),
-        "EXPERIENCE_BLOCK": _experience_block(content),
-        "PROJECTS_BLOCK": _projects_block(content),
-        "EDUCATION_BLOCK": _education_block(content),
-        "OTHER_STUDIES_BLOCK": _other_studies_block(content),
-        "OTHER_KNOWLEDGE_BLOCK": _other_knowledge_block(content),
-        "LANGUAGES_BLOCK": _languages_block(content),
+    }.items():
+        template = template.replace("{{" + key + "}}", value)
+    
+    # Insertar secciones en el orden configurado
+    section_map = {
+        "summary": "SUMMARY_BLOCK",
+        "experience": "EXPERIENCE_BLOCK",
+        "education": "EDUCATION_BLOCK",
+        "projects": "PROJECTS_BLOCK",
+        "skills": "TECHNICAL_SKILLS_BLOCK",
+        "soft_skills": "SOFT_SKILLS_BLOCK",
+        "languages": "LANGUAGES_BLOCK",
+        "other_studies": "OTHER_STUDIES_BLOCK",
+        "other_knowledge": "OTHER_KNOWLEDGE_BLOCK",
     }
+    
+    for section_slug in section_order:
+        block_key = section_map.get(section_slug)
+        if block_key and section_blocks.get(block_key):
+            template = template.replace("{{" + block_key + "}}", section_blocks[block_key])
+        else:
+            template = template.replace("{{" + block_key + "}}", "") if block_key else template
 
-    html_text = template
-    for key, value in titles.items():
-        html_text = html_text.replace("{{" + key + "}}", value)
+    # Limpiar placeholders restantes
+    for block_key in section_map.values():
+        template = template.replace("{{" + block_key + "}}", "")
 
-    if not content.get("full_name") and "<section>" not in html_text:
+    if not content.get("full_name") and "<section>" not in template:
         raise ValueError("Contenido insuficiente para generar el HTML.")
 
-    return html_text
+    return template
+
+    # Linea de titulo estilo ejemplo: rol adaptado | titulo de la persona.
+    adapted = str(content.get("target_role") or "").strip()
+    own = str(content.get("title") or "").strip()
+    if adapted and own and adapted.lower() != own.lower():
+        professional_title = f"{adapted} | {own}"
+    else:
+        professional_title = adapted or own
+
+    line1, line2 = _contact_lines(content)
+
+    # Summary
+    summary = ""
+    if str(content.get("summary") or "").strip():
+        summary = _section(
+            "Perfil Profesional",
+            f'<p class="summary">{esc(content.get("summary"))}</p>'
+        )
+
+    # Orden de secciones desde pdf_config o default
+    section_order = pdf_config.get("section_order") if pdf_config else [
+        "summary", "experience", "education", "projects", "skills", "languages", "other_studies", "other_knowledge"
+    ]
+
+    # Construir bloques según el orden configurado
+    section_blocks = {}
+    section_blocks["CSS"] = css
+    section_blocks["FULL_NAME"] = esc(content.get("full_name"))
+    section_blocks["TITLE_LINE"] = esc(professional_title)
+    section_blocks["CONTACT_LINE_1"] = line1
+    section_blocks["CONTACT_LINE_2"] = line2
+    section_blocks["SUMMARY_BLOCK"] = summary
+    section_blocks["TECHNICAL_SKILLS_BLOCK"] = _technical_skills_block(content)
+    section_blocks["SOFT_SKILLS_BLOCK"] = _soft_skills_block(content)
+    section_blocks["EXPERIENCE_BLOCK"] = _experience_block(content)
+    section_blocks["PROJECTS_BLOCK"] = _projects_block(content)
+    section_blocks["EDUCATION_BLOCK"] = _education_block(content)
+    section_blocks["OTHER_STUDIES_BLOCK"] = _other_studies_block(content)
+    section_blocks["OTHER_KNOWLEDGE_BLOCK"] = _other_knowledge_block(content)
+    section_blocks["LANGUAGES_BLOCK"] = _languages_block(content)
+
+    # Construir HTML final según el orden configurado
+    template = (_templates_dir() / "cv.html").read_text(encoding="utf-8")
+    # Reemplazar CSS primero
+    template = template.replace("{{CSS}}", css)
+    
+    # Reemplazar bloques fijos
+    for key, value in {
+        "FULL_NAME": esc(content.get("full_name")),
+        "TITLE_LINE": esc(professional_title),
+        "CONTACT_LINE_1": line1,
+        "CONTACT_LINE_2": line2,
+        "SUMMARY_BLOCK": summary,
+    }.items():
+        template = template.replace("{{" + key + "}}", value)
+    
+    # Insertar secciones en el orden configurado
+    section_map = {
+        "summary": "SUMMARY_BLOCK",
+        "experience": "EXPERIENCE_BLOCK",
+        "education": "EDUCATION_BLOCK",
+        "projects": "PROJECTS_BLOCK",
+        "skills": "TECHNICAL_SKILLS_BLOCK",
+        "soft_skills": "SOFT_SKILLS_BLOCK",
+        "languages": "LANGUAGES_BLOCK",
+        "other_studies": "OTHER_STUDIES_BLOCK",
+        "other_knowledge": "OTHER_KNOWLEDGE_BLOCK",
+    }
+    
+    for section_slug in section_order:
+        block_key = section_map.get(section_slug)
+        if block_key and section_blocks.get(block_key):
+            template = template.replace("{{" + block_key + "}}", section_blocks[block_key])
+        else:
+            template = template.replace("{{" + block_key + "}}", "") if block_key else template
+
+    # Limpiar placeholders restantes
+    for block_key in section_map.values():
+        template = template.replace("{{" + block_key + "}}", "")
+
+    if not content.get("full_name") and "<section>" not in template:
+        raise ValueError("Contenido insuficiente para generar el HTML.")
+
+    return template

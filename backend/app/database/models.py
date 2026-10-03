@@ -476,3 +476,50 @@ class ProfileCV(Base):
     chars = Column(Integer, nullable=False, default=0)
 
     uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PDFConfig(Base):
+    """Configuración de generación de PDF por usuario.
+
+    Permite personalizar fuente, tamaño, orden de secciones,
+    formato de fechas y estilos para la generación de CVs."""
+
+    __tablename__ = "pdf_configs"
+
+    uid = Column(String(128), primary_key=True, index=True)
+
+    # Fuente y tamaño
+    font_family = Column(String(50), nullable=False, default="georgia")  # georgia, arial, times
+    font_size_pt = Column(Integer, nullable=False, default=11)  # 10, 11, 12, etc.
+
+    # Orden de secciones (JSON array de slugs)
+    # Ej: ["summary", "experience", "education", "projects", "skills", "languages", "other_studies", "other_knowledge"]
+    section_order = Column(Text, nullable=False, default='["summary", "experience", "education", "projects", "skills", "languages", "other_studies", "other_knowledge"]')
+
+    # Formato de fecha
+    date_format = Column(String(50), nullable=False, default="MM/YYYY")  # MM/YYYY, DD/MM/YYYY, YYYY-MM, etc.
+
+    # Estilos adicionales
+    show_skill_chips = Column(Integer, nullable=False, default=1)  # 1 = sí, 0 = no
+    compact_mode = Column(Integer, nullable=False, default=0)  # 1 = compacto, 0 = normal
+    header_style = Column(String(50), nullable=False, default="classic")  # classic, modern, minimal
+    section_divider = Column(String(50), nullable=False, default="line")  # line, double, dots, none
+
+    # Márgenes (en mm)
+    margin_top_mm = Column(Integer, nullable=False, default=18)
+    margin_bottom_mm = Column(Integer, nullable=False, default=18)
+    margin_left_mm = Column(Integer, nullable=False, default=15)
+    margin_right_mm = Column(Integer, nullable=False, default=15)
+
+    # Espaciado entre secciones (en pt)
+    section_spacing_pt = Column(Integer, nullable=False, default=14)
+
+    # Color acento (hex)
+    accent_color = Column(String(7), nullable=False, default="#2c3e50")
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )

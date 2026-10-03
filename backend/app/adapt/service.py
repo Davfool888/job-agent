@@ -38,10 +38,34 @@ def _as_list(value) -> list:
     return []
 
 
-def adapt_profile_for_job(db, job_id) -> dict:
+def adapt_profile_for_job(db, job_id, uid: str | None = None) -> dict:
     """Ejecuta el flujo completo y devuelve la respuesta de la API."""
     from app.adapt import guest, html_renderer, llm, matcher, pdf, selector
     from app.services.job_service import get_job_by_id
+
+    # Obtener configuración de PDF del usuario (si hay UID)
+    pdf_config = {}
+    if uid:
+        from app.database.models import PDFConfig
+        pdf_cfg = db.query(PDFConfig).filter(PDFConfig.uid == uid).first()
+        if pdf_cfg:
+            import json as _json
+            pdf_config = {
+                "font_family": pdf_cfg.font_family,
+                "font_size_pt": pdf_cfg.font_size_pt,
+                "section_order": _json.loads(pdf_cfg.section_order) if pdf_cfg.section_order else [],
+                "date_format": pdf_cfg.date_format,
+                "show_skill_chips": bool(pdf_cfg.show_skill_chips),
+                "compact_mode": bool(pdf_cfg.compact_mode),
+                "header_style": pdf_cfg.header_style,
+                "section_divider": pdf_cfg.section_divider,
+                "margin_top_mm": pdf_cfg.margin_top_mm,
+                "margin_bottom_mm": pdf_cfg.margin_bottom_mm,
+                "margin_left_mm": pdf_cfg.margin_left_mm,
+                "margin_right_mm": pdf_cfg.margin_right_mm,
+                "section_spacing_pt": pdf_cfg.section_spacing_pt,
+                "accent_color": pdf_cfg.accent_color,
+            }
 
     try:
         job = get_job_by_id(db=db, job_id=job_id)
@@ -87,7 +111,7 @@ def adapt_profile_for_job(db, job_id) -> dict:
         content[key] = profile.get(key, "")
 
     try:
-        html_text = html_renderer.render_cv_html(content, offer)
+        html_text = html_renderer.render_cv_html(content, offer, pdf_config)
     except ValueError as error:
         raise AdaptError("HTML_FAILED", str(error), http=502) from error
 
@@ -105,7 +129,7 @@ def adapt_profile_for_job(db, job_id) -> dict:
         ensure_ascii=False, indent=2), encoding="utf-8")
     (directory / "cv.html").write_text(html_text, encoding="utf-8")
     try:
-        pdf.html_to_pdf(html_text, directory / "cv.pdf")
+        pdf.html_to_pdf(html_text, directory / "cv.pdf", pdf_config)
     except pdf.PdfError as error:
         raise AdaptError(error.code, str(error), http=502) from error
 
