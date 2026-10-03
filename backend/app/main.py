@@ -1207,6 +1207,8 @@ def search_jobs_stream(
         0, ge=0, le=60,
         description="Antigüedad maxima en dias (0 = todas).",
     ),
+    # Token de autenticación como query param (EventSource no soporta headers)
+    token: str | None = Query(None, description="Firebase ID token para autenticación"),
     request: Request = None,
     db: Session = Depends(get_db),
 ):
@@ -1236,9 +1238,17 @@ def search_jobs_stream(
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 
-    events: queue.Queue = queue.Queue()
-    source_name = scraper.source
-    uid, email = _profile_identity(request)
+    # Obtener uid/email desde el token en query param (EventSource no soporta headers)
+    uid = None
+    email = None
+    if token:
+        try:
+            from app.auth import verify_bearer_token
+            claims = verify_bearer_token(f"Bearer {token}")
+            uid = claims.get("uid")
+            email = claims.get("email")
+        except HTTPException:
+            pass  # Token inválido, continuar sin auth
 
     def _worker() -> None:
         from app.scheduler import _close_db
@@ -1275,7 +1285,7 @@ def search_jobs_stream(
 
     def gen():
         yield _event({"type": "started", "query": q, "pages": pages,
-                      "source": source_name, "location": location,
+                      "source": source, "location": location,
                       "max_age_days": max_age_days})
         thread = threading.Thread(target=_worker, daemon=True)
         thread.start()
@@ -1326,7 +1336,7 @@ def search_jobs_stream(
                               "message": f"Analisis fallo: {error}"[:300]})
                 return
         yield _event({"type": "done", "query": q, "pages": pages,
-                      "source": source_name, "location": location,
+                      "source": source, "location": location,
                       "max_age_days": max_age_days, "found": found_total,
                       "saved_unique": len(saved_ids), "analyzed": analyzed,
                       "relevant": relevant,

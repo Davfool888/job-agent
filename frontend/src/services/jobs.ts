@@ -66,6 +66,18 @@ export function streamSearchJobs(
   params: StreamSearchParams,
   onEvent: (event: StreamEvent | { type: "connection-error" }) => void,
 ): () => void {
+  // Obtener el token de Firebase si hay sesión activa
+  let idToken: string | null = null;
+  try {
+    const auth = await import("firebase/auth");
+    const user = auth.getAuth().currentUser;
+    if (user) {
+      idToken = await user.getIdToken();
+    }
+  } catch {
+    /* sin Firebase configurado: sigue sin auth */
+  }
+
   const query = new URLSearchParams({
     q: params.q,
     pages: String(params.pages ?? 1),
@@ -76,6 +88,7 @@ export function streamSearchJobs(
     ...(params.maxAgeDays && params.maxAgeDays > 0
       ? { max_age_days: String(params.maxAgeDays) }
       : {}),
+    ...(idToken ? { token: idToken } : {}),
   });
   const source = new EventSource(
     `${API_URL}/jobs/search/stream?${query.toString()}`,
