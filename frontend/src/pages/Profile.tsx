@@ -47,17 +47,34 @@ export function ProfilePage() {
   const { catalogs } = useCatalogs();
   const { firebaseUser } = useAuth();
   const isAdmin = useIsAdminSession();
+  // Todos los hooks SIEMPRE antes de cualquier return temprano: si un
+  // useState queda despues de `if (loading) return ...`, React lanza el
+  // error #310 (mas hooks que en el render anterior) al terminar la carga.
   const [form, setForm] = useState<Profile | null>(null);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [simpleExperiences, setSimpleExperiences] = useState<ProfileEntry[]>([]);
+  const [simpleEducation, setSimpleEducation] = useState<ProfileEntry[]>([]);
+  const [simpleLanguages, setSimpleLanguages] = useState<LanguageEntry[]>([]);
+  const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"simple" | "structured">("simple");
 
-  const initialExperiences = (data as any)?.experiences || [];
-  const initialEducation = (data as any)?.education || [];
-  const initialLanguages = (data as any)?.languages || [];
-
-  const [simpleExperiences, setSimpleExperiences] = useState<ProfileEntry[]>(() => initialExperiences);
-  const [simpleEducation, setSimpleEducation] = useState<ProfileEntry[]>(() => initialEducation);
-  const [simpleLanguages, setSimpleLanguages] = useState<LanguageEntry[]>(() => initialLanguages);
+  // Hidrata los estados editables cuando llega data (los inicializadores
+  // de useState solo corren en el primer render, con data=null).
+  const dataKey = data ? JSON.stringify({
+    e: (data as any)?.experiences ?? [],
+    d: (data as any)?.education ?? [],
+    l: (data as any)?.languages ?? [],
+  }) : null;
+  useEffect(() => {
+    if (!data || !dataKey || hydratedFor === dataKey) return;
+    setHydratedFor(dataKey);
+    setForm(null);
+    setSaved(false);
+    setSimpleExperiences(((data as any)?.experiences || []) as ProfileEntry[]);
+    setSimpleEducation(((data as any)?.education || []) as ProfileEntry[]);
+    setSimpleLanguages(((data as any)?.languages || []) as LanguageEntry[]);
+  }, [data, dataKey, hydratedFor]);
 
   if (loading) {
     return (
@@ -122,8 +139,6 @@ export function ProfilePage() {
       // noop
     }
   };
-
-  const [activeTab, setActiveTab] = useState<"simple" | "structured">("simple");
 
   return (
     <>
