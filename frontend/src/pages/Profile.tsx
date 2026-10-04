@@ -44,6 +44,7 @@ import type {
   Profile,
   ProfileEntry,
   RichProfile,
+  Perspective,
 } from "../types/profile";
 import { EMPTY_PROFILE } from "../types/profile";
 
@@ -64,6 +65,18 @@ export function ProfilePage() {
   const [form, setForm] = useState<Profile | null>(null);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  
+  // Simple profile state (shared between tabs)
+  const [simpleExperiences, setSimpleExperiences] = useState<ProfileEntry[]>(() => {
+    // Initialize from current data if available
+    return (current as any)?.experiences || [];
+  });
+  const [simpleEducation, setSimpleEducation] = useState<ProfileEntry[]>(() => {
+    return (current as any)?.education || [];
+  });
+  const [simpleLanguages, setSimpleLanguages] = useState<LanguageEntry[]>(() => {
+    return (current as any)?.languages || [];
+  });
 
   if (loading) {
     return (
@@ -161,6 +174,9 @@ export function ProfilePage() {
     }
   };
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"simple" | "structured">("simple");
+
   return (
     <>
       <Header
@@ -195,225 +211,82 @@ export function ProfilePage() {
             </p>
           </div>
         )}
-        <form className="card" onSubmit={submit}>
-          {saveError && <div className="alert-error">{saveError}</div>}
-          {saved && (
-            <div className="alert-success">
-              Perfil guardado en el backend.
-            </div>
-          )}
-          <fieldset
-            disabled={locked}
-            style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
-          >
-          <h3 className="card-title">Información personal</h3>
-          <div className="form-grid">
-            <div className="field">
-              <label>Nombre</label>
-              <input className="input" value={current.full_name} onChange={(e) => set({ full_name: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Título profesional</label>
-              <SuggestInput
-                value={current.title}
-                onChange={(v) => set({ title: v })}
-                options={titleOptions}
-                placeholder="Elige de la lista: Analista de Datos"
-                strict
-              />
-            </div>
-            <div className="field">
-              <label>Ubicación</label>
-              <select
-                className="select"
-                value={locationValue}
-                onChange={(e) => set({ location: e.target.value })}
-              >
-                <option value="">— Elige una ciudad —</option>
-                {citySelectOptions(locationValue).map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
 
-          <h3 className="card-title" style={{ marginTop: 8 }}>
-            Habilidades
-          </h3>
-          <p className="card-sub">Escribe y elige de la lista para evitar variantes (“powerbi” vs “Power BI”)</p>
-          <div className="field">
-            <label>Habilidades</label>
-            <TagInput
-              value={current.skills}
-              onChange={(next) => set({ skills: next })}
-              suggestions={SKILLS}
-              placeholder="Escribe para buscar skill y Enter"
-            />
+        {/* Tab Navigation */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", marginBottom: 16 }}>
+            <button
+              type="button"
+              className={`btn btn-sm ${activeTab === "simple" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setActiveTab("simple")}
+              disabled={locked}
+              style={{ padding: "8px 16px" }}
+            >
+              Perfil Simple
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${activeTab === "structured" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setActiveTab("structured")}
+              disabled={locked}
+              style={{ padding: "8px 16px" }}
+            >
+              Perfil Estructurado
+            </button>
           </div>
+          <p className="card-sub" style={{ marginBottom: 0 }}>
+            {activeTab === "simple"
+              ? "Información básica de contacto, experiencia laboral, educación e idiomas (descripción general)."
+              : "Perspectivas detalladas por experiencia/educación: tareas específicas, habilidades y herramientas por óptica (Data Analytics, Software, Finanzas, etc.)."}
+          </p>
+        </div>
 
-          <h3 className="card-title" style={{ marginTop: 8 }}>
-            Preferencias laborales
-          </h3>
-          <div className="form-grid">
-            <div className="field">
-              <label>Cargos objetivo</label>
-              <TagInput
-                value={current.target_roles}
-                onChange={(next) => set({ target_roles: next })}
-                suggestions={titleOptions}
-                placeholder="Escribe para buscar cargo y Enter"
-              />
-            </div>
-            <div className="field">
-              <label>Sectores de interés</label>
-              <TagInput
-                value={current.sectors}
-                onChange={(next) => set({ sectors: next })}
-                suggestions={sectorLabels}
-                placeholder="Escribe para buscar sector y Enter"
-              />
-            </div>
-            <div className="field">
-              <label>Modalidad</label>
-              <select
-                className="select"
-                value={modalityValue}
-                onChange={(e) => set({ modality: e.target.value })}
-              >
-                <option value="">— Cualquiera —</option>
-                {modalityOpts.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-                {current.modality &&
-                  !modalityValue && (
-                    <option value={current.modality}>
-                      {current.modality} (libre)
-                    </option>
-                  )}
-              </select>
-            </div>
-            <div className="field">
-              <label>Ubicación preferida</label>
-              <select
-                className="select"
-                value={preferredLocationValue}
-                onChange={(e) => set({ preferred_location: e.target.value })}
-              >
-                <option value="">— Cualquiera —</option>
-                {citySelectOptions(preferredLocationValue).map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label>Salario mínimo</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input
-                  className="input"
-                  type="number"
-                  min={0}
-                  step={10000}
-                  style={{ flex: 1, minWidth: 0 }}
-                  value={salary.amount}
-                  onChange={(e) =>
-                    set({
-                      min_salary: composeSalary(
-                        e.target.value,
-                        salary.currency,
-                        salary.period,
-                      ),
-                    })
-                  }
-                  placeholder="Ej: 3500000"
-                />
-                <select
-                  className="select"
-                  style={{ maxWidth: 110 }}
-                  value={salary.currency}
-                  onChange={(e) =>
-                    set({
-                      min_salary: composeSalary(
-                        salary.amount,
-                        e.target.value,
-                        salary.period,
-                      ),
-                    })
-                  }
-                  title="Moneda"
-                >
-                  <option value="">Mon.</option>
-                  {currencyOpts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.id}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="select"
-                  style={{ maxWidth: 120 }}
-                  value={salary.period}
-                  onChange={(e) =>
-                    set({
-                      min_salary: composeSalary(
-                        salary.amount,
-                        salary.currency,
-                        e.target.value,
-                      ),
-                    })
-                  }
-                  title="Periodicidad"
-                >
-                  <option value="">Periodo</option>
-                  {periodOpts.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {current.min_salary.trim() &&
-                !salary.amount && (
-                  <small style={{ color: "var(--text-muted)" }}>
-                    Valor guardado: “{current.min_salary}” (edítalo para
-                    normalizarlo).
-                  </small>
-                )}
-            </div>
-            <div className="field">
-              <label>Nivel de experiencia</label>
-              <select
-                className="select"
-                value={seniorityValue}
-                onChange={(e) => set({ experience_level: e.target.value })}
-              >
-                <option value="">— Elige un nivel —</option>
-                {seniorityOpts.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-                {current.experience_level &&
-                  !seniorityValue && (
-                    <option value={current.experience_level}>
-                      {current.experience_level} (libre)
-                    </option>
-                  )}
-              </select>
-            </div>
-          </div>
+        {activeTab === "simple" && (
+          <SimpleProfileTab
+            locked={locked}
+            current={current}
+            set={set}
+            saved={saved}
+            saveError={saveError}
+            setSaved={setSaved}
+            setSaveError={setSaveError}
+            submit={submit}
+            saving={saving}
+            titleOptions={titleOptions}
+            cityOptions={cityOptions}
+            citySelectOptions={citySelectOptions}
+            modalityOpts={modalityOpts}
+            seniorityOpts={seniorityOpts}
+            sectorLabels={sectorLabels}
+            currencyOpts={currencyOpts}
+            periodOpts={periodOpts}
+            salary={salary}
+            composeSalary={composeSalary}
+            locationValue={locationValue}
+            preferredLocationValue={preferredLocationValue}
+            modalityValue={modalityValue}
+            seniorityValue={seniorityValue}
+            // Lifted state
+            experiences={simpleExperiences}
+            setExperiences={setSimpleExperiences}
+            education={simpleEducation}
+            setEducation={setSimpleEducation}
+            languages={simpleLanguages}
+            setLanguages={setSimpleLanguages}
+          />
+        )}
 
-          <button className="btn btn-primary" disabled={saving || locked}>
-            {saving ? "Guardando…" : "Guardar perfil"}
-          </button>
-          </fieldset>
-        </form>
-        <StructuredProfileManager locked={locked} />
+        {activeTab === "structured" && (
+          <StructuredProfileManager 
+            locked={locked} 
+            simpleProfile={{
+              ...current,
+              experiences: simpleExperiences,
+              education: simpleEducation,
+              languages: simpleLanguages,
+            }}
+          />
+        )}
       </div>
     </>
   );
@@ -440,6 +313,328 @@ function useCatalogs() {
   return { catalogs, error };
 }
 
+// ============================================================================
+// PERFIL SIMPLE: Contacto básico, Experiencia, Educación, Idiomas (general)
+// ============================================================================
+
+function SimpleProfileTab({
+  locked,
+  current,
+  set,
+  saved,
+  saveError,
+  setSaved,
+  setSaveError,
+  submit,
+  saving,
+  titleOptions,
+  cityOptions,
+  citySelectOptions,
+  modalityOpts,
+  seniorityOpts,
+  sectorLabels,
+  currencyOpts,
+  periodOpts,
+  salary,
+  composeSalary,
+  locationValue,
+  preferredLocationValue,
+  modalityValue,
+  seniorityValue,
+  // Lifted state from ProfilePage
+  experiences,
+  setExperiences,
+  education,
+  setEducation,
+  languages,
+  setLanguages,
+}: {
+  locked: boolean;
+  current: Profile;
+  set: (patch: Partial<Profile>) => void;
+  saved: boolean;
+  saveError: string | null;
+  setSaved: (v: boolean) => void;
+  setSaveError: (v: string | null) => void;
+  submit: (e: React.FormEvent) => Promise<void>;
+  saving: boolean;
+  titleOptions: string[];
+  cityOptions: string[];
+  citySelectOptions: (value: string) => string[];
+  modalityOpts: Array<{ id: string; label: string }>;
+  seniorityOpts: Array<{ id: string; label: string }>;
+  sectorLabels: string[];
+  currencyOpts: Array<{ id: string; label: string }>;
+  periodOpts: Array<{ id: string; label: string }>;
+  salary: { amount: string; currency: string; period: string };
+  composeSalary: (amount: string, currency: string, period: string) => string;
+  locationValue: string;
+  preferredLocationValue: string;
+  modalityValue: string;
+  seniorityValue: string;
+  experiences: ProfileEntry[];
+  setExperiences: (next: ProfileEntry[]) => void;
+  education: ProfileEntry[];
+  setEducation: (next: ProfileEntry[]) => void;
+  languages: LanguageEntry[];
+  setLanguages: (next: LanguageEntry[]) => void;
+}) {
+  // Función para generar ID único
+  const genId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  return (
+    <form className="card" onSubmit={submit}>
+      {saveError && <div className="alert-error">{saveError}</div>}
+      {saved && (
+        <div className="alert-success">
+          Perfil guardado en el backend.
+        </div>
+      )}
+      <fieldset
+        disabled={locked}
+        style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+      >
+
+      {/* INFORMACIÓN PERSONAL BÁSICA */}
+      <h3 className="card-title">Información personal</h3>
+      <div className="form-grid">
+        <div className="field">
+          <label>Nombre completo</label>
+          <input className="input" value={current.full_name} onChange={(e) => set({ full_name: e.target.value })} />
+        </div>
+        <div className="field">
+          <label>Título profesional</label>
+          <SuggestInput
+            value={current.title}
+            onChange={(v) => set({ title: v })}
+            options={titleOptions}
+            placeholder="Elige de la lista: Analista de Datos"
+            strict
+          />
+        </div>
+        <div className="field">
+          <label>Ubicación</label>
+          <select
+            className="select"
+            value={locationValue}
+            onChange={(e) => set({ location: e.target.value })}
+          >
+            <option value="">— Elige una ciudad —</option>
+            {citySelectOptions(locationValue).map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* INFORMACIÓN DE CONTACTO */}
+      <h3 className="card-title" style={{ marginTop: 16 }}>
+        Información de contacto
+      </h3>
+      <div className="form-grid">
+        <div className="field">
+          <label>Correo principal</label>
+          <input className="input" type="email" value={current.email ?? ""} onChange={(e) => set({ email: e.target.value })} placeholder="usuario@ejemplo.com" />
+        </div>
+        <div className="field">
+          <label>Correo secundario</label>
+          <input className="input" type="email" value={current.secondary_email ?? ""} onChange={(e) => set({ secondary_email: e.target.value })} placeholder="opcional@ejemplo.com" />
+        </div>
+        <div className="field">
+          <label>Celular principal</label>
+          <input className="input" type="tel" value={current.phone ?? ""} onChange={(e) => set({ phone: e.target.value })} placeholder="+57 3XX XXX XXXX" />
+        </div>
+        <div className="field">
+          <label>Celular de respaldo</label>
+          <input className="input" type="tel" value={current.secondary_phone ?? ""} onChange={(e) => set({ secondary_phone: e.target.value })} placeholder="+57 3XX XXX XXXX" />
+        </div>
+        <div className="field">
+          <label>LinkedIn</label>
+          <input className="input" value={current.linkedin ?? ""} onChange={(e) => set({ linkedin: e.target.value })} placeholder="https://linkedin.com/in/usuario" />
+        </div>
+        <div className="field">
+          <label>GitHub</label>
+          <input className="input" value={current.github ?? ""} onChange={(e) => set({ github: e.target.value })} placeholder="https://github.com/usuario" />
+        </div>
+        <div className="field">
+          <label>Portafolio</label>
+          <input className="input" value={current.portfolio ?? ""} onChange={(e) => set({ portfolio: e.target.value })} placeholder="https://portafolio.com" />
+        </div>
+      </div>
+
+      {/* EXPERIENCIA LABORAL - Solo descripción general */}
+      <h3 className="card-title" style={{ marginTop: 16 }}>
+        Experiencia laboral
+      </h3>
+      <p className="card-sub">Agrega tus experiencias laborales con descripción general. En el perfil estructurado podrás detallar tareas específicas por óptica.</p>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => setExperiences([...experiences, { id: genId(), title: "", company: "", start_date: null, end_date: null, is_current: false, description: "", perspectives: [] }])} disabled={locked}>
+          + Agregar experiencia
+        </button>
+      </div>
+      {experiences.map((exp, idx) => (
+        <EntryCard
+          key={exp.id}
+          title={exp.title || `Experiencia ${idx + 1}`}
+          subtitle={exp.company}
+          onRemove={() => setExperiences(experiences.filter((_, i) => i !== idx))}
+          defaultOpen
+        >
+          <div className="form-grid">
+            <div className="field">
+              <label>Empresa</label>
+              <input className="input" value={exp.company ?? ""} onChange={(e) => setExperiences(experiences.map((e, i) => i === idx ? { ...e, company: e.target.value } : e))} placeholder="Nombre de la empresa" />
+            </div>
+            <div className="field">
+              <label>Cargo</label>
+              <SuggestInput
+                value={exp.title ?? ""}
+                onChange={(v) => setExperiences(experiences.map((e, i) => i === idx ? { ...e, title: v } : e))}
+                options={titleOptions}
+                placeholder="Elige de la lista: Analista de Datos"
+                strict
+              />
+            </div>
+            <div className="field">
+              <label>Fecha de inicio</label>
+              <DateInput month value={exp.start_date ?? null} onChange={(v) => setExperiences(experiences.map((e, i) => i === idx ? { ...e, start_date: v } : e))} />
+            </div>
+            <div className="field">
+              <label>Fecha de finalización</label>
+              <DateInput month value={exp.is_current ? null : (exp.end_date ?? null)} onChange={(v) => setExperiences(experiences.map((e, i) => i === idx ? { ...e, end_date: v } : e))} />
+            </div>
+            <div className="field">
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={!!exp.is_current}
+                  onChange={(e) => setExperiences(experiences.map((ex, i) => i === idx ? { ...ex, is_current: e.target.checked, end_date: e.target.checked ? null : ex.end_date } : ex))}
+                />
+                Actualmente trabajo aquí
+              </label>
+            </div>
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label>Descripción general</label>
+              <textarea
+                className="textarea"
+                rows={3}
+                value={exp.description ?? ""}
+                onChange={(e) => setExperiences(experiences.map((ex, i) => i === idx ? { ...ex, description: e.target.value } : ex))}
+                placeholder="Describe tus responsabilidades y logros principales..."
+              />
+            </div>
+          </div>
+        </EntryCard>
+      ))}
+
+      {/* EDUCACIÓN - Solo descripción general */}
+      <h3 className="card-title" style={{ marginTop: 16 }}>
+        Educación
+      </h3>
+      <p className="card-sub">Agrega tu formación académica. En el perfil estructurado podrás detallar materias, proyectos y habilidades por óptica.</p>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => setEducation([...education, { id: genId(), degree: "", institution: "", start_date: null, end_date: null, description: "", perspectives: [] }])} disabled={locked}>
+          + Agregar educación
+        </button>
+      </div>
+      {education.map((edu, idx) => (
+        <EntryCard
+          key={edu.id}
+          title={edu.degree || `Educación ${idx + 1}`}
+          subtitle={edu.institution}
+          onRemove={() => setEducation(education.filter((_, i) => i !== idx))}
+          defaultOpen
+        >
+          <div className="form-grid">
+            <div className="field">
+              <label>Institución</label>
+              <input className="input" value={edu.institution ?? ""} onChange={(e) => setEducation(education.map((e, i) => i === idx ? { ...e, institution: e.target.value } : e))} placeholder="Universidad, instituto, etc." />
+            </div>
+            <div className="field">
+              <label>Título / Programa</label>
+              <input className="input" value={edu.degree ?? ""} onChange={(e) => setEducation(education.map((e, i) => i === idx ? { ...e, degree: e.target.value } : e))} placeholder="Ej: Ingeniería de Sistemas, Maestría en Data Science" />
+            </div>
+            <div className="field">
+              <label>Fecha de inicio</label>
+              <DateInput month value={edu.start_date ?? null} onChange={(v) => setEducation(education.map((e, i) => i === idx ? { ...e, start_date: v } : e))} />
+            </div>
+            <div className="field">
+              <label>Fecha de finalización</label>
+              <DateInput month value={edu.end_date ?? null} onChange={(v) => setEducation(education.map((e, i) => i === idx ? { ...e, end_date: v } : e))} />
+            </div>
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label>Descripción</label>
+              <textarea
+                className="textarea"
+                rows={3}
+                value={edu.description ?? ""}
+                onChange={(e) => setEducation(education.map((ed, i) => i === idx ? { ...ed, description: e.target.value } : ed))}
+                placeholder="Materias relevantes, tesis, proyectos, honores..."
+              />
+            </div>
+          </div>
+        </EntryCard>
+      ))}
+
+      {/* IDIOMAS */}
+      <h3 className="card-title" style={{ marginTop: 16 }}>
+        Idiomas
+      </h3>
+      <p className="card-sub">Agrega los idiomas que conoces con nivel general. En el perfil estructurado podrás detallar por habilidad (listening, reading, writing, speaking).</p>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => setLanguages([...languages, { id: genId(), language: null, language_label: "", academy: "", level: null, listening: null, reading: null, writing: null, speaking: null }])} disabled={locked}>
+          + Agregar idioma
+        </button>
+      </div>
+      {languages.map((lang, idx) => (
+        <EntryCard
+          key={lang.id}
+          title={lang.language_label || lang.language || `Idioma ${idx + 1}`}
+          subtitle={lang.academy}
+          onRemove={() => setLanguages(languages.filter((_, i) => i !== idx))}
+          defaultOpen
+        >
+          <div className="form-grid">
+            <div className="field">
+              <label>Idioma</label>
+              <SuggestInput
+                value={lang.language_label ?? ""}
+                onChange={(v) => setLanguages(languages.map((l, i) => i === idx ? { ...l, language_label: v, language: v.toLowerCase() } : l))}
+                options={["Español", "Inglés", "Portugués", "Francés", "Alemán", "Italiano", "Chino", "Japonés", "Otro"]}
+                placeholder="Ej: Inglés"
+              />
+            </div>
+            <div className="field">
+              <label>Academia / Institución</label>
+              <input className="input" value={lang.academy ?? ""} onChange={(e) => setLanguages(languages.map((l, i) => i === idx ? { ...l, academy: e.target.value } : l))} placeholder="Ej: British Council, Alianza Francesa, autodidacta" />
+            </div>
+            <div className="field">
+              <label>Nivel general</label>
+              <select className="select" value={lang.level ?? ""} onChange={(e) => setLanguages(languages.map((l, i) => i === idx ? { ...l, level: e.target.value || null } : l))}>
+                <option value="">—</option>
+                <option value="A1">A1 - Principiante</option>
+                <option value="A2">A2 - Básico</option>
+                <option value="B1">B1 - Intermedio</option>
+                <option value="B2">B2 - Intermedio Alto</option>
+                <option value="C1">C1 - Avanzado</option>
+                <option value="C2">C2 - Experto</option>
+                <option value="native">Nativo</option>
+              </select>
+            </div>
+          </div>
+        </EntryCard>
+      ))}
+
+      <button className="btn btn-primary" disabled={saving || locked} style={{ marginTop: 16 }}>
+        {saving ? "Guardando…" : "Guardar perfil simple"}
+      </button>
+      </fieldset>
+    </form>
+  );
+}
+
 type SectionKey = "experience" | "education" | "projects" | "certifications";
 
 const SECTIONS: Array<{ key: SectionKey; label: string }> = [
@@ -449,7 +644,13 @@ const SECTIONS: Array<{ key: SectionKey; label: string }> = [
   { key: "certifications", label: "Certificaciones" },
 ];
 
-function StructuredProfileManager({ locked }: { locked: boolean }) {
+function StructuredProfileManager({ 
+  locked, 
+  simpleProfile 
+}: { 
+  locked: boolean; 
+  simpleProfile: Profile | null;
+}) {
   const { catalogs, error: catalogError } = useCatalogs();
   const { firebaseUser } = useAuth();
   const isAdmin = useIsAdminSession();
@@ -479,12 +680,71 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
         setRich(null);
         return;
       }
-      setRich({
+      
+      // Merge with simple profile data for experience/education
+      let mergedData = {
         ...data,
         technical_skills: data.technical_skills ?? [],
         soft_skills: data.soft_skills ?? [],
         years_experience: data.years_experience ?? null,
-      });
+      };
+      
+      // If we have simple profile data, use its experience/education as base
+      if (simpleProfile) {
+        const simpleExperiences = (simpleProfile as any).experiences || [];
+        const simpleEducation = (simpleProfile as any).education || [];
+        
+        // Merge experiences: keep existing perspectives from rich profile, add simple ones
+        if (simpleExperiences.length > 0) {
+          const richExperiences = mergedData.experience || [];
+          const mergedExperiences = simpleExperiences.map((simpleExp: any, idx: number) => {
+            const richExp = richExperiences[idx];
+            if (richExp) {
+              // Keep rich profile's perspectives and structured fields, but update base fields from simple
+              return {
+                ...richExp,
+                company: simpleExp.company || richExp.company,
+                title: simpleExp.title || richExp.title,
+                start_date: simpleExp.start_date || richExp.start_date,
+                end_date: simpleExp.end_date || richExp.end_date,
+                is_current: simpleExp.is_current ?? richExp.is_current,
+                description: simpleExp.description || richExp.description,
+              };
+            }
+            // New entry from simple profile, add empty perspectives
+            return {
+              ...simpleExp,
+              perspectives: [],
+            };
+          });
+          mergedData.experience = mergedExperiences;
+        }
+        
+        // Merge education similarly
+        if (simpleEducation.length > 0) {
+          const richEducation = mergedData.education || [];
+          const mergedEducation = simpleEducation.map((simpleEdu: any, idx: number) => {
+            const richEdu = richEducation[idx];
+            if (richEdu) {
+              return {
+                ...richEdu,
+                institution: simpleEdu.institution || richEdu.institution,
+                degree: simpleEdu.degree || richEdu.degree,
+                start_date: simpleEdu.start_date || richEdu.start_date,
+                end_date: simpleEdu.end_date || richEdu.end_date,
+                description: simpleEdu.description || richEdu.description,
+              };
+            }
+            return {
+              ...simpleEdu,
+              perspectives: [],
+            };
+          });
+          mergedData.education = mergedEducation;
+        }
+      }
+      
+      setRich(mergedData);
       setWarnings(data._warnings ?? []);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Error inesperado");
@@ -531,11 +791,12 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
 
   return (
     <div className="card" style={{ marginTop: 16 }}>
-      <h3 className="card-title">Perfil estructurado</h3>
+      <h3 className="card-title">Perfil Estructurado</h3>
       <p className="card-sub">
-        Información de contacto, experiencia, educación, idiomas y skills con
-        valores normalizados (listas, fechas, catálogos). Lo que guardes aquí
-        alimenta matching, perspectivas y CV.
+        Extiende el <strong>Perfil Simple</strong> añadiendo <strong>perspectivas</strong> a tus experiencias y educación.
+        Cada perspectiva describe tareas específicas, skills y herramientas para una óptica distinta
+        (ej: Data Analytics, Ingeniería de Software, Finanzas). La información base (empresa, cargo, fechas, descripción general)
+        viene del Perfil Simple y no se duplica aquí.
       </p>
       {(locked || lockedRich) && (
         <div className="alert-error">
@@ -569,7 +830,7 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
             </div>
           )}
 
-          <h4 style={{ margin: "12px 0 8px" }}>Información personal</h4>
+          <h4 style={{ margin: "12px 0 8px" }}>Información personal (viene del Perfil Simple)</h4>
           <div className="form-grid">
             <div className="field">
               <label>Nombre</label>
@@ -632,7 +893,7 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
             </div>
           </div>
 
-          <h4 style={{ margin: "12px 0 8px" }}>Información de contacto</h4>
+          <h4 style={{ margin: "12px 0 8px" }}>Contacto (viene del Perfil Simple)</h4>
           <div className="form-grid">
             {(
               [
@@ -742,6 +1003,12 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
           />
 
           <h4 style={{ margin: "12px 0 8px" }}>Experiencia, educación, proyectos y certificaciones</h4>
+          <p className="card-sub" style={{ marginBottom: 12 }}>
+            <strong>Experiencia y Educación:</strong> La información base (empresa/institución, cargo/título, fechas, descripción general)
+            proviene del <strong>Perfil Simple</strong>. Aquí solo añades <strong>perspectivas</strong> con tareas específicas,
+            skills y herramientas por óptica profesional. Los botones "Agregar entrada" crean entradas vacías solo para
+            proyectos/certificaciones; para experiencia/educación usa el Perfil Simple.
+          </p>
           <div className="toolbar-row" style={{ marginBottom: 12 }}>
             {SECTIONS.map((s) => (
               <button
@@ -749,6 +1016,7 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
                 type="button"
                 className={`btn btn-sm ${section === s.key ? "btn-primary" : "btn-ghost"}`}
                 onClick={() => setSection(s.key)}
+                disabled={locked}
               >
                 {s.label} ({((rich[s.key] ?? []) as ProfileEntry[]).length})
               </button>
@@ -759,13 +1027,17 @@ function StructuredProfileManager({ locked }: { locked: boolean }) {
             section={section}
             catalogs={catalogs}
             onPatch={patchEntry}
-            onAdd={() =>
-              setEntries([
-                ...entries,
-                { title: "", perspectives: [] } as ProfileEntry,
-              ])
-            }
+            onAdd={() => {
+              // Solo permitir agregar entradas nuevas para projects y certifications
+              // Para experience/education, se debe usar el Perfil Simple
+              if (section === "projects") {
+                setEntries([...entries, { name: "", perspectives: [] } as ProfileEntry]);
+              } else if (section === "certifications") {
+                setEntries([...entries, { name: "", perspectives: [] } as ProfileEntry]);
+              }
+            }}
             onRemove={(i) => setEntries(entries.filter((_, j) => j !== i))}
+            isExperienceOrEducation={section === "experience" || section === "education"}
           />
 
           <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
@@ -929,6 +1201,7 @@ function EntrySection({
   onPatch,
   onAdd,
   onRemove,
+  isExperienceOrEducation = false,
 }: {
   entries: ProfileEntry[];
   section: SectionKey;
@@ -936,12 +1209,17 @@ function EntrySection({
   onPatch: (i: number, patch: Partial<ProfileEntry>) => void;
   onAdd: () => void;
   onRemove: (i: number) => void;
+  isExperienceOrEducation?: boolean;
 }) {
   const [open, setOpen] = useState<number | null>(null);
   return (
     <div>
       {entries.length === 0 && (
-        <p className="card-sub">Sin entradas en esta sección.</p>
+        <p className="card-sub">
+          {isExperienceOrEducation
+            ? "Agrega experiencias/educación en el <strong>Perfil Simple</strong> para verlas aquí y añadir perspectivas."
+            : "Sin entradas en esta sección."}
+        </p>
       )}
       {entries.map((entry, i) => {
         const title =
@@ -956,7 +1234,7 @@ function EntrySection({
             title={title}
             subtitle={[org, dates || entry.period || ""].filter(Boolean).join(" · ")}
             badge={`${(entry.perspectives ?? []).length} perspectiva(s)`}
-            onRemove={() => onRemove(i)}
+            onRemove={isExperienceOrEducation ? undefined : () => onRemove(i)}
             defaultOpen={open === i}
           >
             <div onClick={() => setOpen(i)}>
@@ -965,6 +1243,7 @@ function EntrySection({
                   entry={entry}
                   catalogs={catalogs}
                   onPatch={(p) => onPatch(i, p)}
+                  readOnly={isExperienceOrEducation}
                 />
               )}
               {section === "education" && (
@@ -972,6 +1251,7 @@ function EntrySection({
                   entry={entry}
                   catalogs={catalogs}
                   onPatch={(p) => onPatch(i, p)}
+                  readOnly={isExperienceOrEducation}
                 />
               )}
               {section === "projects" && (
@@ -995,9 +1275,11 @@ function EntrySection({
           </EntryCard>
         );
       })}
-      <button type="button" className="btn btn-ghost btn-sm" onClick={onAdd}>
-        + Agregar entrada
-      </button>
+      {!isExperienceOrEducation && (
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onAdd}>
+          + Agregar entrada
+        </button>
+      )}
     </div>
   );
 }
@@ -1052,10 +1334,12 @@ function ExperienceFields({
   entry,
   catalogs,
   onPatch,
+  readOnly = false,
 }: {
   entry: ProfileEntry;
   catalogs: Catalogs | null;
   onPatch: (p: Partial<ProfileEntry>) => void;
+  readOnly?: boolean;
 }) {
   const titleItem = catalogs
     ? resolveOptionId(entry.title, catalogs.professional_titles)
@@ -1063,19 +1347,21 @@ function ExperienceFields({
   return (
     <div className="form-grid">
       <div className="field">
-        <label>Empresa</label>
+        <label>Empresa {readOnly && "(desde Perfil Simple)"}</label>
         <input
           className="input"
           value={entry.company ?? ""}
-          onChange={(e) => onPatch({ company: e.target.value })}
+          onChange={(e) => !readOnly && onPatch({ company: e.target.value })}
+          disabled={readOnly}
         />
       </div>
       <div className="field">
-        <label>Cargo</label>
+        <label>Cargo {readOnly && "(desde Perfil Simple)"}</label>
         {catalogs ? (
           <Autocomplete
             value={titleItem ?? ""}
             onChange={(id) =>
+              !readOnly &&
               onPatch({
                 title:
                   catalogs.professional_titles.find((t) => t.id === id)
@@ -1089,6 +1375,7 @@ function ExperienceFields({
             allowCustom
             customLabel="Otro (texto libre)"
             placeholder="Escribe para buscar cargo…"
+            disabled={readOnly}
           />
         ) : (
           <input
@@ -1100,19 +1387,21 @@ function ExperienceFields({
         )}
       </div>
       <div className="field">
-        <label>Fecha de inicio</label>
+        <label>Fecha de inicio {readOnly && "(desde Perfil Simple)"}</label>
         <DateInput
           month
           value={entry.start_date ?? null}
-          onChange={(v) => onPatch({ start_date: v })}
+          onChange={(v) => !readOnly && onPatch({ start_date: v })}
+          disabled={readOnly}
         />
       </div>
       <div className="field">
-        <label>Fecha de finalización</label>
+        <label>Fecha de finalización {readOnly && "(desde Perfil Simple)"}</label>
         <DateInput
           month
           value={entry.is_current ? null : (entry.end_date ?? null)}
-          onChange={(v) => onPatch({ end_date: v })}
+          onChange={(v) => !readOnly && onPatch({ end_date: v })}
+          disabled={readOnly}
         />
       </div>
       <div className="field">
@@ -1121,57 +1410,82 @@ function ExperienceFields({
             type="checkbox"
             checked={!!entry.is_current}
             onChange={(e) =>
+              !readOnly &&
               onPatch({
                 is_current: e.target.checked,
                 end_date: e.target.checked ? null : entry.end_date,
               })
             }
+            disabled={readOnly}
           />
           Actualmente trabajo aquí
         </label>
       </div>
-      <div className="field">
-        <label>Modalidad</label>
-        <select
-          className="select"
-          value={entry.modality ?? ""}
-          onChange={(e) => onPatch({ modality: e.target.value || null })}
-        >
-          <option value="">—</option>
-          {(catalogs?.modalities ?? MODALITY_FALLBACK).map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label>Ciudad</label>
-        <CityAutocomplete value={entry.city} catalogs={catalogs} onChange={(city) => onPatch({ city })} />
-      </div>
-      <div className="field">
-        <label>Tipo de contrato</label>
-        <select
-          className="select"
-          value={entry.contract_type ?? ""}
-          onChange={(e) => onPatch({ contract_type: e.target.value || null })}
-        >
-          <option value="">—</option>
-          {(catalogs?.contract_types ?? []).map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field" style={{ gridColumn: "1 / -1" }}>
-        <label>Descripción general</label>
-        <textarea
-          className="textarea"
-          value={entry.description ?? ""}
-          onChange={(e) => onPatch({ description: e.target.value })}
-        />
-      </div>
+      {readOnly ? (
+        <>
+          <div className="field">
+            <label>Modalidad (desde Perfil Simple)</label>
+            <input className="input" value={entry.modality ? (catalogs?.modalities?.find(m => m.id === entry.modality)?.label || entry.modality) : "—"} disabled />
+          </div>
+          <div className="field">
+            <label>Ciudad (desde Perfil Simple)</label>
+            <input className="input" value={entry.city?.label || "—"} disabled />
+          </div>
+          <div className="field">
+            <label>Tipo de contrato (desde Perfil Simple)</label>
+            <input className="input" value={entry.contract_type || "—"} disabled />
+          </div>
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label>Descripción general (desde Perfil Simple)</label>
+            <textarea className="textarea" value={entry.description ?? ""} disabled rows={3} />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="field">
+            <label>Modalidad</label>
+            <select
+              className="select"
+              value={entry.modality ?? ""}
+              onChange={(e) => onPatch({ modality: e.target.value || null })}
+            >
+              <option value="">—</option>
+              {(catalogs?.modalities ?? MODALITY_FALLBACK).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Ciudad</label>
+            <CityAutocomplete value={entry.city} catalogs={catalogs} onChange={(city) => onPatch({ city })} />
+          </div>
+          <div className="field">
+            <label>Tipo de contrato</label>
+            <select
+              className="select"
+              value={entry.contract_type ?? ""}
+              onChange={(e) => onPatch({ contract_type: e.target.value || null })}
+            >
+              <option value="">—</option>
+              {(catalogs?.contract_types ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label>Descripción general</label>
+            <textarea
+              className="textarea"
+              value={entry.description ?? ""}
+              onChange={(e) => onPatch({ description: e.target.value })}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1180,85 +1494,122 @@ function EducationFields({
   entry,
   catalogs,
   onPatch,
+  readOnly = false,
 }: {
   entry: ProfileEntry;
   catalogs: Catalogs | null;
   onPatch: (p: Partial<ProfileEntry>) => void;
+  readOnly?: boolean;
 }) {
   return (
     <div className="form-grid">
-      <div className="field">
-        <label>Institución</label>
-        <input
-          className="input"
-          value={entry.institution ?? entry.company ?? ""}
-          onChange={(e) => onPatch({ institution: e.target.value })}
-        />
-      </div>
-      <div className="field">
-        <label>Título / programa</label>
-        <input
-          className="input"
-          value={entry.degree ?? entry.title ?? ""}
-          onChange={(e) => onPatch({ degree: e.target.value })}
-        />
-      </div>
-      <div className="field">
-        <label>Nivel educativo</label>
-        <select
-          className="select"
-          value={entry.level ?? ""}
-          onChange={(e) => onPatch({ level: e.target.value || null })}
-        >
-          <option value="">—</option>
-          {((catalogs?.education_levels ?? ENTRY_STATUS_FALLBACK) as CatalogItem[]).map(
-            (l) => (
-              <option key={l.id} value={l.id}>
-                {l.label}
-              </option>
-            ),
-          )}
-        </select>
-      </div>
-      <div className="field">
-        <label>Estado</label>
-        <select
-          className="select"
-          value={entry.status ?? ""}
-          onChange={(e) => onPatch({ status: e.target.value || null })}
-        >
-          <option value="">—</option>
-          {(catalogs?.entry_status ?? ENTRY_STATUS_FALLBACK).map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label>Fecha de inicio</label>
-        <DateInput
-          month
-          value={entry.start_date ?? null}
-          onChange={(v) => onPatch({ start_date: v })}
-        />
-      </div>
-      <div className="field">
-        <label>Fecha de finalización</label>
-        <DateInput
-          month
-          value={entry.end_date ?? null}
-          onChange={(v) => onPatch({ end_date: v })}
-        />
-      </div>
-      <div className="field" style={{ gridColumn: "1 / -1" }}>
-        <label>Descripción</label>
-        <textarea
-          className="textarea"
-          value={entry.description ?? ""}
-          onChange={(e) => onPatch({ description: e.target.value })}
-        />
-      </div>
+      {readOnly ? (
+        <>
+          <div className="field">
+            <label>Institución (desde Perfil Simple)</label>
+            <input className="input" value={entry.institution ?? entry.company ?? ""} disabled />
+          </div>
+          <div className="field">
+            <label>Título / programa (desde Perfil Simple)</label>
+            <input className="input" value={entry.degree ?? entry.title ?? ""} disabled />
+          </div>
+          <div className="field">
+            <label>Nivel educativo (desde Perfil Simple)</label>
+            <input className="input" value={entry.level ? (catalogs?.education_levels?.find(l => l.id === entry.level)?.label || entry.level) : "—"} disabled />
+          </div>
+          <div className="field">
+            <label>Estado (desde Perfil Simple)</label>
+            <input className="input" value={entry.status ? (catalogs?.entry_status?.find(s => s.id === entry.status)?.label || entry.status) : "—"} disabled />
+          </div>
+          <div className="field">
+            <label>Fecha de inicio (desde Perfil Simple)</label>
+            <input className="input" value={entry.start_date ? entry.start_date.slice(0, 7) : "—"} disabled />
+          </div>
+          <div className="field">
+            <label>Fecha de finalización (desde Perfil Simple)</label>
+            <input className="input" value={entry.end_date ? entry.end_date.slice(0, 7) : "—"} disabled />
+          </div>
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label>Descripción (desde Perfil Simple)</label>
+            <textarea className="textarea" value={entry.description ?? ""} disabled rows={3} />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="field">
+            <label>Institución</label>
+            <input
+              className="input"
+              value={entry.institution ?? entry.company ?? ""}
+              onChange={(e) => onPatch({ institution: e.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label>Título / programa</label>
+            <input
+              className="input"
+              value={entry.degree ?? entry.title ?? ""}
+              onChange={(e) => onPatch({ degree: e.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label>Nivel educativo</label>
+            <select
+              className="select"
+              value={entry.level ?? ""}
+              onChange={(e) => onPatch({ level: e.target.value || null })}
+            >
+              <option value="">—</option>
+              {((catalogs?.education_levels ?? ENTRY_STATUS_FALLBACK) as CatalogItem[]).map(
+                (l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.label}
+                  </option>
+                ),
+              )}
+            </select>
+          </div>
+          <div className="field">
+            <label>Estado</label>
+            <select
+              className="select"
+              value={entry.status ?? ""}
+              onChange={(e) => onPatch({ status: e.target.value || null })}
+            >
+              <option value="">—</option>
+              {(catalogs?.entry_status ?? ENTRY_STATUS_FALLBACK).map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Fecha de inicio</label>
+            <DateInput
+              month
+              value={entry.start_date ?? null}
+              onChange={(v) => onPatch({ start_date: v })}
+            />
+          </div>
+          <div className="field">
+            <label>Fecha de finalización</label>
+            <DateInput
+              month
+              value={entry.end_date ?? null}
+              onChange={(v) => onPatch({ end_date: v })}
+            />
+          </div>
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label>Descripción</label>
+            <textarea
+              className="textarea"
+              value={entry.description ?? ""}
+              onChange={(e) => onPatch({ description: e.target.value })}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

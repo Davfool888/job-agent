@@ -28,10 +28,11 @@ import { useJob, useJobExtra } from "../hooks/useApi";
 import { analyzeJob, updateJobStatus } from "../services/jobs";
 import {
   ADAPT_STAGES,
-  adaptCv,
+  adaptCvAsync,
   adaptDownloadUrl,
+  adaptErrorMessage,
+  type AdaptAsyncError,
   type AdaptCvResult,
-  type ProfileIncompleteError,
 } from "../services/adapt";
 import { API_URL } from "../services/api";
 import {
@@ -148,19 +149,41 @@ export function JobDetail() {
     setAdaptStage(ADAPT_STAGES[0]);
     setError(null);
     setProfileIncomplete(null);
-    // Etapas visibles mientras el backend procesa (puede tardar).
+    // Polling asincrono: el POST /start responde en ms y el PDF se genera
+    // en fondo. Las etapas rotan por tiempo y por polls para feedback real.
     let stage = 0;
     const timer = window.setInterval(() => {
       stage = Math.min(stage + 1, ADAPT_STAGES.length - 1);
       setAdaptStage(ADAPT_STAGES[stage]);
-    }, 6000);
+    }, 8000);
     try {
-      setAdapt(await adaptCv(jobId));
+      setAdapt(
+        await adaptCvAsync(jobId, {
+          onPoll: (attempt, status) => {
+            if (status.status === "done") {
+              setAdaptStage("Listo ✓");
+            } else if (attempt > 4) {
+              // Tras ~12s sin done, casi seguro esta en Chromium/PDF.
+              setAdaptStage(ADAPT_STAGES[2]);
+            } else if (attempt > 1) {
+              setAdaptStage(ADAPT_STAGES[1]);
+            }
+          },
+        }),
+      );
     } catch (e) {
-      if (e instanceof Error && "code" in e && (e as ProfileIncompleteError).code === "PROFILE_INCOMPLETE") {
-        setProfileIncomplete({ message: e.message });
+      const code =
+        e instanceof Error && "code" in e
+          ? String((e as AdaptAsyncError).code || "UNKNOWN_ERROR")
+          : "UNKNOWN_ERROR";
+      if (code === "PROFILE_INCOMPLETE") {
+        setProfileIncomplete({
+          message: e instanceof Error ? e.message : adaptErrorMessage(code),
+        });
       } else {
-        setError(e instanceof Error ? e.message : "Error inesperado");
+        setError(
+          e instanceof Error ? e.message : adaptErrorMessage(code),
+        );
       }
     } finally {
       window.clearInterval(timer);
@@ -482,7 +505,7 @@ function DetailBody({
             className="btn btn-ghost btn-sm"
             disabled={adapting}
             onClick={onAdapt}
-            title="Analiza la oferta y genera un CV personalizado en PDF (POST /jobs/{id}/adapt-cv)"
+            title="Adapta el perfil y genera el PDF en segundo plano (POST /jobs/{id}/adapt-cv/start + polling /status)"
           >
             <Sparkles size={15} /> {adapting ? adaptStage ?? "Adaptando…" : "Adaptar perfil"}
           </button>

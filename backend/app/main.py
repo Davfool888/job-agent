@@ -1000,6 +1000,55 @@ def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db)):
             status_code=error.http, content=error_body(error))
 
 
+@app.post("/jobs/{job_id}/adapt-cv/start", status_code=202)
+def start_adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db)):
+    """Inicia la adaptacion en segundo plano. Responde 202 de inmediato
+    (valida job + perfil sin Chromium); el cliente hace polling a
+    GET /jobs/{job_id}/adapt-cv/status hasta done/error y luego descarga
+    el PDF. Evita el timeout del flujo sync en instancias gratuitas."""
+    from fastapi.responses import JSONResponse
+
+    from app.adapt.jobs import prevalidate_adapt_job, start_adapt_job
+    from app.adapt.service import AdaptError, error_body
+
+    uid = None
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        try:
+            from app.auth import verify_bearer_token
+            claims = verify_bearer_token(auth_header)
+            uid = claims.get("uid")
+        except Exception:
+            pass  # Sin auth válido, usar defaults
+
+    try:
+        prevalidate_adapt_job(db, job_id, uid)
+    except AdaptError as error:
+        return JSONResponse(
+            status_code=error.http, content=error_body(error))
+    body = start_adapt_job(job_id, uid)
+    return JSONResponse(status_code=202, content=body)
+
+
+@app.get("/jobs/{job_id}/adapt-cv/status")
+def adapt_job_cv_status(job_id: str, db: Session = Depends(get_db)):
+    """Estado para polling: idle | processing | done (+result) | error
+    (+error {code, message}). done incluye download_url del PDF."""
+    from fastapi.responses import JSONResponse
+
+    from app.adapt.jobs import get_adapt_status
+    from app.adapt.service import AdaptError
+
+    try:
+        return get_adapt_status(db, job_id)
+    except AdaptError as error:
+        return JSONResponse(
+            status_code=error.http,
+            content={"success": False,
+                     "error": {"code": error.code,
+                               "message": str(error)}})
+
+
 @app.get("/jobs/{job_id}/adapt-cv/download")
 def download_adapt_cv(
     job_id: str,
