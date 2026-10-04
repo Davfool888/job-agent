@@ -26,7 +26,7 @@ const LINKS = [
   { to: "/discarded", label: "Descartadas", icon: BookmarkX },
   { to: "/viewed", label: "Vistas", icon: Eye },
   { to: "/applications", label: "Postulaciones", icon: Send },
-  { to: "/cv", label: "CV", icon: FileText },
+  { to: "/cv", label: "Guardadas", icon: FileText },
   { to: "/analytics", label: "Análisis", icon: BarChart3 },
   { to: "/profile", label: "Perfil", icon: User },
   { to: "/settings", label: "Configuración", icon: Settings },
