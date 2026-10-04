@@ -133,19 +133,21 @@ def to_display_profile(flat: dict, rich: dict) -> dict:
     }
 
 
-def get_profile_for_cv(db=None, user_id=None) -> dict:
-    """Perfil para adaptar el CV.
-    
-    - Si user_id es None o "__guest__": usa datos demo de invitado
-    - Si hay user_id real: usa el perfil del usuario autenticado (sin fallback a demo)
+def get_profile_for_cv(db=None, user_id=None, email=None) -> dict:
+    """Perfil para adaptar el CV, SIEMPRE en forma display.
+
+    - Invitado (sin user_id, o anonimo sin email): datos demo.
+    - Google (user_id + email): su propio perfil (plano + estructurado),
+      en blanco donde no haya guardado nada. Sin fallback a demo.
     """
     from app.services import job_service as jobs
+    from app.services.search_profiles import _is_guest
 
     # Determinar qué perfil usar
-    if user_id and user_id != "__guest__":
+    if user_id and not _is_guest(user_id, email):
         # Usuario autenticado: usar su perfil real (sin fallback a demo)
-        flat = jobs.get_profile_for(db, user_id, "")
-        rich = jobs.get_rich_profile_for(db, user_id, "")
+        flat = jobs.get_profile_for(db, user_id, email)
+        rich = jobs.get_rich_profile_for(db, user_id, email)
         # Para usuarios autenticados, asegurar que los campos opcionales sean arrays vacíos si no existen
         # para evitar fallback a datos demo en to_display_profile
         rich.setdefault("other_knowledge", [])

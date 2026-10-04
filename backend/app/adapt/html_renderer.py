@@ -126,15 +126,47 @@ def _split_sentences(text: str) -> list[str]:
 
 
 def _contact_lines(content: dict) -> tuple[str, str]:
-    """Dos lineas como el ejemplo: ubicacion|tel|email y enlaces."""
+    """Dos lineas como el ejemplo: ubicacion|tel|email y enlaces.
+
+    Lo importante que falte no se inventa: se marca en el mismo
+    pedazo con '(falta información de ...)'.
+    """
+    missing = set(content.get("missing") or [])
     line1 = [content.get("location"), content.get("phone"),
              content.get("email")]
+    if "phone" in missing:
+        line1.append(_missing_text("phone"))
+    if "email" in missing:
+        line1.append(_missing_text("email"))
     line2 = [_display_url(content.get("linkedin")),
              _display_url(content.get("github")),
              _display_url(content.get("portfolio"))]
     first = " | ".join(esc(p) for p in line1 if str(p).strip())
     second = " | ".join(esc(p) for p in line2 if str(p).strip())
     return first, second
+
+
+MISSING_LABELS = {
+    "title": "título profesional",
+    "email": "correo electrónico",
+    "phone": "teléfono",
+    "summary": "resumen profesional",
+    "skills": "habilidades",
+    "experiences": "experiencia laboral",
+    "education": "educación",
+}
+
+
+def _missing_text(code: str) -> str:
+    return f"(falta información de {MISSING_LABELS.get(code, code)})"
+
+
+def _missing_block(content: dict, code: str) -> str:
+    """Parrafo marcador para secciones sin datos del perfil."""
+    if code in (content.get("missing") or []):
+        return (f'<p class="missing-info">'
+                f"{esc(_missing_text(code))}</p>")
+    return ""
 
 
 def _section(title: str, inner: str) -> str:
@@ -189,7 +221,8 @@ def _technical_skills_block(content: dict) -> str:
                 )
 
     if not blocks:
-        return ""
+        return _section("Competencias Técnicas",
+                        _missing_block(content, "skills"))
 
     return _section("Competencias Técnicas", "".join(blocks))
 
@@ -301,7 +334,8 @@ def _experience_block(content: dict, fmt: str = "MMM YYYY") -> str:
         )
 
     if not blocks:
-        return ""
+        return _section("Experiencia Profesional / Professional Experience",
+                        _missing_block(content, "experiences"))
 
     return _section("Experiencia Profesional / Professional Experience",
                     "".join(blocks))
@@ -369,7 +403,8 @@ def _education_block(content: dict, fmt: str = "MMM YYYY") -> str:
         )
 
     if not blocks:
-        return ""
+        return _section("Educación / Education",
+                        _missing_block(content, "education"))
 
     return _section("Educación / Education", "".join(blocks))
 
@@ -614,23 +649,29 @@ def render_cv_html(content: dict, job: dict | None = None, pdf_config: dict | No
     if pdf_config:
         css = _apply_pdf_config_to_css(css, pdf_config)
 
-    # Linea de titulo estilo ejemplo: rol adaptado | titulo de la persona.
+    # Linea de titulo: SOLO el titulo del perfil. El rol de la oferta
+    # no se hace pasar por titulo propio: va en "Cargo objetivo".
+    # Si el perfil no trae titulo, se marca en vez de inventarlo.
     adapted = str(content.get("target_role") or "").strip()
     own = str(content.get("title") or "").strip()
-    if adapted and own and adapted.lower() != own.lower():
-        professional_title = f"{adapted} | {own}"
+    professional_title = own or _missing_text("title")
+    if adapted and adapted.lower() != own.lower():
+        objective_line = f"Cargo objetivo: {adapted}"
     else:
-        professional_title = adapted or own
+        objective_line = ""
 
     line1, line2 = _contact_lines(content)
 
-    # Summary
+    # Summary: del perfil (con o sin pulido LLM). Si falta, se marca.
     summary = ""
     if str(content.get("summary") or "").strip():
         summary = _section(
             "Perfil Profesional",
             f'<p class="summary">{esc(content.get("summary"))}</p>'
         )
+    else:
+        summary = _section(
+            "Perfil Profesional", _missing_block(content, "summary"))
 
     # Orden de secciones desde pdf_config o default completo.
     # Slugs desconocidos se ignoran; quitar un slug oculta la seccion.
@@ -659,67 +700,7 @@ def render_cv_html(content: dict, job: dict | None = None, pdf_config: dict | No
         "CSS": css,
         "FULL_NAME": esc(content.get("full_name")),
         "TITLE_LINE": esc(professional_title),
-        "CONTACT_LINE_1": line1,
-        "CONTACT_LINE_2": line2,
-        "SECTIONS": "".join(
-            blocks.get(slug, "") for slug in section_order
-            if isinstance(slug, str)),
-    }
-
-    html_text = template
-    for key, value in titles.items():
-        html_text = html_text.replace("{{" + key + "}}", value)
-
-    if not content.get("full_name") and "<section>" not in html_text:
-        raise ValueError("Contenido insuficiente para generar el HTML.")
-
-    return html_text
-
-    # Linea de titulo estilo ejemplo: rol adaptado | titulo de la persona.
-    adapted = str(content.get("target_role") or "").strip()
-    own = str(content.get("title") or "").strip()
-    if adapted and own and adapted.lower() != own.lower():
-        professional_title = f"{adapted} | {own}"
-    else:
-        professional_title = adapted or own
-
-    line1, line2 = _contact_lines(content)
-
-    # Summary
-    summary = ""
-    if str(content.get("summary") or "").strip():
-        summary = _section(
-            "Perfil Profesional",
-            f'<p class="summary">{esc(content.get("summary"))}</p>'
-        )
-
-    # Orden de secciones desde pdf_config o default completo.
-    # Slugs desconocidos se ignoran; quitar un slug oculta la seccion.
-    # "certifications" vive dentro de "other_studies" (sin bloque propio).
-    default_order = ["summary", "experience", "education", "projects",
-                     "skills", "soft_skills", "languages", "other_studies",
-                     "other_knowledge"]
-    section_order = (pdf_config or {}).get("section_order") or default_order
-    if not isinstance(section_order, list):
-        section_order = default_order
-
-    fmt = str((pdf_config or {}).get("date_format") or "MMM YYYY")
-    blocks = {
-        "summary": summary,
-        "experience": _experience_block(content, fmt),
-        "education": _education_block(content, fmt),
-        "projects": _projects_block(content, fmt),
-        "skills": _technical_skills_block(content),
-        "soft_skills": _soft_skills_block(content),
-        "languages": _languages_block(content),
-        "other_studies": _other_studies_block(content, fmt),
-        "other_knowledge": _other_knowledge_block(content),
-    }
-
-    titles = {
-        "CSS": css,
-        "FULL_NAME": esc(content.get("full_name")),
-        "TITLE_LINE": esc(professional_title),
+        "OBJECTIVE_LINE": esc(objective_line),
         "CONTACT_LINE_1": line1,
         "CONTACT_LINE_2": line2,
         "SECTIONS": "".join(

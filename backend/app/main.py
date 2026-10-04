@@ -973,6 +973,27 @@ def tailor_job_profile(job_id: str, db: Session = Depends(get_db)):
     }
 
 
+def _adapt_identity(request: Request | None) -> tuple[str | None, str | None]:
+    """(uid, email) de la sesion para Adaptar-perfil.
+
+    Invitado = sin token o anonimo sin email: usa el demo y comparte la
+    carpeta "guest". Google = uid + email: usa solo su perfil y sus
+    archivos. Centraliza la lectura del Bearer para que sync/start/
+    status/download usen siempre EL MISMO perfil.
+    """
+    if request is None:
+        return None, None
+    auth_header = request.headers.get("authorization")
+    if not auth_header or not auth_header.lower().startswith("bearer "):
+        return None, None
+    try:
+        from app.auth import verify_bearer_token
+        claims = verify_bearer_token(auth_header)
+        return claims.get("uid"), claims.get("email")
+    except Exception:
+        return None, None  # Sin auth válido, usar defaults
+
+
 @app.post("/jobs/{job_id}/adapt-cv")
 def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db)):
     """Adaptar-perfil: matching deterministico + seleccion + HTML/CSS
@@ -982,19 +1003,11 @@ def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db)):
 
     from app.adapt.service import adapt_profile_for_job, AdaptError, error_body
 
-    # Obtener UID del usuario autenticado (opcional, para config de PDF)
-    uid = None
-    auth_header = request.headers.get("authorization")
-    if auth_header and auth_header.lower().startswith("bearer "):
-        try:
-            from app.auth import verify_bearer_token
-            claims = verify_bearer_token(auth_header)
-            uid = claims.get("uid")
-        except Exception:
-            pass  # Sin auth válido, usar defaults
+    # UID+email de la sesion (invitado = demo, Google = su perfil).
+    uid, email = _adapt_identity(request)
 
     try:
-        return adapt_profile_for_job(db, job_id, uid)
+        return adapt_profile_for_job(db, job_id, uid, email)
     except AdaptError as error:
         return JSONResponse(
             status_code=error.http, content=error_body(error))
@@ -1011,27 +1024,21 @@ def start_adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_
     from app.adapt.jobs import prevalidate_adapt_job, start_adapt_job
     from app.adapt.service import AdaptError, error_body
 
-    uid = None
-    auth_header = request.headers.get("authorization")
-    if auth_header and auth_header.lower().startswith("bearer "):
-        try:
-            from app.auth import verify_bearer_token
-            claims = verify_bearer_token(auth_header)
-            uid = claims.get("uid")
-        except Exception:
-            pass  # Sin auth válido, usar defaults
+    uid, email = _adapt_identity(request)
 
     try:
-        prevalidate_adapt_job(db, job_id, uid)
+        prevalidate_adapt_job(db, job_id, uid, email)
     except AdaptError as error:
         return JSONResponse(
             status_code=error.http, content=error_body(error))
-    body = start_adapt_job(job_id, uid)
+    body = start_adapt_job(job_id, uid, email)
     return JSONResponse(status_code=202, content=body)
 
 
 @app.get("/jobs/{job_id}/adapt-cv/status")
-def adapt_job_cv_status(job_id: str, db: Session = Depends(get_db)):
+def adapt_job_cv_status(
+    job_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Estado para polling: idle | processing | done (+result) | error
     (+error {code, message}). done incluye download_url del PDF."""
     from fastapi.responses import JSONResponse
@@ -1039,8 +1046,9 @@ def adapt_job_cv_status(job_id: str, db: Session = Depends(get_db)):
     from app.adapt.jobs import get_adapt_status
     from app.adapt.service import AdaptError
 
+    uid, email = _adapt_identity(request)
     try:
-        return get_adapt_status(db, job_id)
+        return get_adapt_status(db, job_id, uid, email)
     except AdaptError as error:
         return JSONResponse(
             status_code=error.http,
@@ -1053,19 +1061,24 @@ def adapt_job_cv_status(job_id: str, db: Session = Depends(get_db)):
 def download_adapt_cv(
     job_id: str,
     format: str = Query("pdf", pattern="^(pdf|html)$"),
+    request: Request = None,
     db: Session = Depends(get_db),
 ):
-    """Descarga el CV adaptado (pdf o html). 404 honesto si no existe.
+    """Descarga el CV adaptado (pdf o html) DEL USUARIO de la sesion.
+    404 honesto si no existe.
 
     Si la oferta existe pero el archivo se perdio (reinicio con disco
-    efimero), se regenera al vuelo antes de servir."""
+    efimero), se regenera al vuelo con EL PERFIL DE LA SESION antes
+    de servir. Como fallback se acepta el archivo legacy (sin
+    subdirectorio de usuario) generado antes del aislamiento."""
     from pathlib import Path
 
     from fastapi.responses import FileResponse
 
-    from app.adapt.service import adapt_dir
+    from app.adapt.service import adapt_dir, legacy_adapt_dir
     from app.services.job_service import get_job_by_id
 
+    uid, email = _adapt_identity(request)
     job = None
     try:
         job = get_job_by_id(db=db, job_id=job_id)
@@ -1075,11 +1088,15 @@ def download_adapt_cv(
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
     from app.config import ADAPT_CVS_DIR
 
-    target = adapt_dir(job.id) / (f"cv.{format}")
+    target = adapt_dir(job.id, uid, email) / (f"cv.{format}")
     try:
         target.resolve().relative_to(ADAPT_CVS_DIR.resolve())
     except ValueError:
         raise HTTPException(status_code=404, detail="Archivo no disponible.")
+    if not Path(target).exists():
+        legacy = legacy_adapt_dir(job.id) / (f"cv.{format}")
+        if Path(legacy).exists():
+            target = legacy
     if not Path(target).exists():
         # Disco efimero: la oferta existe pero el archivo se perdio.
         # Regenerar es mas util que un 404.
@@ -1088,7 +1105,7 @@ def download_adapt_cv(
         from app.adapt.service import adapt_profile_for_job, AdaptError
 
         try:
-            adapt_profile_for_job(db, job.id)
+            adapt_profile_for_job(db, job.id, uid, email)
         except AdaptError as error:
             return JSONResponse(
                 status_code=error.http,

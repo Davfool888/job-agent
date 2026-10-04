@@ -18,12 +18,37 @@ class AdaptError(RuntimeError):
         self.http = http
 
 
-def adapt_dir(job_id) -> Path:
+def _owner_key(uid: str | None, email: str | None = None) -> str:
+    """Subdirectorio por usuario: cada sesion tiene sus PDFs.
+
+    Invitado (sin uid o anonimo sin email) comparte "guest" porque
+    comparte los mismos datos demo. Google usa su uid.
+    """
+    import re as _re
+
+    from app.services.search_profiles import _is_guest
+
+    if not uid or _is_guest(uid, email):
+        return "guest"
+    safe = _re.sub(r"[^A-Za-z0-9_-]", "_", str(uid))[:64]
+    return safe or "guest"
+
+
+def adapt_dir(job_id, uid: str | None = None,
+              email: str | None = None) -> Path:
     from app.config import ADAPT_CVS_DIR
 
-    directory = ADAPT_CVS_DIR / f"job_{job_id}"
+    directory = ADAPT_CVS_DIR / f"job_{job_id}" / _owner_key(uid, email)
     directory.mkdir(parents=True, exist_ok=True)
     return directory
+
+
+def legacy_adapt_dir(job_id) -> Path:
+    """Ubicacion anterior (sin subdirectorio): solo lectura para
+    migrar descargas generadas antes del aislamiento por usuario."""
+    from app.config import ADAPT_CVS_DIR
+
+    return ADAPT_CVS_DIR / f"job_{job_id}"
 
 
 def _as_list(value) -> list:
@@ -38,10 +63,12 @@ def _as_list(value) -> list:
     return []
 
 
-def adapt_profile_for_job(db, job_id, uid: str | None = None) -> dict:
+def adapt_profile_for_job(db, job_id, uid: str | None = None,
+                          email: str | None = None) -> dict:
     """Ejecuta el flujo completo y devuelve la respuesta de la API."""
     from app.adapt import guest, html_renderer, llm, matcher, pdf, selector
     from app.services.job_service import get_job_by_id
+    from app.services.search_profiles import _is_guest
 
     # Obtener configuración de PDF del usuario (si hay UID)
     pdf_config = {}
@@ -75,18 +102,22 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None) -> dict:
     if not job:
         raise AdaptError("JOB_NOT_FOUND", "Oferta no encontrada.", http=404)
 
-    # Si hay UID (usuario autenticado), verificar que tenga perfil completo
-    if uid:
+    # Perfil SIEMPRE en forma display (plano+estructurado del MISMO
+    # usuario): invitado (sin uid o anonimo sin email) -> demo;
+    # Google (uid + email) -> solo lo suyo. Asi el PDF nunca mezcla
+    # ni inventa: todo sale de la seccion Perfil.
+    if uid and not _is_guest(uid, email):
         from app.services.job_service import get_rich_profile_for
-        profile = get_rich_profile_for(db, uid, "")
+        raw = get_rich_profile_for(db, uid, email)
         # Verificar que el perfil tenga datos mínimos requeridos
-        if not _is_profile_complete(profile):
+        if not _is_profile_complete(raw):
             raise AdaptError(
                 "PROFILE_INCOMPLETE",
                 "Debe completar su perfil antes de generar un CV adaptado. "
                 "Vaya a la sección de Perfil y complete los campos obligatorios.",
                 http=400
             )
+        profile = guest.get_profile_for_cv(db, user_id=uid, email=email)
     else:
         # Usuario invitado: usar perfil demo
         profile = guest.get_profile_for_cv(db)
@@ -124,16 +155,22 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None) -> dict:
                 "github", "portfolio", "location"):
         content[key] = profile.get(key, "")
 
+    # Lo que falte IMPORTANTE no se inventa: se marca en el PDF con
+    # "(falta información de ...)" en el mismo pedazo (ver renderer).
+    content["missing"] = _missing_profile_fields(content)
+
     try:
         html_text = html_renderer.render_cv_html(content, offer, pdf_config)
     except ValueError as error:
         raise AdaptError("HTML_FAILED", str(error), http=502) from error
 
-    directory = adapt_dir(job.id)
+    directory = adapt_dir(job.id, uid, email)
     (directory / "adapt.json").write_text(json.dumps(
         {"job_id": job.id,
          "created_at": datetime.utcnow().isoformat(),
-         "profile_source": "guest",
+         "profile_source": "user" if (uid and not _is_guest(uid, email))
+         else "guest",
+         "owner_uid": _owner_key(uid, email),
          "matching": {k: v for k, v in matching.items()
                       if k in ("percentage", "matched_skills",
                                "missing_skills", "modality_ok",
@@ -188,6 +225,39 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None) -> dict:
 def error_body(error: AdaptError) -> dict:
     return {"success": False,
             "error": {"code": error.code, "message": str(error)}}
+
+
+def _missing_profile_fields(content: dict) -> list[str]:
+    """Campos importantes ausentes en el perfil (sin inventar: el
+    renderer los muestra como '(falta información de ...)')."""
+    missing: list[str] = []
+
+    def blank(value) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str):
+            return not value.strip()
+        if isinstance(value, (list, dict)):
+            return len(value) == 0
+        return False
+
+    if blank(content.get("title")):
+        missing.append("title")
+    if blank(content.get("email")):
+        missing.append("email")
+    if blank(content.get("phone")):
+        missing.append("phone")
+    if blank(content.get("summary")):
+        missing.append("summary")
+    skills = list(content.get("skills") or [])
+    groups = content.get("skills_groups") or {}
+    if not skills and not any(groups.get(k) for k in groups):
+        missing.append("skills")
+    if blank(content.get("experiences")):
+        missing.append("experiences")
+    if blank(content.get("education")):
+        missing.append("education")
+    return missing
 
 
 def _is_profile_complete(profile: dict) -> bool:
