@@ -9,6 +9,7 @@ export function Autocomplete({
   placeholder,
   allowCustom = false,
   customLabel = "Otro",
+  disabled = false,
 }: {
   value: string;
   onChange: (id: string) => void;
@@ -16,6 +17,7 @@ export function Autocomplete({
   placeholder?: string;
   allowCustom?: boolean;
   customLabel?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -36,14 +38,19 @@ export function Autocomplete({
         style={{ width: "100%" }}
         value={open ? text : (selected?.label ?? value)}
         placeholder={placeholder}
+        disabled={disabled}
         onFocus={() => {
-          setText("");
-          setOpen(true);
+          if (!disabled) {
+            setText("");
+            setOpen(true);
+          }
         }}
         onChange={(e) => {
-          setText(e.target.value);
-          setOpen(true);
-          if (e.target.value === "") onChange("");
+          if (!disabled) {
+            setText(e.target.value);
+            setOpen(true);
+            if (e.target.value === "") onChange("");
+          }
         }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
@@ -117,10 +124,12 @@ export function DateInput({
   value,
   onChange,
   month = false,
+  disabled = false,
 }: {
   value: string | null | undefined;
   onChange: (iso: string | null) => void;
   month?: boolean;
+  disabled?: boolean;
 }) {
   const shown = (value ?? "").slice(0, month ? 7 : 10);
   return (
@@ -128,7 +137,9 @@ export function DateInput({
       className="input"
       type={month ? "month" : "date"}
       value={shown}
+      disabled={disabled}
       onChange={(e) => {
+        if (disabled) return;
         const raw = e.target.value;
         if (!raw) {
           onChange(null);

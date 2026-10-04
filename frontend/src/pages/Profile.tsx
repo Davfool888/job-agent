@@ -26,14 +26,9 @@ import {
   DOMAIN_SUGGESTIONS,
   ENTRY_STATUS_FALLBACK,
   MODALITY_FALLBACK,
-  SALARY_CURRENCY_FALLBACK,
-  SALARY_PERIOD_FALLBACK,
-  SECTOR_FALLBACK,
-  SENIORITY_FALLBACK,
   SOFT_SKILLS_FALLBACK,
   TITLE_CATEGORY_SUGGESTIONS,
   canonicalLocation,
-  parseSalaryString,
   resolveOptionId,
 } from "../utils/profileOptions";
 import type {
@@ -44,7 +39,6 @@ import type {
   Profile,
   ProfileEntry,
   RichProfile,
-  Perspective,
 } from "../types/profile";
 import { EMPTY_PROFILE } from "../types/profile";
 
@@ -113,35 +107,8 @@ export function ProfilePage() {
   const titleOptions =
     catalogs?.professional_titles.map((t) => t.label) ?? TITLES;
   const cityOptions = catalogs?.cities.map((c) => c.label) ?? COLOMBIAN_CITIES;
-  const modalityOpts =
-    catalogs?.modalities.map((m) => ({ id: m.id, label: m.label })) ??
-    MODALITY_FALLBACK;
-  const seniorityOpts =
-    catalogs?.seniority_levels.map((s) => ({ id: s.id, label: s.label })) ??
-    SENIORITY_FALLBACK;
-  const sectorLabels =
-    catalogs?.sectors.map((s) => s.label) ??
-    SECTOR_FALLBACK.map((s) => s.label);
-  const currencyOpts =
-    catalogs?.salary_currencies.map((c) => ({ id: c.id, label: c.label })) ??
-    SALARY_CURRENCY_FALLBACK;
-  const periodOpts =
-    catalogs?.salary_periods.map((p) => ({ id: p.id, label: p.label })) ??
-    SALARY_PERIOD_FALLBACK;
 
-  // Valores guardados legacy (texto libre) resueltos al id canonico para
-  // que los selects muestren la opcion correcta sin perder datos.
-  const modalityValue = resolveOptionId(current.modality, modalityOpts) ?? "";
-  const seniorityValue =
-    resolveOptionId(current.experience_level, seniorityOpts) ?? "";
   const locationValue = canonicalLocation(current.location, cityOptions);
-  const preferredLocationValue = canonicalLocation(
-    current.preferred_location,
-    cityOptions,
-  );
-  const salary = parseSalaryString(current.min_salary);
-  const composeSalary = (amount: string, currency: string, period: string) =>
-    [amount.trim(), currency, period].filter(Boolean).join(" ");
 
   // Opciones de ciudad garantizando que el valor guardado siempre aparece
   // (aunque sea texto libre legacy que ya no esta en el catalogo).
@@ -248,24 +215,11 @@ export function ProfilePage() {
             set={set}
             saved={saved}
             saveError={saveError}
-            setSaved={setSaved}
-            setSaveError={setSaveError}
             submit={submit}
             saving={saving}
             titleOptions={titleOptions}
-            cityOptions={cityOptions}
             citySelectOptions={citySelectOptions}
-            modalityOpts={modalityOpts}
-            seniorityOpts={seniorityOpts}
-            sectorLabels={sectorLabels}
-            currencyOpts={currencyOpts}
-            periodOpts={periodOpts}
-            salary={salary}
-            composeSalary={composeSalary}
             locationValue={locationValue}
-            preferredLocationValue={preferredLocationValue}
-            modalityValue={modalityValue}
-            seniorityValue={seniorityValue}
             // Lifted state
             experiences={simpleExperiences}
             setExperiences={setSimpleExperiences}
@@ -279,12 +233,9 @@ export function ProfilePage() {
         {activeTab === "structured" && (
           <StructuredProfileManager 
             locked={locked} 
-            simpleProfile={{
-              ...current,
-              experiences: simpleExperiences,
-              education: simpleEducation,
-              languages: simpleLanguages,
-            }}
+            simpleExperiences={simpleExperiences}
+            simpleEducation={simpleEducation}
+            simpleLanguages={simpleLanguages}
           />
         )}
       </div>
@@ -323,24 +274,11 @@ function SimpleProfileTab({
   set,
   saved,
   saveError,
-  setSaved,
-  setSaveError,
   submit,
   saving,
   titleOptions,
-  cityOptions,
   citySelectOptions,
-  modalityOpts,
-  seniorityOpts,
-  sectorLabels,
-  currencyOpts,
-  periodOpts,
-  salary,
-  composeSalary,
   locationValue,
-  preferredLocationValue,
-  modalityValue,
-  seniorityValue,
   // Lifted state from ProfilePage
   experiences,
   setExperiences,
@@ -354,24 +292,11 @@ function SimpleProfileTab({
   set: (patch: Partial<Profile>) => void;
   saved: boolean;
   saveError: string | null;
-  setSaved: (v: boolean) => void;
-  setSaveError: (v: string | null) => void;
   submit: (e: React.FormEvent) => Promise<void>;
   saving: boolean;
   titleOptions: string[];
-  cityOptions: string[];
   citySelectOptions: (value: string) => string[];
-  modalityOpts: Array<{ id: string; label: string }>;
-  seniorityOpts: Array<{ id: string; label: string }>;
-  sectorLabels: string[];
-  currencyOpts: Array<{ id: string; label: string }>;
-  periodOpts: Array<{ id: string; label: string }>;
-  salary: { amount: string; currency: string; period: string };
-  composeSalary: (amount: string, currency: string, period: string) => string;
   locationValue: string;
-  preferredLocationValue: string;
-  modalityValue: string;
-  seniorityValue: string;
   experiences: ProfileEntry[];
   setExperiences: (next: ProfileEntry[]) => void;
   education: ProfileEntry[];
@@ -485,13 +410,13 @@ function SimpleProfileTab({
           <div className="form-grid">
             <div className="field">
               <label>Empresa</label>
-              <input className="input" value={exp.company ?? ""} onChange={(e) => setExperiences(experiences.map((e, i) => i === idx ? { ...e, company: e.target.value } : e))} placeholder="Nombre de la empresa" />
+              <input className="input" value={exp.company ?? ""} onChange={(evt) => setExperiences(experiences.map((item, i) => i === idx ? { ...item, company: evt.target.value } : item))} placeholder="Nombre de la empresa" />
             </div>
             <div className="field">
               <label>Cargo</label>
               <SuggestInput
                 value={exp.title ?? ""}
-                onChange={(v) => setExperiences(experiences.map((e, i) => i === idx ? { ...e, title: v } : e))}
+                onChange={(v) => setExperiences(experiences.map((item, i) => i === idx ? { ...item, title: v } : item))}
                 options={titleOptions}
                 placeholder="Elige de la lista: Analista de Datos"
                 strict
@@ -499,18 +424,18 @@ function SimpleProfileTab({
             </div>
             <div className="field">
               <label>Fecha de inicio</label>
-              <DateInput month value={exp.start_date ?? null} onChange={(v) => setExperiences(experiences.map((e, i) => i === idx ? { ...e, start_date: v } : e))} />
+              <DateInput month value={exp.start_date ?? null} onChange={(v) => setExperiences(experiences.map((item, i) => i === idx ? { ...item, start_date: v } : item))} />
             </div>
             <div className="field">
               <label>Fecha de finalización</label>
-              <DateInput month value={exp.is_current ? null : (exp.end_date ?? null)} onChange={(v) => setExperiences(experiences.map((e, i) => i === idx ? { ...e, end_date: v } : e))} />
+              <DateInput month value={exp.is_current ? null : (exp.end_date ?? null)} onChange={(v) => setExperiences(experiences.map((item, i) => i === idx ? { ...item, end_date: v } : item))} />
             </div>
             <div className="field">
               <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input
                   type="checkbox"
                   checked={!!exp.is_current}
-                  onChange={(e) => setExperiences(experiences.map((ex, i) => i === idx ? { ...ex, is_current: e.target.checked, end_date: e.target.checked ? null : ex.end_date } : ex))}
+                  onChange={(evt) => setExperiences(experiences.map((item, i) => i === idx ? { ...item, is_current: evt.target.checked, end_date: evt.target.checked ? null : item.end_date } : item))}
                 />
                 Actualmente trabajo aquí
               </label>
@@ -521,7 +446,7 @@ function SimpleProfileTab({
                 className="textarea"
                 rows={3}
                 value={exp.description ?? ""}
-                onChange={(e) => setExperiences(experiences.map((ex, i) => i === idx ? { ...ex, description: e.target.value } : ex))}
+                onChange={(evt) => setExperiences(experiences.map((item, i) => i === idx ? { ...item, description: evt.target.value } : item))}
                 placeholder="Describe tus responsabilidades y logros principales..."
               />
             </div>
@@ -550,19 +475,19 @@ function SimpleProfileTab({
           <div className="form-grid">
             <div className="field">
               <label>Institución</label>
-              <input className="input" value={edu.institution ?? ""} onChange={(e) => setEducation(education.map((e, i) => i === idx ? { ...e, institution: e.target.value } : e))} placeholder="Universidad, instituto, etc." />
+              <input className="input" value={edu.institution ?? ""} onChange={(evt) => setEducation(education.map((item, i) => i === idx ? { ...item, institution: evt.target.value } : item))} placeholder="Universidad, instituto, etc." />
             </div>
             <div className="field">
               <label>Título / Programa</label>
-              <input className="input" value={edu.degree ?? ""} onChange={(e) => setEducation(education.map((e, i) => i === idx ? { ...e, degree: e.target.value } : e))} placeholder="Ej: Ingeniería de Sistemas, Maestría en Data Science" />
+              <input className="input" value={edu.degree ?? ""} onChange={(evt) => setEducation(education.map((item, i) => i === idx ? { ...item, degree: evt.target.value } : item))} placeholder="Ej: Ingeniería de Sistemas, Maestría en Data Science" />
             </div>
             <div className="field">
               <label>Fecha de inicio</label>
-              <DateInput month value={edu.start_date ?? null} onChange={(v) => setEducation(education.map((e, i) => i === idx ? { ...e, start_date: v } : e))} />
+              <DateInput month value={edu.start_date ?? null} onChange={(v) => setEducation(education.map((item, i) => i === idx ? { ...item, start_date: v } : item))} />
             </div>
             <div className="field">
               <label>Fecha de finalización</label>
-              <DateInput month value={edu.end_date ?? null} onChange={(v) => setEducation(education.map((e, i) => i === idx ? { ...e, end_date: v } : e))} />
+              <DateInput month value={edu.end_date ?? null} onChange={(v) => setEducation(education.map((item, i) => i === idx ? { ...item, end_date: v } : item))} />
             </div>
             <div className="field" style={{ gridColumn: "1 / -1" }}>
               <label>Descripción</label>
@@ -570,7 +495,7 @@ function SimpleProfileTab({
                 className="textarea"
                 rows={3}
                 value={edu.description ?? ""}
-                onChange={(e) => setEducation(education.map((ed, i) => i === idx ? { ...ed, description: e.target.value } : ed))}
+                onChange={(evt) => setEducation(education.map((item, i) => i === idx ? { ...item, description: evt.target.value } : item))}
                 placeholder="Materias relevantes, tesis, proyectos, honores..."
               />
             </div>
@@ -646,10 +571,14 @@ const SECTIONS: Array<{ key: SectionKey; label: string }> = [
 
 function StructuredProfileManager({ 
   locked, 
-  simpleProfile 
+  simpleExperiences,
+  simpleEducation,
+  simpleLanguages,
 }: { 
   locked: boolean; 
-  simpleProfile: Profile | null;
+  simpleExperiences: ProfileEntry[];
+  simpleEducation: ProfileEntry[];
+  simpleLanguages: LanguageEntry[];
 }) {
   const { catalogs, error: catalogError } = useCatalogs();
   const { firebaseUser } = useAuth();
@@ -690,58 +619,57 @@ function StructuredProfileManager({
       };
       
       // If we have simple profile data, use its experience/education as base
-      if (simpleProfile) {
-        const simpleExperiences = (simpleProfile as any).experiences || [];
-        const simpleEducation = (simpleProfile as any).education || [];
-        
-        // Merge experiences: keep existing perspectives from rich profile, add simple ones
-        if (simpleExperiences.length > 0) {
-          const richExperiences = mergedData.experience || [];
-          const mergedExperiences = simpleExperiences.map((simpleExp: any, idx: number) => {
-            const richExp = richExperiences[idx];
-            if (richExp) {
-              // Keep rich profile's perspectives and structured fields, but update base fields from simple
-              return {
-                ...richExp,
-                company: simpleExp.company || richExp.company,
-                title: simpleExp.title || richExp.title,
-                start_date: simpleExp.start_date || richExp.start_date,
-                end_date: simpleExp.end_date || richExp.end_date,
-                is_current: simpleExp.is_current ?? richExp.is_current,
-                description: simpleExp.description || richExp.description,
-              };
-            }
-            // New entry from simple profile, add empty perspectives
+      if (simpleExperiences.length > 0) {
+        const richExperiences = mergedData.experience || [];
+        const mergedExperiences = simpleExperiences.map((simpleExp: any, idx: number) => {
+          const richExp = richExperiences[idx];
+          if (richExp) {
+            // Keep rich profile's perspectives and structured fields, but update base fields from simple
             return {
-              ...simpleExp,
-              perspectives: [],
+              ...richExp,
+              company: simpleExp.company || richExp.company,
+              title: simpleExp.title || richExp.title,
+              start_date: simpleExp.start_date || richExp.start_date,
+              end_date: simpleExp.end_date || richExp.end_date,
+              is_current: simpleExp.is_current ?? richExp.is_current,
+              description: simpleExp.description || richExp.description,
             };
-          });
-          mergedData.experience = mergedExperiences;
-        }
-        
-        // Merge education similarly
-        if (simpleEducation.length > 0) {
-          const richEducation = mergedData.education || [];
-          const mergedEducation = simpleEducation.map((simpleEdu: any, idx: number) => {
-            const richEdu = richEducation[idx];
-            if (richEdu) {
-              return {
-                ...richEdu,
-                institution: simpleEdu.institution || richEdu.institution,
-                degree: simpleEdu.degree || richEdu.degree,
-                start_date: simpleEdu.start_date || richEdu.start_date,
-                end_date: simpleEdu.end_date || richEdu.end_date,
-                description: simpleEdu.description || richEdu.description,
-              };
-            }
+          }
+          // New entry from simple profile, add empty perspectives
+          return {
+            ...simpleExp,
+            perspectives: [],
+          };
+        });
+        mergedData.experience = mergedExperiences;
+      }
+      
+      // Merge education similarly
+      if (simpleEducation.length > 0) {
+        const richEducation = mergedData.education || [];
+        const mergedEducation = simpleEducation.map((simpleEdu: any, idx: number) => {
+          const richEdu = richEducation[idx];
+          if (richEdu) {
             return {
-              ...simpleEdu,
-              perspectives: [],
+              ...richEdu,
+              institution: simpleEdu.institution || richEdu.institution,
+              degree: simpleEdu.degree || richEdu.degree,
+              start_date: simpleEdu.start_date || richEdu.start_date,
+              end_date: simpleEdu.end_date || richEdu.end_date,
+              description: simpleEdu.description || richEdu.description,
             };
-          });
-          mergedData.education = mergedEducation;
-        }
+          }
+          return {
+            ...simpleEdu,
+            perspectives: [],
+          };
+        });
+        mergedData.education = mergedEducation;
+      }
+      
+      // Merge languages if provided
+      if (simpleLanguages.length > 0) {
+        mergedData.languages = simpleLanguages;
       }
       
       setRich(mergedData);

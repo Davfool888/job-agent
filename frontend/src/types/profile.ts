@@ -15,6 +15,11 @@ export interface Profile {
   preferred_location: string;
   min_salary: string;
   experience_level: string;
+  // Contact fields (para Perfil Simple)
+  email: string;
+  secondary_email: string;
+  phone: string;
+  secondary_phone: string;
   // Origen de los datos (backend): admin = perfil base global,
   // own = perfil personal del usuario, demo = datos de prueba de
   // invitado, shared = modo sin sesion.
@@ -192,4 +197,8 @@ export const EMPTY_PROFILE: Profile = {
   preferred_location: "",
   min_salary: "",
   experience_level: "",
+  email: "",
+  secondary_email: "",
+  phone: "",
+  secondary_phone: "",
 };
