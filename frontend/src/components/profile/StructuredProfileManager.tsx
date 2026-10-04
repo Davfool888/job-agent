@@ -6,7 +6,7 @@ import {
   EntryCard,
   TagInput,
 } from "../../components/profile/fields";
-import { fetchCatalogs, fetchFullProfile, saveFullProfile } from "../../services/profile";
+import { fetchCatalogs, fetchFullProfile, fetchProfile, saveFullProfile } from "../../services/profile";
 import { SKILLS } from "../../utils/skills";
 import {
   DOMAIN_SUGGESTIONS,
@@ -95,6 +95,32 @@ export function StructuredProfileManager({
         soft_skills: data.soft_skills ?? [],
         years_experience: data.years_experience ?? null,
       };
+
+      // Consistencia con el tab simple: los campos repetidos vacíos
+      // se pre-rellenan desde el plano (solo display; al guardar, el
+      // backend los iguala en ambos lados).
+      try {
+        const flat = (await fetchProfile()) as unknown as Record<string, unknown>;
+        const pp = { ...(mergedData.personal ?? {}) } as Record<string, unknown>;
+        const pick = (richV: unknown, flatV: unknown) =>
+          String(richV ?? "").trim() ? richV : (flatV ?? richV);
+        pp.full_name = pick(pp.full_name, flat.full_name);
+        pp.title = pick(pp.title, flat.title);
+        pp.location = pick(pp.location, flat.location);
+        for (const k of ["email", "phone", "linkedin", "github", "portfolio"] as const) {
+          pp[k] = pick(pp[k], flat[k]);
+        }
+        if (!String(pp.first_name ?? "").trim() && !String(pp.last_name ?? "").trim()) {
+          const parts = String(pp.full_name ?? "").trim().split(/\s+/).filter(Boolean);
+          if (parts.length > 0) {
+            pp.first_name = parts[0];
+            pp.last_name = parts.slice(1).join(" ");
+          }
+        }
+        mergedData.personal = pp as typeof mergedData.personal;
+      } catch {
+        /* sin plano: se muestra el estructurado tal cual */
+      }
 
       if (simpleExperiences.length > 0) {
         const richExperiences = mergedData.experience || [];

@@ -78,9 +78,8 @@ def build_queries(profile: dict) -> list[str]:
 
 def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | None = None) -> dict:
     """Ejecuta un perfil: scraping + dedup + analisis. Devuelve resumen."""
-    from app.analysis.discovery import enrich_and_analyze
-    from app.scraper.registry import get_scraper
     from app.services import job_service as jobs
+    from app.services import search_orchestrator as orch
     from app.services import search_profiles as profiles
 
     owns_db = db is None
@@ -119,15 +118,16 @@ def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | Non
 
             for source in sources:
                 try:
-                    scraper = get_scraper(source)
+                    scraper = orch.resolve_scraper(source)
                 except ValueError as error:
                     summary["errors"].append(f"{source}: {error}")
                     continue
                 rows: list = []
                 for query in queries:
                     try:
-                        found = scraper.search(
-                            query, max_pages=1, location=location
+                        found = orch.scrape_with(
+                            scraper, source, query, max_pages=1,
+                            location=location,
                         )
                     except Exception as error:  # noqa: BLE001
                         summary["errors"].append(
@@ -139,13 +139,10 @@ def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | Non
                         )
                         continue
                     # Antigüedad del perfil: lo viejo ni se guarda.
-                    if max_age_days > 0:
-                        from app.scraper.base import filter_by_max_age
-
-                        found = filter_by_max_age(found, max_age_days)
+                    found = orch.filter_by_age(found, max_age_days)
                     summary["found"] += len(found)
                     try:
-                        saved = jobs.save_jobs(
+                        saved = orch.save_batch(
                             db, found, search_query=query,
                             search_profile_id=str(profile_id),
                             uid=uid, email=email,
@@ -159,7 +156,7 @@ def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | Non
                     time.sleep(0.5)
                 if rows:
                     try:
-                        stats = enrich_and_analyze(
+                        stats = orch.analyze_batch(
                             db, scraper=scraper, profile=user_profile,
                             rows=rows, max_details=8, delay=0.5,
                             uid=uid, email=email,
@@ -248,7 +245,12 @@ def run_due_profiles(*, db=None) -> dict:
 
 def _tick_job() -> None:
     with _lock:
-        run_due_profiles()
+        # Fase 4: no ejecuta inline (bloquearia el hilo del scheduler
+        # si un tick tarda mas que el intervalo). Encola coalescido;
+        # el worker unico lo procesa y actualiza _last_tick al terminar.
+        from app.services import run_queue as queue
+
+        queue.submit_tick(wait=False)
 
 
 def start_scheduler() -> bool:
@@ -294,12 +296,20 @@ def scheduler_status() -> dict:
     from app.config import SCHEDULER_ENABLED
     from app.config import SCHEDULER_INTERVAL_SECONDS
 
+    try:
+        from app.services import run_queue as queue
+
+        queue_info = queue.queue_status()
+    except Exception:  # noqa: BLE001
+        queue_info = {"pending": 0, "running": 0,
+                      "worker_alive": False, "stored": 0}
     return {
         "enabled": bool(SCHEDULER_ENABLED and _scheduler is not None),
         "configured": bool(SCHEDULER_ENABLED),
         "interval_seconds": max(60, SCHEDULER_INTERVAL_SECONDS),
         "running_profiles": sorted(_running_profiles),
         "last_tick": dict(_last_tick),
+        "queue": queue_info,
     }
 
 

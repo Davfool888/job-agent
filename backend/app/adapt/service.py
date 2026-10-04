@@ -70,29 +70,11 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
     from app.services.job_service import get_job_by_id
     from app.services.search_profiles import _is_guest
 
-    # Obtener configuración de PDF del usuario (si hay UID)
-    pdf_config = {}
-    if uid:
-        from app.database.models import PDFConfig
-        pdf_cfg = db.query(PDFConfig).filter(PDFConfig.uid == uid).first()
-        if pdf_cfg:
-            import json as _json
-            pdf_config = {
-                "font_family": pdf_cfg.font_family,
-                "font_size_pt": pdf_cfg.font_size_pt,
-                "section_order": _json.loads(pdf_cfg.section_order) if pdf_cfg.section_order else [],
-                "date_format": pdf_cfg.date_format,
-                "show_skill_chips": bool(pdf_cfg.show_skill_chips),
-                "compact_mode": bool(pdf_cfg.compact_mode),
-                "header_style": pdf_cfg.header_style,
-                "section_divider": pdf_cfg.section_divider,
-                "margin_top_mm": pdf_cfg.margin_top_mm,
-                "margin_bottom_mm": pdf_cfg.margin_bottom_mm,
-                "margin_left_mm": pdf_cfg.margin_left_mm,
-                "margin_right_mm": pdf_cfg.margin_right_mm,
-                "section_spacing_pt": pdf_cfg.section_spacing_pt,
-                "accent_color": pdf_cfg.accent_color,
-            }
+    # Config de PDF del usuario (Fase 2: servicio dual SQLite/Firestore).
+    # Sin UID o sin fila -> {} y el renderer usa sus defaults.
+    from app.services.pdf_config import get_pdf_config_for_renderer
+
+    pdf_config = get_pdf_config_for_renderer(db, uid) if uid else {}
 
     try:
         job = get_job_by_id(db=db, job_id=job_id)

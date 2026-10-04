@@ -1048,3 +1048,32 @@ def delete_profile_cv(db, profile_id) -> bool:
         return False
     ref.delete()
     return True
+
+
+# ---------------------------------------------------------------------------
+# PDF configs por usuario (Fase 2). Coleccion pdf_configs/{uid}, mismos
+# campos que el modelo SQLite (section_order como JSON string, flags 0/1).
+# ---------------------------------------------------------------------------
+
+def get_pdf_config(db, uid: str) -> dict | None:
+    snap = _col(db, "pdf_configs").document(str(uid)).get()
+    if not snap.exists:
+        return None
+    return dict(snap.to_dict() or {})
+
+
+def save_pdf_config(db, uid: str, fields: dict) -> dict:
+    ref = _col(db, "pdf_configs").document(str(uid))
+    snap = ref.get()
+    current = dict(snap.to_dict() or {}) if snap.exists else {}
+    merged = {**current, **{k: v for k, v in fields.items() if v is not None}}
+    ref.set(merged, merge=True)
+    return get_pdf_config(db, uid) or {"uid": str(uid), **merged}
+
+
+def delete_pdf_config(db, uid: str) -> bool:
+    ref = _col(db, "pdf_configs").document(str(uid))
+    if not ref.get().exists:
+        return False
+    ref.delete()
+    return True

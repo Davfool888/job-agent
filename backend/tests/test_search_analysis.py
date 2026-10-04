@@ -53,6 +53,9 @@ class FakeScraper:
 @pytest.fixture()
 def fake_source(monkeypatch):
     monkeypatch.setattr(main_module, "get_scraper", lambda source: FakeScraper())
+    # Fase 1: endpoints en routers usan registry.get_scraper.
+    monkeypatch.setattr(
+        "app.scraper.registry.get_scraper", lambda source: FakeScraper())
     from app.database.connection import SessionLocal
     from app.database.models import Job, Profile
 

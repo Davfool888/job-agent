@@ -39,6 +39,10 @@ def _fake(monkeypatch, **kwargs):
 
     monkeypatch.setattr(
         main_module, "get_scraper", lambda source: FakeScraper(**kwargs))
+    # Fase 1: endpoints en routers usan registry.get_scraper.
+    monkeypatch.setattr(
+        "app.scraper.registry.get_scraper",
+        lambda source: FakeScraper(**kwargs))
 
 
 def _read_sse(client, params):

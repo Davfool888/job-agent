@@ -80,8 +80,14 @@ class FakeScraperWithLocation:
 
 @pytest.fixture()
 def fake_source_location(monkeypatch):
+    # Fase 1: endpoints en routers usan registry.get_scraper; se parcha
+    # tanto app.main (compat) como app.scraper.registry (real).
     monkeypatch.setattr(
         main_module, "get_scraper", lambda source: FakeScraperWithLocation()
+    )
+    monkeypatch.setattr(
+        "app.scraper.registry.get_scraper",
+        lambda source: FakeScraperWithLocation(),
     )
     from app.database.connection import SessionLocal
     from app.database.models import Job

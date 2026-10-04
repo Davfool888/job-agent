@@ -1063,7 +1063,96 @@ def save_profile_for(
         row.updated_at = datetime.utcnow()
         db.add(row)
         db.commit()
+    # Consistencia simple<->estructurado: lo que se repite queda igual
+    # en ambos (solo valores no vacios, para no borrar nunca).
+    _sync_flat_to_rich_personal(db, store_uid, allowed)
     return get_profile_for(db, uid, email)
+
+
+# Campos repetidos entre tab simple (plano) y estructurado (personal).
+# Regla: al guardar un lado, los valores NO vacios se copian al otro.
+_SYNC_FIELDS = (
+    "full_name", "title", "location", "email", "secondary_email",
+    "phone", "secondary_phone", "linkedin", "github", "portfolio",
+)
+
+
+def _sync_flat_to_rich_personal(db, store_uid: str, flat: dict) -> None:
+    """Tab simple -> estructurado (personal)."""
+    from app.profile import schema as profile_schema
+
+    current = _stored_user_rich(db, store_uid)
+    personal = dict(current.get("personal") or {})
+    changed = False
+    for key in _SYNC_FIELDS:
+        if key == "full_name":
+            value = str(flat.get("full_name") or "").strip()
+            if value and value != str(
+                    personal.get("full_name") or "").strip():
+                # Fuerza que normalize derive first/last de este valor.
+                personal["first_name"] = ""
+                personal["last_name"] = ""
+                personal["full_name"] = value
+                changed = True
+            continue
+        value = str(flat.get(key) or "").strip()
+        if value and value != str(personal.get(key) or "").strip():
+            personal[key] = value
+            changed = True
+    if not changed:
+        return
+    merged = dict(current)
+    merged["personal"] = personal
+    normalized, _ = profile_schema.normalize_rich_profile(merged)
+    _store_user_rich(db, store_uid, normalized)
+
+
+def _sync_rich_personal_to_flat(
+    db, store_uid: str, personal: dict
+) -> None:
+    """Estructurado (personal) -> tab simple (plano)."""
+    from app.profile import schema as profile_schema
+
+    stored = _stored_user_flat(db, store_uid)
+    allowed = dict(stored)
+    changed = False
+    mapping = {
+        "full_name": "full_name",
+        "title_label": "title",
+        "title": "title",
+        "location": "location",
+        "email": "email",
+        "secondary_email": "secondary_email",
+        "phone": "phone",
+        "secondary_phone": "secondary_phone",
+        "linkedin": "linkedin",
+        "github": "github",
+        "portfolio": "portfolio",
+    }
+    for pkey, fkey in mapping.items():
+        value = str(personal.get(pkey) or "").strip()
+        if value and value != str(allowed.get(fkey) or "").strip():
+            allowed[fkey] = value
+            changed = True
+    if not changed:
+        return
+    normalized, _ = profile_schema.normalize_flat_profile(allowed)
+    filtered = {key: normalized.get(key, DEFAULT_PROFILE[key])
+                for key in DEFAULT_PROFILE}
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        fs.save_user_profile(db, store_uid, filtered)
+    else:
+        row = db.query(UserProfile).filter(
+            UserProfile.uid == store_uid).first()
+        if not row:
+            row = UserProfile(uid=store_uid, data="{}")
+            db.add(row)
+        row.data = json.dumps(filtered, ensure_ascii=False)
+        row.updated_at = datetime.utcnow()
+        db.add(row)
+        db.commit()
 
 
 # Version de los datos demo del invitado. Subirla cuando cambie el
@@ -1769,6 +1858,11 @@ def save_rich_profile_for(
     normalized, schema_warnings = profile_schema.normalize_rich_profile(
         merged)
     _store_user_rich(db, store_uid, normalized)
+    # Consistencia estructurado->simple: lo repetido queda igual en
+    # ambos (solo valores no vacios). Solo si vino personal en el payload.
+    if isinstance(data.get("personal"), dict):
+        _sync_rich_personal_to_flat(
+            db, store_uid, normalized.get("personal") or {})
     warnings = validate_profile(normalized) + schema_warnings
     from app.services.search_profiles import _is_guest as _guest_check
 

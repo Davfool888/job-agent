@@ -107,6 +107,9 @@ def test_search_endpoint_respects_max_age(monkeypatch):
 
     # main.py importa get_scraper por nombre: parchar ahi.
     monkeypatch.setattr(main_module, "get_scraper", lambda s: FakeScraper())
+    # Fase 1: endpoints en routers usan registry.get_scraper.
+    monkeypatch.setattr(
+        "app.scraper.registry.get_scraper", lambda s: FakeScraper())
     with TestClient(app) as client:
         body = client.get("/jobs/search", params={
             "q": "python edad", "pages": 1, "source": "computrabajo",
