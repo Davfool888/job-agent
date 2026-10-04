@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { Header } from "../components/layout/Header";
 import { ErrorState, LoadingState } from "../components/jobs/States";
-import { useJobs, useJobSearchStream, useSources, useStats } from "../hooks/useApi";
+import { useJobs, useSources, useStats } from "../hooks/useApi";
+import { useJobSearchStream } from "../hooks/useJobSearchStream";
 import { useSearchSession } from "../context/SearchSessionContext";
 import { discoverJobs } from "../services/jobs";
 import { fetchSchedulerStatus } from "../services/searchProfiles";

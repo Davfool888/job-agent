@@ -1250,6 +1250,11 @@ def search_jobs_stream(
         except HTTPException:
             pass  # Token inválido, continuar sin auth
 
+    # Cola de eventos entre el hilo de scraping y el generador SSE.
+    # Sin esto el stream abortaba tras "started" (NameError) y el
+    # frontend solo veia "Se perdio la conexion...".
+    events: queue.Queue = queue.Queue()
+
     def _worker() -> None:
         from app.scheduler import _close_db
         from app.scheduler import _new_db
@@ -1257,19 +1262,27 @@ def search_jobs_stream(
         handle, needs_close = _new_db()
         try:
             def on_page(jobs: list, page: int) -> None:
-                batch = filter_by_location(jobs, location)
-                batch = filter_by_max_age(batch, max_age_days)
-                saved = save_jobs(db=handle, jobs=batch, search_query=q, uid=uid, email=email)
-                events.put(("jobs", {
-                    "page": page,
-                    "jobs": [
-                        {"id": job.id, "title": job.title,
-                         "company": job.company,
-                         "location": job.location, "url": job.url,
-                         "source": job.source}
-                        for job in saved
-                    ],
-                }))
+                try:
+                    batch = filter_by_location(jobs, location)
+                    batch = filter_by_max_age(batch, max_age_days)
+                    saved = save_jobs(db=handle, jobs=batch, search_query=q, uid=uid, email=email)
+                except Exception:
+                    # Una pagina con datos malos no debe abortar toda la
+                    # busqueda: se salta el lote y sigue con la siguiente.
+                    return
+                try:
+                    events.put(("jobs", {
+                        "page": page,
+                        "jobs": [
+                            {"id": job.id, "title": job.title,
+                             "company": job.company,
+                             "location": job.location, "url": job.url,
+                             "source": job.source}
+                            for job in saved
+                        ],
+                    }))
+                except Exception:
+                    pass
 
             found = scraper.search(
                 q, max_pages=pages, include_details=False,
@@ -1326,14 +1339,21 @@ def search_jobs_stream(
 
                 rows = get_jobs_by_ids(db, saved_ids)
                 stats = enrich_and_analyze(
-                    db, scraper=scraper, profile=get_profile(db),
+                    db, scraper=scraper, profile=get_profile(db, uid=uid, email=email),
                     rows=rows, max_details=max_details, delay=0)
                 analyzed = stats["analyzed"]
                 relevant = stats["relevant"]
                 details_fetched = stats["details_fetched"]
             except Exception as error:  # noqa: BLE001
-                yield _event({"type": "error",
-                              "message": f"Analisis fallo: {error}"[:300]})
+                # El analisis no debe invalidar lo ya guardado: se cierra
+                # con done parcial en vez de error para que el frontend
+                # muestre las ofertas en lugar de "conexion perdida".
+                yield _event({"type": "done", "query": q, "pages": pages,
+                              "source": source, "location": location,
+                              "max_age_days": max_age_days, "found": found_total,
+                              "saved_unique": len(saved_ids), "analyzed": 0,
+                              "relevant": 0, "details_fetched": 0,
+                              "analysis_error": str(error)[:200]})
                 return
         yield _event({"type": "done", "query": q, "pages": pages,
                       "source": source, "location": location,
@@ -1344,7 +1364,8 @@ def search_jobs_stream(
 
     return StreamingResponse(
         gen(), media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+                 "Connection": "keep-alive"},
     )
 
 

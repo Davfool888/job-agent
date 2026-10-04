@@ -1,5 +1,5 @@
-import { API_URL, api } from "./api";
-import { getFirebaseAuth, isFirebaseConfigured } from "../lib/firebase";
+import { api } from "./api";
+import { openSearchStream } from "./searchStream";
 import type {
   Job,
   JobDetailExtra,
@@ -61,82 +61,15 @@ export interface StreamSearchParams {
 }
 
 // Busqueda progresiva (SSE): llama onEvent por cada pagina guardada.
-// Devuelve funcion para cancelar. Al cerrar limpio tras "done" no hay
-// error; si el servidor corta antes, llega error de conexion.
+// Devuelve funcion para cancelar.
 //
-// Nota: EventSource no soporta headers, por eso el token va como ?token=
-// (el backend lo acepta). Como la funcion debe devolver el cleanup de
-// forma sincrona, el token se resuelve por promesa y la conexion se abre
-// al resolver — sin usar `await` en funcion sync (rompia `tsc -b`).
+// Implementacion real aislada en ./searchStream (SSE + fallback REST):
+// este wrapper solo existe por compatibilidad con imports existentes.
 export function streamSearchJobs(
   params: StreamSearchParams,
   onEvent: (event: StreamEvent | { type: "connection-error" }) => void,
 ): () => void {
-  let source: EventSource | null = null;
-  let finished = false;
-  let cancelled = false;
-
-  const cleanup = () => {
-    cancelled = true;
-    finished = true;
-    source?.close();
-  };
-
-  const connect = (idToken: string | null) => {
-    if (cancelled) return;
-    const query = new URLSearchParams({
-      q: params.q,
-      pages: String(params.pages ?? 1),
-      source: params.source ?? "computrabajo",
-      ...(params.location?.trim()
-        ? { location: params.location.trim() }
-        : {}),
-      ...(params.maxAgeDays && params.maxAgeDays > 0
-        ? { max_age_days: String(params.maxAgeDays) }
-        : {}),
-      ...(idToken ? { token: idToken } : {}),
-    });
-    const es = new EventSource(
-      `${API_URL}/jobs/search/stream?${query.toString()}`,
-    );
-    source = es;
-    es.onmessage = (message) => {
-      try {
-        const event = JSON.parse(message.data) as StreamEvent;
-        if (event.type === "done" || event.type === "error") {
-          finished = true;
-          es.close();
-        }
-        onEvent(event);
-      } catch {
-        // Linea no-JSON (ping ": ..."): se ignora.
-      }
-    };
-    es.onerror = () => {
-      es.close();
-      if (!finished) {
-        onEvent({ type: "connection-error" });
-      }
-    };
-  };
-
-  // Resolver token sin bloquear el retorno del cleanup.
-  if (isFirebaseConfigured) {
-    try {
-      const user = getFirebaseAuth().currentUser;
-      if (user) {
-        user
-          .getIdToken()
-          .then((t) => connect(t))
-          .catch(() => connect(null));
-        return cleanup;
-      }
-    } catch {
-      /* sin auth: sigue sin token */
-    }
-  }
-  connect(null);
-  return cleanup;
+  return openSearchStream(params, onEvent);
 }
 
 export async function fetchSources(): Promise<string[]> {

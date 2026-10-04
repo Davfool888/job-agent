@@ -91,7 +91,7 @@ export type StreamEvent =
   | { type: "done"; query: string; pages: number; source: string;
       location?: string | null; max_age_days?: number; found: number;
       saved_unique: number; analyzed: number; relevant: number;
-      details_fetched: number }
+      details_fetched: number; analysis_error?: string }
   | { type: "error"; message: string };
 
 export interface JobDetailExtra {
