@@ -33,6 +33,12 @@ DEFAULT_PROFILE = {
     "linkedin": "",
     "github": "",
     "portfolio": "",
+    # Contacto del tab simple: antes se perdian al guardar porque el
+    # filtro de claves solo dejaba pasar las de arriba.
+    "email": "",
+    "secondary_email": "",
+    "phone": "",
+    "secondary_phone": "",
     "skills": [],
     "target_roles": [],
     "sectors": [],
@@ -887,6 +893,7 @@ def get_rich_profile(db: Session) -> dict:
             rich[section] = []
     rich["_flat"] = {k: flat.get(k) for k in (
         "full_name", "title", "location", "linkedin", "github", "portfolio",
+        "email", "secondary_email", "phone", "secondary_phone",
         "skills", "target_roles", "sectors", "modality",
         "preferred_location", "min_salary", "experience_level",
     )}
@@ -1699,6 +1706,7 @@ def _assemble_rich(base_rich: dict, flat: dict) -> dict:
             rich[section] = []
     rich["_flat"] = {k: flat.get(k) for k in (
         "full_name", "title", "location", "linkedin", "github", "portfolio",
+        "email", "secondary_email", "phone", "secondary_phone",
         "skills", "target_roles", "sectors", "modality",
         "preferred_location", "min_salary", "experience_level",
     )}

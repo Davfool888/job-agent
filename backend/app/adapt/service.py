@@ -261,23 +261,29 @@ def _missing_profile_fields(content: dict) -> list[str]:
 
 
 def _is_profile_complete(profile: dict) -> bool:
-    """Verifica si el perfil tiene los campos mínimos requeridos."""
+    """Verifica si el perfil tiene los campos mínimos requeridos.
+
+    Vale lo guardado en el tab simple (plano, en "_flat") o en el
+    estructurado (personal): el usuario puede completar cualquiera.
+    """
     if not profile:
         return False
-    
+
     # Campos obligatorios: nombre completo, email, teléfono
     personal = profile.get("personal") or {}
-    full_name = (personal.get("full_name") or "").strip()
-    email = (personal.get("email") or "").strip()
-    phone = (personal.get("phone") or "").strip()
-    
+    flat = profile.get("_flat") or {}
+    full_name = (
+        personal.get("full_name") or flat.get("full_name") or "").strip()
+    email = (personal.get("email") or flat.get("email") or "").strip()
+    phone = (personal.get("phone") or flat.get("phone") or "").strip()
+
     if not full_name or not email or not phone:
         return False
-    
+
     # Al menos una experiencia o educación
     experiences = profile.get("experiences") or profile.get("experience") or []
     education = profile.get("education") or []
     if not experiences and not education:
         return False
-    
+
     return True

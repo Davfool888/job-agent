@@ -88,7 +88,12 @@ export function Dashboard() {
     [cityValue],
   );
 
-  const recentActivity = useMemo(() => all.slice(0, 8), [all]);
+  // Actividad reciente = solo nuevas: lo visto/decidido vive en sus
+  // secciones (Vistas/Postuladas/Descartadas) y no se repite aquí.
+  const recentActivity = useMemo(
+    () => all.filter((j) => j.status === "new").slice(0, 8),
+    [all],
+  );
 
   const runSearch = async () => {
     if (!query.trim() || search.searching) return;
@@ -144,16 +149,46 @@ export function Dashboard() {
     }
   };
 
+  // Queries del descubrimiento: SIEMPRE parten del cargo escrito en
+  // el input (mas sus palabras significativas), nunca de packs fijos.
+  // Asi "abogado junior", "ingeniero civil", etc. traen sus vacantes.
+  const buildDiscoveryQueries = (raw: string): string[] => {
+    const base = raw.trim();
+    if (!base) return [];
+    const out = [base];
+    for (const token of base.split(/[\s,;]+/)) {
+      const t = token.trim();
+      if (
+        t.length > 3 &&
+        !out.some((q) => q.toLowerCase() === t.toLowerCase())
+      ) {
+        out.push(t);
+      }
+    }
+    return out.slice(0, 4);
+  };
+
   const runDiscovery = async () => {
     if (discovering) return;
     setDiscoveryError(null);
     setDiscovery(null);
+    const queries = buildDiscoveryQueries(query);
+    if (queries.length === 0) {
+      setDiscoveryError(
+        "Escribe un cargo en el buscador (ej: abogado junior) para descubrir sus vacantes.",
+      );
+      return;
+    }
     setDiscovering(true);
     try {
-      // Descubrimiento por capas en la fuente elegida (o computrabajo
-      // si está "todas"): titulos + habilidades + responsabilidades.
+      // Descubrimiento por capas sobre EL CARGO del input (o
+      // computrabajo si está "todas"): el texto + sus variantes.
       const src = source === "all" ? "computrabajo" : source;
-      const summary = await discoverJobs({ source: src, pages: 1 });
+      const summary = await discoverJobs({
+        source: src,
+        pages: 1,
+        queries,
+      });
       setDiscovery(summary);
       jobs.reload();
       setRefreshKey((k) => k + 1);
@@ -252,7 +287,7 @@ export function Dashboard() {
               className="btn btn-ghost btn-sm"
               disabled={search.searching || discovering}
               onClick={runDiscovery}
-              title="Descubrimiento por capas: títulos + habilidades + responsabilidades, con análisis de contenido (POST /jobs/discover). Encuentra ofertas cuyo título no es de datos."
+              title="Descubrimiento por capas sobre el cargo escrito arriba (texto + variantes), con análisis de contenido (POST /jobs/discover). Encuentra ofertas cuyo título no es exacto."
             >
               {discovering ? (
                 <>
@@ -361,6 +396,16 @@ export function Dashboard() {
                 {discovery.errors.length} queries fallaron
                 (plataforma bloqueó o sin resultados).
               </p>
+            )}
+            {discovery.per_query.length > 0 && (
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
+                {discovery.per_query.map((q) => (
+                  <li key={q.query}>
+                    <strong>“{q.query}”</strong>: {q.found} encontradas,{" "}
+                    {q.saved} guardadas
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         )}

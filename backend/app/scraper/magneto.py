@@ -21,6 +21,8 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
+import requests
+
 from app.config import MAGNETO_BASE_URL
 from app.config import USER_AGENT
 from app.scraper.base import BaseScraper

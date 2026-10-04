@@ -9,7 +9,7 @@ import { StructuredProfileManager } from "../components/profile/StructuredProfil
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useApi";
 import { ADMIN_EMAIL } from "../lib/firebase";
-import { fetchCatalogs } from "../services/profile";
+import { fetchCatalogs, fetchFullProfile, saveFullProfile } from "../services/profile";
 import { canonicalLocation } from "../utils/profileOptions";
 import type {
   Catalogs,
@@ -57,10 +57,14 @@ export function ProfilePage() {
   const [simpleEducation, setSimpleEducation] = useState<ProfileEntry[]>([]);
   const [simpleLanguages, setSimpleLanguages] = useState<LanguageEntry[]>([]);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+  const [listsHydrated, setListsHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<"simple" | "structured">("simple");
 
   // Hidrata los estados editables cuando llega data (los inicializadores
   // de useState solo corren en el primer render, con data=null).
+  // Las listas (experiencia/educación/idiomas) viven en el perfil
+  // estructurado: se cargan de /profile/full una sola vez y solo si el
+  // usuario aún no editó nada (no se pisa lo que ya escribió).
   const dataKey = data ? JSON.stringify({
     e: (data as any)?.experiences ?? [],
     d: (data as any)?.education ?? [],
@@ -75,6 +79,25 @@ export function ProfilePage() {
     setSimpleEducation(((data as any)?.education || []) as ProfileEntry[]);
     setSimpleLanguages(((data as any)?.languages || []) as LanguageEntry[]);
   }, [data, dataKey, hydratedFor]);
+  useEffect(() => {
+    if (!data || listsHydrated) return;
+    let alive = true;
+    fetchFullProfile()
+      .then((rich) => {
+        if (!alive) return;
+        setSimpleExperiences((prev) =>
+          prev.length > 0 ? prev : ((rich.experience || []) as ProfileEntry[]));
+        setSimpleEducation((prev) =>
+          prev.length > 0 ? prev : ((rich.education || []) as ProfileEntry[]));
+        setSimpleLanguages((prev) =>
+          prev.length > 0 ? prev : ((rich.languages || []) as LanguageEntry[]));
+        setListsHydrated(true);
+      })
+      .catch(() => alive && setListsHydrated(true));
+    return () => {
+      alive = false;
+    };
+  }, [data, listsHydrated]);
 
   if (loading) {
     return (
@@ -130,8 +153,37 @@ export function ProfilePage() {
     }
     setSaveError(null);
     try {
+      // 1. Guarda el plano (nombre, contacto, ubicación...).
       const updated = await save(current);
       setForm(updated);
+      // 2. Persiste las listas del tab simple en el estructurado.
+      // Merge por id: conserva las perspectivas ya creadas y propaga
+      // los eliminados. Sin esto, experiencias/idiomas se perdían al
+      // recargar (el plano no tiene esas claves).
+      const mergeSection = <T extends { id?: string }>(
+        simple: T[],
+        stored: T[] | undefined,
+      ): T[] => {
+        const prev = new Map(
+          (stored ?? []).map((item) => [item.id, item]),
+        );
+        return simple.map((item) => {
+          const old = item.id ? prev.get(item.id) : undefined;
+          if (!old) return item;
+          const { perspectives, ...rest } = item as unknown as Record<string, unknown>;
+          return {
+            ...rest,
+            perspectives:
+              (old as unknown as Record<string, unknown>).perspectives ?? perspectives ?? [],
+          } as unknown as T;
+        });
+      };
+      const rich = await fetchFullProfile().catch(() => null);
+      await saveFullProfile({
+        experience: mergeSection(simpleExperiences, rich?.experience as ProfileEntry[] | undefined),
+        education: mergeSection(simpleEducation, rich?.education as ProfileEntry[] | undefined),
+        languages: mergeSection(simpleLanguages, rich?.languages as LanguageEntry[] | undefined),
+      });
       setSaved(true);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Error inesperado");

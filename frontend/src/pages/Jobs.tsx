@@ -21,7 +21,8 @@ import {
 } from "../utils/jobs";
 
 export function Jobs() {
-  // Excluye descartadas: esas viven en /discarded.
+  // Ofertas = pendientes de decisión: nuevas + conservadas.
+  // Vistas/postuladas/descartadas viven en sus secciones y no se repiten aquí.
   const { data, loading, error, reload, mutate } = useJobs();
   const allProfiles = useProfileOptions();
   const [filters, setFilters] = useState<JobFilterState>(DEFAULT_FILTERS);
@@ -45,7 +46,11 @@ export function Jobs() {
       fetchJobsSince(lastVisit)
         .then((jobs) => {
           if (!alive) return;
-          setNewCount(jobs.filter((j) => j.status !== "discarded").length);
+          setNewCount(
+            jobs.filter(
+              (j) => j.status === "new" || j.status === "kept",
+            ).length,
+          );
           stamp();
         })
         .catch(() => {
@@ -61,7 +66,9 @@ export function Jobs() {
   }, []);
 
   const active = useMemo(
-    () => (data ?? []).filter((j) => j.status !== "discarded"),
+    () => (data ?? []).filter(
+      (j) => j.status === "new" || j.status === "kept",
+    ),
     [data],
   );
 
@@ -128,7 +135,7 @@ const locations = useMemo(() => uniqueLocations(active), [active]);
     <>
       <Header
         title="Ofertas"
-        subtitle={`${active.length} ofertas activas (sin descartadas)`}
+        subtitle={`${active.length} ofertas nuevas y conservadas (vistas, postuladas y descartadas están en sus secciones)`}
       />
       <div className="content">
         {actionError && <div className="alert-error">{actionError}</div>}

@@ -198,8 +198,12 @@ def discover(
     """Ejecuta descubrimiento por capas y devuelve resumen honesto."""
     from app.scraper.registry import get_scraper
 
-    if queries:
+    if queries is not None:
         selected = [q for q in queries if q.strip()]
+        if not selected:
+            raise ValueError(
+                "Indica al menos una consulta (ej: abogado junior)."
+            )
     else:
         selected_packs = packs or ["titles", "skills", "responsibilities"]
         selected = []
