@@ -60,17 +60,16 @@ export function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   
+  // Compute initial values for simple profile state from data (available immediately)
+  // This must be before useState lazy initializers that reference it
+  const initialExperiences = (data as any)?.experiences || [];
+  const initialEducation = (data as any)?.education || [];
+  const initialLanguages = (data as any)?.languages || [];
+
   // Simple profile state (shared between tabs)
-  const [simpleExperiences, setSimpleExperiences] = useState<ProfileEntry[]>(() => {
-    // Initialize from current data if available
-    return (current as any)?.experiences || [];
-  });
-  const [simpleEducation, setSimpleEducation] = useState<ProfileEntry[]>(() => {
-    return (current as any)?.education || [];
-  });
-  const [simpleLanguages, setSimpleLanguages] = useState<LanguageEntry[]>(() => {
-    return (current as any)?.languages || [];
-  });
+  const [simpleExperiences, setSimpleExperiences] = useState<ProfileEntry[]>(() => initialExperiences);
+  const [simpleEducation, setSimpleEducation] = useState<ProfileEntry[]>(() => initialEducation);
+  const [simpleLanguages, setSimpleLanguages] = useState<LanguageEntry[]>(() => initialLanguages);
 
   if (loading) {
     return (
