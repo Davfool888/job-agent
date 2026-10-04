@@ -1,22 +1,39 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Briefcase, LogIn, Phone, User as UserIcon } from "lucide-react";
+import {
+  Briefcase,
+  LogIn,
+  Phone,
+  User as UserIcon,
+  UserPlus,
+} from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { isFirebaseConfigured } from "../lib/firebase";
+import type { AuthApiError } from "../services/auth";
+
+type Mode = "register" | "login";
 
 export function Login() {
   const {
     configured,
-    loginWithGoogle,
-    loginAsGuest,
+    googlePopup,
+    establishSession,
+    registerWithGoogle,
+    loginWithGoogleStrict,
     completeProfile,
+    loginAsGuest,
+    logout,
     firebaseUser,
     profile,
     needsProfile,
   } = useAuth();
   const navigate = useNavigate();
+  // Sin elección no hay botón de Google: primero Registrarse o Login,
+  // y dentro de cada uno su opción con Google.
+  const [mode, setMode] = useState<Mode | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
   const [touchedNombre, setTouchedNombre] = useState(false);
@@ -48,15 +65,109 @@ export function Login() {
     }
   }, [firebaseUser, needsProfile, navigate]);
 
-  const doLogin = async () => {
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setError(null);
+    setInfo(null);
+  };
+
+  // Paso 1 (registro): popup Google. Si la cuenta ya esta completa,
+  // no se registra de nuevo: se le manda al login.
+  const doRegisterGoogle = async () => {
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const fb = await googlePopup();
+      const me = await establishSession(fb);
+      if (me?.is_profile_complete) {
+        await logout();
+        setMode("login");
+        setError("ya existe esta cuenta ingresa por login");
+      }
+      // Si no, se queda aquí y aparece el formulario (paso 2).
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "No se pudo conectar con Google.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Paso 2 (registro): nombre + telefono UNA sola vez. Si otro
+  // dispositivo ya la registro, 409 y se le manda al login.
+  const doRegisterSubmit = async () => {
+    if (!nombre.trim()) {
+      setError("El nombre es obligatorio.");
+      return;
+    }
+    if (!telefono.trim()) {
+      setError("El teléfono es obligatorio (se pide una sola vez).");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await loginWithGoogle();
+      await registerWithGoogle(nombre.trim(), telefono.trim());
+      navigate("/dashboard", { replace: true });
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "No se pudo iniciar sesion con Google.",
+      const code = (e as AuthApiError)?.code;
+      if (code === "ACCOUNT_EXISTS") {
+        await logout();
+        setMode("login");
+        setError("ya existe esta cuenta ingresa por login");
+      } else {
+        setError(e instanceof Error ? e.message : "No se pudo registrar.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Entrada: popup Google + chequeo estricto en backend.
+  const doLoginGoogle = async () => {
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const fb = await googlePopup();
+      await establishSession(fb);
+      await loginWithGoogleStrict();
+      // Si entra: el redirect lleva al dashboard (o al formulario
+      // legacy si es una cuenta vieja sin telefono).
+    } catch (e) {
+      const code = (e as AuthApiError)?.code;
+      if (code === "NOT_REGISTERED") {
+        await logout();
+        setMode("register");
+        setError("tienes que registrarte");
+      } else {
+        setError(
+          e instanceof Error ? e.message : "No se pudo iniciar sesión.",
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Cuentas legacy (existen pero sin telefono): se completa una vez.
+  const doLoginComplete = async () => {
+    if (!telefono.trim()) {
+      setError("El teléfono es obligatorio.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await completeProfile(
+        nombre.trim() || googleName || "Usuario",
+        telefono.trim(),
       );
+      navigate("/dashboard", { replace: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar.");
     } finally {
       setBusy(false);
     }
@@ -77,37 +188,21 @@ export function Login() {
     }
   };
 
-  const doComplete = async () => {
-    if (!nombre.trim()) {
-      setError("El nombre es obligatorio.");
-      return;
-    }
-    if (!telefono.trim()) {
-      setError("El telefono es obligatorio.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await completeProfile(nombre.trim(), telefono.trim());
-      navigate("/dashboard", { replace: true });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo guardar.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Paso 2: completar registro (solo nombre + telefono; gmail viene de Google).
-  if (firebaseUser && needsProfile) {
+  // Paso 2: formulario tras el popup (registro nuevo o legacy sin telefono).
+  // Solo nombre + telefono; el gmail viene de Google y se guarda una vez.
+  if (firebaseUser && !firebaseUser.isAnonymous && needsProfile) {
+    const isRegister = mode !== "login";
     return (
       <div className="auth-wrap">
         <div className="auth-card">
           <h1>
-            <Briefcase size={19} /> Completa tu registro
+            <Briefcase size={19} />{" "}
+            {isRegister ? "Completa tu registro" : "Un dato pendiente"}
           </h1>
           <p className="card-sub">
-            Ya entraste con Google. Solo guardamos tu nombre, telefono y gmail.
+            {isRegister
+              ? "Ya entraste con Google. Solo guardamos tu nombre, teléfono y gmail (una sola vez)."
+              : "Tu cuenta existe pero le falta el teléfono. Lo guardamos una sola vez."}
           </p>
           {error && <div className="alert-error">{error}</div>}
           <div className="field">
@@ -130,7 +225,7 @@ export function Login() {
             <input className="input" value={googleEmail} disabled />
           </div>
           <div className="field">
-            <label>Telefono</label>
+            <label>Teléfono</label>
             <div className="auth-input-icon">
               <Phone size={14} />
               <input
@@ -148,7 +243,7 @@ export function Login() {
           <button
             className="btn btn-primary auth-btn"
             disabled={busy}
-            onClick={doComplete}
+            onClick={isRegister ? doRegisterSubmit : doLoginComplete}
           >
             {busy ? "Guardando…" : "Guardar y entrar"}
           </button>
@@ -163,10 +258,59 @@ export function Login() {
         <h1>
           <Briefcase size={19} /> Job Agent
         </h1>
-        <p className="card-sub">
-          Inicia sesion o registrate con tu cuenta de Google. La sesion queda
-          activa en este navegador.
-        </p>
+        <div style={{ display: "flex", gap: 8, margin: "12px 0" }}>
+          <button
+            type="button"
+            className={`btn btn-sm ${mode === "register" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => switchMode("register")}
+          >
+            <UserPlus size={14} /> Registrarse
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${mode === "login" ? "btn-primary" : "btn-ghost"}`}
+            onClick={() => switchMode("login")}
+          >
+            <LogIn size={14} /> Login
+          </button>
+        </div>
+        {mode === null && (
+          <p className="card-sub">
+            Elige una opción para continuar con tu cuenta de Google.
+          </p>
+        )}
+        {mode === "register" && (
+          <>
+            <p className="card-sub">
+              Crea tu cuenta con Google: el teléfono se pide una sola vez y
+              queda guardado.
+            </p>
+            <button
+              className="btn btn-primary auth-btn"
+              disabled={busy || !isFirebaseConfigured}
+              onClick={doRegisterGoogle}
+            >
+              <UserPlus size={15} />{" "}
+              {busy ? "Conectando…" : "Registrarme con Google"}
+            </button>
+          </>
+        )}
+        {mode === "login" && (
+          <>
+            <p className="card-sub">
+              Entra con tu cuenta Google ya registrada. Sin registro no hay
+              entrada.
+            </p>
+            <button
+              className="btn btn-primary auth-btn"
+              disabled={busy || !isFirebaseConfigured}
+              onClick={doLoginGoogle}
+            >
+              <LogIn size={15} />{" "}
+              {busy ? "Conectando…" : "Login con Google"}
+            </button>
+          </>
+        )}
         {!isFirebaseConfigured && (
           <div className="notice-pending">
             Falta configurar Firebase en el frontend (VITE_FIREBASE_* en
@@ -174,13 +318,7 @@ export function Login() {
           </div>
         )}
         {error && <div className="alert-error">{error}</div>}
-        <button
-          className="btn btn-primary auth-btn"
-          disabled={busy || !isFirebaseConfigured}
-          onClick={doLogin}
-        >
-          <LogIn size={15} /> {busy ? "Conectando…" : "Continuar con Google"}
-        </button>
+        {info && <div className="alert-success">{info}</div>}
         <button
           className="btn btn-ghost auth-btn"
           disabled={busy || !isFirebaseConfigured}

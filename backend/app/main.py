@@ -219,6 +219,104 @@ def auth_update_me(
     }
 
 
+def _auth_account_complete(user: dict | None) -> bool:
+    """Cuenta registrada = existe con nombre y telefono (una sola vez)."""
+    return bool(user) and bool((user.get("nombre") or "").strip()) \
+        and bool((user.get("telefono") or "").strip())
+
+
+@app.post("/auth/register", status_code=201)
+def auth_register(
+    payload: dict[str, Any],
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Registra la cuenta Google UNA sola vez (nombre + telefono).
+
+    - Sin email (anonimo) -> 400: registrate con Google.
+    - Cuenta ya registrada -> 409 ACCOUNT_EXISTS
+      ("ya existe esta cuenta ingresa por login").
+    - Fila vacia previa (auto-creada sin completar) -> la completa.
+    """
+    from fastapi.responses import JSONResponse
+
+    from app.auth import verify_bearer_token
+    from app.services.user_service import (
+        get_or_create_user,
+        get_user,
+        update_user,
+    )
+
+    claims = verify_bearer_token(request.headers.get("authorization"))
+    uid = claims["uid"]
+    email = claims.get("email") or ""
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Regístrate con una cuenta de Google.",
+        )
+    existing = get_user(db, uid)
+    if _auth_account_complete(existing):
+        return JSONResponse(
+            status_code=409,
+            content={"code": "ACCOUNT_EXISTS",
+                     "message": "ya existe esta cuenta ingresa por login"},
+        )
+    nombre = (payload.get("nombre") if isinstance(payload, dict) else None)
+    telefono = (payload.get("telefono") if isinstance(payload, dict) else None)
+    nombre = str(nombre or "").strip() or str(claims.get("name") or "").strip()
+    telefono = str(telefono or "").strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio.")
+    if not telefono:
+        raise HTTPException(
+            status_code=400,
+            detail="El teléfono es obligatorio (se pide una sola vez).",
+        )
+    if not existing:
+        get_or_create_user(db, uid, email, nombre)
+    user = update_user(db, uid, nombre=nombre, telefono=telefono)
+    return JSONResponse(status_code=201, content={
+        **user,
+        "is_new": not existing,
+        "is_profile_complete": True,
+    })
+
+
+@app.post("/auth/login")
+def auth_login(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Entrada estricta: sin registro previo no deja pasar.
+
+    - Sin email (anonimo) -> 400.
+    - Sin cuenta registrada -> 404 NOT_REGISTERED
+      ("tienes que registrarte").
+    """
+    from fastapi.responses import JSONResponse
+
+    from app.auth import verify_bearer_token
+    from app.services.user_service import get_user
+
+    claims = verify_bearer_token(request.headers.get("authorization"))
+    uid = claims["uid"]
+    email = claims.get("email") or ""
+    if not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Entra con una cuenta de Google.",
+        )
+    user = get_user(db, uid)
+    if not _auth_account_complete(user):
+        return JSONResponse(
+            status_code=404,
+            content={"code": "NOT_REGISTERED",
+                     "message": "tienes que registrarte"},
+        )
+    return {**user, "is_profile_complete": True}
+
+
 # ============================================================
 # PDF Config endpoints
 # ============================================================

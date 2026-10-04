@@ -20,7 +20,16 @@ import {
   googleProvider,
   isFirebaseConfigured,
 } from "../lib/firebase";
-import { fetchMe, updateMe, type BackendUser } from "../services/auth";
+import {
+  fetchMe,
+  loginAccount,
+  registerAccount,
+  updateMe,
+  type AuthApiError,
+  type BackendUser,
+} from "../services/auth";
+
+export type { AuthApiError };
 
 interface AuthState {
   configured: boolean;
@@ -34,8 +43,39 @@ interface AuthState {
   loginAsGuest: () => Promise<void>;
   switchAccount: () => Promise<void>;
   completeProfile: (nombre: string, telefono: string) => Promise<void>;
+  googlePopup: () => Promise<FirebaseUser>;
+  establishSession: (fb: FirebaseUser) => Promise<BackendUser | null>;
+  registerWithGoogle: (nombre: string, telefono: string) => Promise<BackendUser>;
+  loginWithGoogleStrict: () => Promise<BackendUser>;
   refreshProfile: () => Promise<void>;
   logout: () => Promise<void>;
+}
+
+function profileCacheKey(uid: string): string {
+  return `jobagent_profile_${uid}`;
+}
+
+function readCachedProfile(uid: string): BackendUser | null {
+  try {
+    const raw = window.localStorage.getItem(profileCacheKey(uid));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as BackendUser;
+    if (parsed && parsed.uid === uid) return parsed;
+  } catch {
+    /* cache ilegible */
+  }
+  return null;
+}
+
+function writeCachedProfile(user: BackendUser): void {
+  try {
+    window.localStorage.setItem(
+      profileCacheKey(user.uid),
+      JSON.stringify(user),
+    );
+  } catch {
+    /* almacenamiento lleno/bloqueado */
+  }
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -49,19 +89,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const syncProfile = useCallback(async (fb: FirebaseUser | null) => {
     if (!fb) {
       setProfile(null);
-      return;
+      return null;
     }
     try {
       const token = await fb.getIdToken();
       const me = await fetchMe(token);
+      // Cache local: si el backend cae luego, la sesion sigue completa.
+      writeCachedProfile(me);
       // Prefill nombre desde Google si el backend aun no lo tiene.
       if (!me.nombre?.trim() && fb.displayName) {
-        setProfile({ ...me, nombre: fb.displayName });
-      } else {
-        setProfile(me);
+        const prefilled = { ...me, nombre: fb.displayName };
+        setProfile(prefilled);
+        return prefilled;
       }
+      setProfile(me);
+      return me;
     } catch (e) {
-      // Backend sin Firebase Admin o sin red: usa datos de Google.
+      // Backend sin Firebase Admin o sin red: reutiliza lo ultimo
+      // guardado para NO volver a pedir telefono cada vez.
+      const cached = readCachedProfile(fb.uid);
+      if (
+        cached &&
+        cached.nombre?.trim() &&
+        cached.telefono?.trim()
+      ) {
+        setProfile({ ...cached, is_profile_complete: true });
+        setAuthError(null);
+        return cached;
+      }
+      // Sin nada guardado: datos de Google, incompleto.
       setProfile({
         uid: fb.uid,
         email: fb.email ?? "",
@@ -72,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthError(
         e instanceof Error ? e.message : "No se pudo cargar el perfil.",
       );
+      return null;
     }
   }, []);
 
@@ -144,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = await firebaseUser.getIdToken();
       try {
         const me = await updateMe(token, { nombre, telefono });
+        writeCachedProfile(me);
         setProfile(me);
       } catch {
         // Sin backend: guarda local para no bloquear el registro.
@@ -154,15 +212,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           telefono,
           is_profile_complete: true,
         };
-        window.localStorage.setItem(
-          `jobagent_profile_${firebaseUser.uid}`,
-          JSON.stringify(fallback),
-        );
+        writeCachedProfile(fallback);
         setProfile(fallback);
       }
     },
     [firebaseUser],
   );
+
+  // Popup Google crudo (los flujos registro/login deciden despues).
+  const googlePopup = useCallback(async () => {
+    setAuthError(null);
+    const auth = getFirebaseAuth();
+    const cred = await signInWithPopup(auth, googleProvider);
+    setFirebaseUser(cred.user);
+    return cred.user;
+  }, []);
+
+  const establishSession = useCallback(
+    async (fb: FirebaseUser) => {
+      setFirebaseUser(fb);
+      setAuthError(null);
+      return syncProfile(fb);
+    },
+    [syncProfile],
+  );
+
+  // Registro estricto: 409 si la cuenta ya existe (no pisa).
+  const registerWithGoogle = useCallback(
+    async (nombre: string, telefono: string) => {
+      if (!firebaseUser) throw new Error("Sin sesion.");
+      const token = await firebaseUser.getIdToken();
+      const me = await registerAccount(token, { nombre, telefono });
+      writeCachedProfile(me);
+      setProfile(me);
+      return me;
+    },
+    [firebaseUser],
+  );
+
+  // Entrada estricta: 404 si no hay registro previo.
+  const loginWithGoogleStrict = useCallback(async () => {
+    if (!firebaseUser) throw new Error("Sin sesion.");
+    const token = await firebaseUser.getIdToken();
+    const me = await loginAccount(token);
+    writeCachedProfile(me);
+    setProfile(me);
+    return me;
+  }, [firebaseUser]);
 
   const refreshProfile = useCallback(async () => {
     if (firebaseUser) await syncProfile(firebaseUser);
@@ -195,6 +291,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginAsGuest,
     switchAccount,
     completeProfile,
+    googlePopup,
+    establishSession,
+    registerWithGoogle,
+    loginWithGoogleStrict,
     refreshProfile,
     logout,
   };
