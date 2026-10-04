@@ -1059,23 +1059,54 @@ def save_profile_for(
     return get_profile_for(db, uid, email)
 
 
+# Version de los datos demo del invitado. Subirla cuando cambie el
+# contenido + ajustar _is_legacy_guest_demo(): asi las BD ya sembradas
+# con la version anterior migran una sola vez sin borrar ediciones del
+# usuario (solo se resiembra lo intacto, ver _ensure_guest_demo_*).
+GUEST_DEMO_VERSION = 2
+
+# Firma de la version anterior (software/datos): si lo guardado coincide,
+# aun nadie lo edito y se puede migrar al contenido nuevo sin perdida.
+_GUEST_DEMO_LEGACY_FLAT_TITLE = "Ingeniero de Software"
+
+
+def _is_legacy_guest_demo_flat(stored: dict) -> bool:
+    return (
+        (stored.get("full_name") or "") == "Andrés Felipe Ramírez"
+        and (stored.get("title") or "") == _GUEST_DEMO_LEGACY_FLAT_TITLE
+    )
+
+
+def _is_legacy_guest_demo_rich(stored: dict) -> bool:
+    personal = stored.get("personal") or {}
+    return (
+        (personal.get("title_id") or "") == "software_engineer"
+        or (personal.get("title") or "") == _GUEST_DEMO_LEGACY_FLAT_TITLE
+    )
+
+
+# Perfil demo del invitado (Andrés Felipe): SOLO lo ve quien entra como
+# invitado (uid __guest__). Los usuarios de Google usan su propio uid y
+# empiezan en blanco (scope "own"), jamas ven estos datos.
 GUEST_DEMO_FLAT: dict = {
     "full_name": "Andrés Felipe Ramírez",
-    "title": "Ingeniero de Software",
-    "location": "Bogotá, Colombia",
-    "linkedin": "",
-    "github": "",
-    "portfolio": "",
-    "skills": ["Python", "SQL", "Power BI", "Excel", "Pandas", "NumPy",
-               "FastAPI", "JavaScript", "React", "Git", "PostgreSQL",
-               "REST APIs"],
-    "target_roles": ["Data Analyst", "Data Engineer Junior",
-                     "Python Developer Junior"],
-    "sectors": ["Tecnología", "Servicios Financieros", "Retail",
-                "Consultoría"],
-    "modality": "Híbrido",
-    "preferred_location": "Bogotá, Colombia",
-    "min_salary": "3500000",
+    "title": "Ingeniero Agrónomo",
+    "location": "Villavicencio, Colombia",
+    "linkedin": "https://linkedin.com/in/andres-ramirez-agro",
+    "github": "https://github.com/andresramirez-agro",
+    "portfolio": "https://andresramirez.agro",
+    "skills": ["Manejo integrado de plagas", "Fertilidad de suelos",
+               "Riego y drenaje", "Agricultura de precisión", "QGIS",
+               "Excel", "Nutrición vegetal", "Monitoreo de cultivos",
+               "Buenas prácticas agrícolas", "Palma de aceite",
+               "Análisis de datos agrícolas", "Drones agrícolas"],
+    "target_roles": ["Ingeniero Agrónomo", "Asesor Técnico Agrícola",
+                     "Coordinador de Cultivo",
+                     "Analista de Datos Agrícolas"],
+    "sectors": ["Agroindustria", "Consultoría", "Servicios"],
+    "modality": "Presencial",
+    "preferred_location": "Villavicencio, Colombia",
+    "min_salary": "3200000",
     "experience_level": "Junior",
 }
 
@@ -1083,180 +1114,131 @@ GUEST_DEMO_RICH: dict = {
     "personal": {
         "first_name": "Andrés Felipe",
         "last_name": "Ramírez Torres",
-        "title": "Ingeniero de Software",
-        "location": "Bogotá, Colombia",
-        "email": "andres.ramirez.dev@example.com",
-        "secondary_email": "andres.ramirez.work@example.com",
+        "title": "Ingeniero Agrónomo",
+        "location": "Villavicencio, Colombia",
+        "email": "andres.ramirez.agro@example.com",
+        "secondary_email": "andres.ramirez.campo@example.com",
         "phone": "+57 310 555 4821",
         "secondary_phone": "+57 315 555 7394",
-        "linkedin": "https://linkedin.com/in/andres-ramirez-dev",
-        "github": "https://github.com/andresramirez-dev",
-        "portfolio": "https://andresramirez.dev",
-        "address": "Calle 98 # 18-42, Bogotá",
-        "preferred_city_id": "bogota",
-        "preferred_location": "Bogotá, Colombia",
-        "preferred_modality": "HYBRID",
+        "linkedin": "https://linkedin.com/in/andres-ramirez-agro",
+        "github": "https://github.com/andresramirez-agro",
+        "portfolio": "https://andresramirez.agro",
+        "address": "Calle 40 # 28-15, Villavicencio",
+        "preferred_city_id": "villavicencio",
+        "preferred_location": "Villavicencio, Colombia",
+        "preferred_modality": "ONSITE",
     },
     "professional_summary": (
-        "Ingeniero de Software con experiencia en análisis de datos, "
-        "automatización de procesos y desarrollo de soluciones utilizando "
-        "Python, SQL, Power BI y herramientas de procesamiento de "
-        "información. Interesado en posiciones junior relacionadas con "
-        "análisis de datos, Business Intelligence, ingeniería de datos y "
-        "desarrollo backend con Python."),
-    "years_experience": 1,
-    "technical_skills": ["Python", "SQL", "Power BI", "Excel", "Pandas",
-                         "NumPy", "FastAPI", "JavaScript", "React", "Git",
-                         "PostgreSQL", "REST APIs", "DAX", "Google Apps Script",
-                         "MySQL", "MariaDB", "MongoDB", "Power Query", "AWS",
-                         "Azure", "GCP", "Docker", "Kubernetes", "Linux",
-                         "Tableau", "Looker", "Airflow", "Spark", "Kafka",
-                         "ETL", "Machine Learning", "Scikit-learn", "TensorFlow",
-                         "PyTorch", "NLP", "Computer Vision", "YOLOv8",
-                         "OpenCV", "Roboflow", "Google Apps Script", "APIs REST",
-                         "Node.js", "TypeScript", "Vue.js", "React Native",
-                         "Flutter", "Django", "Flask", "Spring Boot", ".NET",
-                         "C#", "Java", "Go", "Rust", "C++", "C", "R",
-                         "MATLAB", "SAS", "SPSS", "STATA", "Jupyter",
-                         "Google Colab", "Visual Studio Code", "Git",
-                         "GitHub", "GitLab", "Bitbucket", "Jira", "Confluence",
-                         "Trello", "Asana", "Notion", "Obsidian", "Figma",
-                         "Adobe XD", "Sketch", "InVision", "Zeplin",
-                         "PowerPoint", "Word", "Outlook", "Teams", "Slack",
-                         "Zoom", "Meet", "Webex", "Jitsi", "Discord",
-                         "Telegram", "WhatsApp", "Signal", "ProtonMail",
-                         "Tutanota", "ProtonVPN", "NordVPN", "ExpressVPN",
-                         "Surfshark", "Mullvad", "Windscribe", "ProtonVPN",
-                         "WireGuard", "OpenVPN", "IKEv2", "IPSec",
-                         "OpenSSL", "LibreSSL", "BoringSSL", "WolfSSL",
-                         "mbedTLS", "GnuTLS", "NSS", "SChannel",
-                         "Secure Channel", "Schannel", "SChannel"],
-    "soft_skills": ["Pensamiento analítico", "Comunicación y trabajo en equipo",
-                    "Orientación a resultados", "Atención al detalle",
-                    "Pensamiento crítico", "Adaptabilidad", "Organización",
-                    "Resolución de problemas", "Aprendizaje autónomo", "Trabajo en equipo",
-                    "Comunicación", "Atención al cliente", "Análisis financiero",
-                    "Pensamiento lógico", "Gestión de proyectos", "Resolución de problemas",
-                    "Aprendizaje autónomo", "Pensamiento crítico", "Adaptabilidad",
-                    "Organización", "Trabajo en equipo", "Comunicación",
-                    "Atención al cliente", "Análisis financiero"],
-    "target_roles": ["Data Analyst", "BI Analyst", "Data Engineer Junior",
-                     "Python Developer Junior", "Backend Developer Junior",
-                     "Financial Data Analyst"],
+        "Ingeniero Agrónomo con 2 años de experiencia en sanidad vegetal, "
+        "nutrición de cultivos y agricultura de precisión en palma de "
+        "aceite y cultivos transitorios del Meta. Manejo integrado de "
+        "plagas, fertilidad de suelos, riego y monitoreo con dron y SIG. "
+        "Interesado en posiciones como ingeniero agrónomo, asesor técnico "
+        "agrícola y coordinación de cultivo."),
+    "years_experience": 2,
+    "technical_skills": ["Manejo integrado de plagas (MIP)",
+                         "Fertilidad de suelos", "Riego y drenaje",
+                         "Agricultura de precisión", "QGIS",
+                         "Drones agrícolas", "Nutrición vegetal",
+                         "Monitoreo de cultivos",
+                         "Buenas prácticas agrícolas", "Palma de aceite",
+                         "Excel", "Análisis de datos agrícolas",
+                         "Control biológico",
+                         "Calibración de equipos de aspersión"],
+    "soft_skills": ["Trabajo en campo", "Comunicación con productores",
+                    "Organización", "Resolución de problemas",
+                    "Trabajo en equipo", "Adaptabilidad",
+                    "Atención al detalle", "Liderazgo de cuadrillas"],
+    "target_roles": ["Ingeniero Agrónomo", "Asesor Técnico Agrícola",
+                     "Coordinador de Cultivo",
+                     "Analista de Datos Agrícolas"],
     # skills para el template (claves: analysis, languages, bi, databases, automation, backend, ml, tools)
     "skills": {
-        "analysis": ["EDA (análisis exploratorio de datos)", "limpieza", "transformación", "segmentación",
-                     "filtrado", "consolidación", "cruces de información", "KPIs", "indicadores",
-                     "reportes", "análisis comercial", "Análisis de datos", "Data Analysis",
-                     "Data Visualization", "Data Visualization", "KPI Analysis", "Business Intelligence",
-                     "ETL", "Reporting", "Data Quality", "Financial Analysis", "Automation",
-                     "API Integration", "Data Processing", "Machine Learning", "Statistical Analysis",
-                     "Predictive Modeling", "Data Mining", "Big Data", "Data Engineering"],
-        "languages": ["Python", "SQL", "JavaScript", "Pandas", "NumPy", "R", "TypeScript",
-                      "Java", "C#", "Go", "Rust", "C++", "C", "R", "MATLAB", "Julia",
-                      "Scala", "Kotlin", "Swift", "PHP", "Ruby", "Perl", "Lua", "Haskell",
-                      "F#", "OCaml", "Dart", "Dart", "Groovy", "Clojure", "Elixir", "Erlang",
-                      "Prolog", "Fortran", "COBOL", "Ada", "Assembly", "VHDL", "Verilog",
-                      "SystemVerilog", "LabVIEW", "Simulink", "Modelica", "Wolfram",
-                      "Mathematica", "Maple", "Maple", "SageMath", "Maxima", "Octave",
-                      "Scilab", "GNU Octave", "Julia", "Nim", "Crystal", "V", "Zig",
-                      "Odin", "Jai", "Carbon", "Vale", "Austral", "Beef", "Zig", "Odin",
-                      "Jai", "Carbon", "Vale", "Austral", "Beef"],
-        "bi": ["Power BI", "Power Query", "DAX", "Excel avanzado", "tablas dinámicas",
-               "dashboards", "KPIs", "indicadores", "reportes", "visualización de datos",
-               "Business Intelligence", "Data Modeling", "Data Modeling", "Visualization",
-               "Visualization", "BI", "Data Visualization", "KPI Analysis", "Reporting",
-               "Dashboards", "Scorecards", "OLAP", "MDX", "DAX", "M", "Power Query",
-               "Power Pivot", "Power View", "Power Map", "Power BI Service",
-               "Power BI Desktop", "Power BI Report Server", "Power BI Embedded",
-               "Power BI Premium", "Power BI Pro", "Power BI Free", "SSRS", "SSAS",
-               "SSIS", "Tabular", "Multidimensional", "Analysis Services", "Reporting Services",
-               "Integration Services", "Data Quality Services", "Master Data Services",
-               "Data Quality Services", "Master Data Services", "Data Quality Client",
-               "Data Quality Server", "Data Quality Project", "Data Quality Rules",
-               "Data Quality Domains", "Data Quality Knowledge Base", "Data Quality Matching",
-               "Data Quality Cleansing", "Data Quality Profiling", "Data Quality Monitoring",
-               "Data Quality Alerts", "Data Quality Reports", "Data Quality Dashboards"],
-        "databases": ["SQL", "MySQL", "MariaDB", "PostgreSQL", "SQLite", "MongoDB",
-                      "Oracle", "Oracle", "SQL Server", "SQL Server", "SQL Server",
-                      "Aurora", "Aurora", "Redshift", "Redshift", "BigQuery", "BigQuery",
-                      "Snowflake", "Snowflake", "Databricks", "Databricks", "Databricks",
-                      "Synapse", "Synapse", "Synapse", "Fabric", "Fabric", "Fabric",
-                      "Cosmos DB", "Cosmos DB", "DynamoDB", "DynamoDB", "Firestore",
-                      "Firestore", "Bigtable", "Bigtable", "Spanner", "Spanner",
-                      "Cloud SQL", "Cloud SQL", "Cloud Spanner", "AlloyDB", "AlloyDB",
-                      "Memorystore", "Memorystore", "Cloud Bigtable", "Bigtable"],
-        "automation": ["Python", "Google Apps Script", "APIs REST", "consumo de APIs",
-                       "automatización de procesos", "procesamiento de información",
-                       "Automation", "Automation", "Automation", "Automation",
-                       "Automation", "Automation", "Automation", "Automation",
-                       "Automation", "Automation", "Automation", "Automation",
-                       "Automation", "Automation", "Automation", "Automation",
-                       "Automation", "Automation", "Automation", "Automation"],
-        "backend": ["FastAPI", "Flask", "Django", "FastAPI", "Flask", "Django",
-                    "Node.js", "Express", "Fastify", "Koa", "Hapi", "NestJS",
-                    "Spring Boot", "Spring MVC", "Spring WebFlux", "Quarkus",
-                    "Micronaut", "Helidon", "Vert.x", "Play Framework", "Akka HTTP",
-                    "Gin", "Echo", "Fiber", "Chi", "Mux", "Gorilla Mux", "Gorilla",
-                    "Actix Web", "Actix", "Rocket", "Warp", "Axum", "Tide",
-                    "Salvo", "Poem", "Volo", "Thrussh", "Tokio", "Async-std",
-                    "Smol", "Actix Web", "Actix", "Rocket", "Warp", "Axum",
-                    "Tide", "Salvo", "Poem", "Volo", "Thrussh", "Tokio",
-                    "Async-std", "Smol", "Actix Web", "Actix", "Rocket"],
-        "ml": ["Scikit-learn", "YOLOv8", "OpenCV", "Roboflow", "procesamiento de imágenes",
-               "TensorFlow", "PyTorch", "Keras", "JAX", "Flax", "Haiku",
-               "Hugging Face", "Transformers", "Diffusers", "Accelerate",
-               "PEFT", "LoRA", "QLoRA", "DeepSpeed", "Megatron-LM", "FairScale",
-               "ColossalAI", "FairScale", "DeepSpeed", "Megatron-LM", "ColossalAI",
-               "PyTorch Lightning", "Lightning", "FastAI", "Keras", "TensorFlow",
-               "TensorFlow", "TensorFlow", "TensorFlow", "TensorFlow",
-               "TensorFlow", "TensorFlow", "TensorFlow", "TensorFlow",
-               "TensorFlow", "TensorFlow", "TensorFlow", "TensorFlow",
-               "TensorFlow", "TensorFlow", "TensorFlow", "TensorFlow",
-               "TensorFlow", "TensorFlow", "TensorFlow", "TensorFlow",
-               "TensorFlow", "TensorFlow", "TensorFlow", "TensorFlow"],
-        "tools": ["Git", "GitHub", "Docker", "Linux", "WSL", "Google Colab", "Visual Studio Code",
-                  "GitLab", "Bitbucket", "Azure DevOps", "Azure Repos", "Azure Pipelines",
-                  "GitHub Actions", "GitHub Actions", "GitHub Actions", "GitHub Actions",
-                  "GitHub Actions", "GitHub Actions", "GitHub Actions", "GitHub Actions",
-                  "GitHub Actions", "GitHub Actions", "GitHub Actions", "GitHub Actions",
-                  "GitHub Actions", "GitHub Actions", "GitHub Actions", "GitHub Actions",
-                  "GitHub Actions", "GitHub Actions", "GitHub Actions", "GitHub Actions",
-                  "GitHub Actions", "GitHub Actions", "GitHub Actions", "GitHub Actions",
-                  "GitHub Actions", "GitHub Actions", "GitHub Actions", "GitHub Actions",
-                  "GitHub Actions", "GitHub Actions", "GitHub Actions", "GitHub Actions",
-                  "GitHub Actions", "GitHub Actions", "GitHub Actions", "GitHub Actions",
-                  "GitHub Actions", "GitHub Actions", "GitHub Actions", "GitHub Actions"],
+        "analysis": ["Monitoreo de cultivos", "muestreos de suelo",
+                     "lectura de análisis foliares", "KPIs de cosecha",
+                     "reportes técnicos", "evaluación de plagas",
+                     "Sanidad vegetal", "Fertilidad de suelos",
+                     "Nutrición vegetal", "Fisiología vegetal",
+                     "Edafología"],
+        "languages": ["Español", "Inglés técnico"],
+        "bi": ["Excel avanzado", "dashboards de cosecha", "QGIS",
+               "reportes", "visualización de datos",
+               "Análisis de datos agrícolas"],
+        "databases": ["Excel", "KoboToolbox", "ODK Collect",
+                      "registros de campo"],
+        "automation": ["Riego automatizado", "monitoreo con sensores",
+                       "drones", "programación de riego",
+                       "Riego y drenaje", "Agricultura de precisión",
+                       "Dron multiespectral", "Drones agrícolas",
+                       "Sensores de humedad", "Trampas con feromonas",
+                       "Calibración de equipos de aspersión"],
+        "backend": ["KoboToolbox", "ODK Collect"],
+        "ml": ["Detección de plagas por imagen",
+               "modelos de rendimiento"],
+        "tools": ["QGIS", "Dron multiespectral", "GPS", "Excel",
+                  "KoboToolbox", "Calibradora de aspersión"],
+        # Grupo extra: cubre el resto de skills declarados en entradas
+        # y perspectivas para que el validador no reporte ruido. El
+        # renderer HTML solo pinta las claves conocidas (ignora esta).
+        "field": ["Buenas prácticas agrícolas",
+                  "Establecimiento de cultivos", "Maquinaria agrícola",
+                  "Manejo integrado de plagas (MIP)",
+                  "Control biológico", "Trabajo en campo",
+                  "Comunicación con productores", "Organización",
+                  "Resolución de problemas", "Trabajo en equipo",
+                  "Adaptabilidad", "Atención al detalle",
+                  "Liderazgo de cuadrillas", "Pensamiento científico",
+                  "Comunicación técnica", "Disciplina operativa",
+                  "Gestión de recursos", "Aprendizaje autónomo",
+                  "Toma de decisiones en campo",
+                  "Pensamiento analítico"],
     },
     # skills_groups para compatibilidad con template (mismo contenido que skills)
     "skills_groups": {
-        "analysis": ["EDA (análisis exploratorio de datos)", "limpieza", "transformación", "segmentación",
-                     "filtrado", "consolidación", "cruces de información", "KPIs", "indicadores",
-                     "reportes", "análisis comercial"],
-        "languages": ["Python", "SQL", "JavaScript", "Pandas", "NumPy"],
-        "bi": ["Power BI", "Power Query", "DAX", "Excel avanzado", "tablas dinámicas",
-               "dashboards", "KPIs", "indicadores", "reportes", "visualización de datos"],
-        "databases": ["SQL", "MySQL", "MariaDB", "PostgreSQL", "SQLite", "MongoDB"],
-        "automation": ["Python", "Google Apps Script", "APIs REST", "consumo de APIs",
-                       "automatización de procesos", "procesamiento de información"],
-        "backend": ["FastAPI", "Flask"],
-        "ml": ["Scikit-learn", "YOLOv8", "OpenCV", "Roboflow", "procesamiento de imágenes"],
-        "tools": ["Git", "GitHub", "Docker", "Linux", "WSL", "Google Colab", "Visual Studio Code"],
+        "analysis": ["Monitoreo de cultivos", "muestreos de suelo",
+                     "lectura de análisis foliares", "KPIs de cosecha",
+                     "reportes técnicos", "evaluación de plagas",
+                     "Sanidad vegetal", "Fertilidad de suelos",
+                     "Nutrición vegetal", "Fisiología vegetal",
+                     "Edafología"],
+        "languages": ["Español", "Inglés técnico"],
+        "bi": ["Excel avanzado", "dashboards de cosecha", "QGIS",
+               "reportes", "visualización de datos",
+               "Análisis de datos agrícolas"],
+        "databases": ["Excel", "KoboToolbox", "ODK Collect",
+                      "registros de campo"],
+        "automation": ["Riego automatizado", "monitoreo con sensores",
+                       "drones", "programación de riego",
+                       "Riego y drenaje", "Agricultura de precisión",
+                       "Dron multiespectral", "Drones agrícolas",
+                       "Sensores de humedad", "Trampas con feromonas",
+                       "Calibración de equipos de aspersión"],
+        "backend": ["KoboToolbox", "ODK Collect"],
+        "ml": ["Detección de plagas por imagen",
+               "modelos de rendimiento"],
+        "tools": ["QGIS", "Dron multiespectral", "GPS", "Excel",
+                  "KoboToolbox", "Calibradora de aspersión"],
+        # Grupo extra: ver comentario en "skills".
+        "field": ["Buenas prácticas agrícolas",
+                  "Establecimiento de cultivos", "Maquinaria agrícola",
+                  "Manejo integrado de plagas (MIP)",
+                  "Control biológico", "Trabajo en campo",
+                  "Comunicación con productores", "Organización",
+                  "Resolución de problemas", "Trabajo en equipo",
+                  "Adaptabilidad", "Atención al detalle",
+                  "Liderazgo de cuadrillas", "Pensamiento científico",
+                  "Comunicación técnica", "Disciplina operativa",
+                  "Gestión de recursos", "Aprendizaje autónomo",
+                  "Toma de decisiones en campo",
+                  "Pensamiento analítico"],
     },
-    "other_knowledge": ["Lógica de programación", "programación orientada a objetos",
-                        "estructuras de datos", "algoritmos", "APIs REST",
-                        "arquitectura cliente-servidor", "fundamentos de desarrollo de software"],
+    "other_knowledge": ["Fisiología vegetal", "Edafología",
+                        "Normativa ICA", "Certificación BPA",
+                        "Primeros auxilios en campo"],
     "other_studies": [
-        {"title": "Curso de DAX para Power BI", "institution": "Platzi", "start_date": "2021", "end_date": "2026"},
-        {"title": "Curso de Excel Analytics con AI y Python", "institution": "Platzi", "start_date": "2021", "end_date": "2026"},
-        {"title": "Curso de Power BI", "institution": "Platzi", "start_date": "2021", "end_date": "2026"},
-        {"title": "Curso de Python Intermedio: Comprehensions, Lambdas y Manejo de Errores", "institution": "Platzi", "start_date": "2021", "end_date": "2026"},
-        {"title": "Curso Básico de Algoritmos y Pensamiento Lógico", "institution": "Platzi", "start_date": "2021", "end_date": "2026"},
-        {"title": "Curso de Introducción al Desarrollo Backend", "institution": "Platzi", "start_date": "2021", "end_date": "2026"},
-        {"title": "Curso de Docker: Fundamentos", "institution": "Platzi", "start_date": "2021", "end_date": "2026"},
-        {"title": "Curso Práctico de JavaScript", "institution": "Platzi", "start_date": "2021", "end_date": "2026"},
-        {"title": "Fundamentos de Ingeniería de Software", "institution": "Platzi", "start_date": "2021", "end_date": "2026"},
-        {"title": "Curso de Introducción a la Terminal y Línea de Comandos", "institution": "Platzi", "start_date": "2021", "end_date": "2026"},
+        {"title": "Diplomado en Nutrición Vegetal", "institution": "Universidad de los Llanos", "start_date": "2024", "end_date": "2024"},
+        {"title": "Curso de Drones para Agricultura", "institution": "SENA", "start_date": "2024", "end_date": "2024"},
+        {"title": "Curso de Riego y Drenaje", "institution": "SENA", "start_date": "2023", "end_date": "2023"},
         {"title": "Inglés — Nivel B1 en formación", "institution": "Smart Language Academy", "start_date": "2025", "end_date": "Actualidad"},
     ],
     "languages": [
@@ -1271,244 +1253,265 @@ GUEST_DEMO_RICH: dict = {
     ],
     "experiences": [
         {
-            "company": "Banco de Bogotá",
-            "title": "Ejecutivo de Nómina para Empresas Cooperativas — Análisis de Información Empresarial y Comercial",
-            "city": "Bogotá, Colombia",
-            "modality": "Híbrido",
-            "start_date": "Mar 2025",
-            "end_date": "Dic 2025",
+            "company": "Palmas del Llano S.A.S.",
+            "title": "Ingeniero Agrónomo Junior — Sanidad y Nutrición de Palma",
+            "city": "Villavicencio, Colombia",
+            "modality": "Presencial",
+            "start_date": "2024-03-01",
+            "end_date": "2025-12-01",
             "is_current": False,
-            "description": "Analizar información empresarial y financiera de más de 10.000 registros para apoyar la toma de decisiones comerciales, utilizando herramientas de análisis de datos y automatización.",
+            "description": "Responder por la sanidad vegetal y la nutrición de 800 hectáreas de palma de aceite: monitoreo de plagas, planes de fertilización y reportes técnicos para la gerencia del cultivo.",
             "bullets": [
-                "Analicé y consolidé bases de datos con más de 10.000 registros utilizando Excel avanzado y Python para limpieza, validación, eliminación de duplicados, filtrado y segmentación de información.",
-                "Realicé cruces de información entre fuentes internas y externas (incluyendo fuentes institucionales) para analizar variables empresariales como tamaño de empresa, número de empleados, presupuesto y nivel de endeudamiento, generando indicadores para apoyar decisiones comerciales.",
-                "Desarrollé soluciones de automatización con Python y Google Apps Script para agilizar tareas de procesamiento, organización y consolidación de información.",
-                "Consulté y realicé seguimiento a un volumen diario de empresas (más de 100 consultadas, cerca de 30 contactadas y entre 30-40 en seguimiento activo), aplicando criterios de análisis de datos para priorizar oportunidades.",
-                "Gestioné información relacionada con productos financieros (créditos, CDT, tarjetas de crédito, depósitos y fiducias) de acuerdo con el perfil de cada empresa/cliente, identificado mediante análisis de datos.",
+                "Monitoreé semanalmente 800 hectáreas con trampas y muestreos foliares, detectando focos de Rhynchophorus palmarum y reduciendo la incidencia de pudrición del cogollo en un 30%.",
+                "Diseñé planes de fertilización por lote a partir de análisis de suelos y foliares, ajustando dosis de NPK y enmiendas según la etapa fenológica del cultivo.",
+                "Coordiné cuadrillas de 12 operarios en aplicaciones fitosanitarias, verificando calibración de equipos de aspersión y cumplimiento de buenas prácticas agrícolas.",
+                "Levanté mapas de vigor con dron multiespectral y QGIS para focalizar fertilización y riego en los lotes de menor rendimiento.",
+                "Consolidé bitácoras de campo en Excel y KoboToolbox, generando reportes mensuales de sanidad, cosecha y costos por hectárea.",
             ],
-            "technical_skills": ["Python", "SQL", "Power BI", "Excel", "Pandas", "DAX", "Google Apps Script"],
-            "soft_skills": ["Análisis", "Comunicación", "Organización", "Trabajo en equipo"],
+            "technical_skills": ["Manejo integrado de plagas (MIP)", "Fertilidad de suelos", "Nutrición vegetal", "Drones agrícolas", "QGIS", "Excel", "Calibración de equipos de aspersión"],
+            "soft_skills": ["Liderazgo de cuadrillas", "Organización", "Trabajo en equipo", "Atención al detalle"],
         },
         {
-            "company": "Banco de Bogotá",
-            "title": "Asesor Comercial (Prácticas)",
+            "company": "Agrocampo S.A.S.",
+            "title": "Auxiliar Técnico Agrícola (Prácticas)",
             "city": "Bogotá, Colombia",
             "modality": "Presencial",
-            "start_date": "Oct 2023",
-            "end_date": "Oct 2024",
+            "start_date": "2023-02-01",
+            "end_date": "2023-11-01",
             "is_current": False,
-            "description": "Apoyar procesos comerciales y operativos relacionados con clientes, productos financieros y gestión de información.",
+            "description": "Apoyar la asistencia técnica a productores de cultivos transitorios: visitas de campo, toma de muestras y recomendaciones básicas de manejo.",
             "bullets": [
-                "Gestioné y validé información de clientes y productos financieros mediante Excel y plataformas internas, realizando consulta y seguimiento de datos.",
-                "Atendí y gestioné clientes, adquiriendo experiencia en productos financieros, operaciones bancarias y procesos comerciales.",
-                "Verifiqué información y documentación de clientes, garantizando el cumplimiento de los procedimientos establecidos por la entidad.",
+                "Realicé visitas técnicas a fincas productoras de maíz y soya, levantando diagnósticos de estado nutricional y fitosanitario.",
+                "Tomé y rotulé muestras de suelo y tejido vegetal para laboratorio, siguiendo protocolos de cadena de custodia.",
+                "Acompañé demostraciones de riego por goteo y calibración de aspersoras ante grupos de 20 productores.",
             ],
-            "technical_skills": ["Excel", "Plataformas bancarias", "Análisis financiero"],
-            "soft_skills": ["Atención al cliente", "Comunicación", "Trabajo en equipo"],
+            "technical_skills": ["Muestreos de suelo", "Riego y drenaje", "Buenas prácticas agrícolas"],
+            "soft_skills": ["Comunicación con productores", "Trabajo en campo", "Adaptabilidad"],
         },
     ],
     "experience": [
         {
-            "company": "Banco de Bogotá",
-            "title": "Ejecutivo de Nómina para Empresas Cooperativas — Análisis de Información Empresarial y Comercial",
-            "city": "Bogotá, Colombia",
-            "modality": "Híbrido",
-            "start_date": "Mar 2025",
-            "end_date": "Dic 2025",
-            "is_current": False,
-            "description": "Analizar información empresarial y financiera de más de 10.000 registros para apoyar la toma de decisiones comerciales, utilizando herramientas de análisis de datos y automatización.",
-            "bullets": [
-                "Analicé y consolidé bases de datos con más de 10.000 registros utilizando Excel avanzado y Python para limpieza, validación, eliminación de duplicados, filtrado y segmentación de información.",
-                "Realicé cruces de información entre fuentes internas y externas (incluyendo fuentes institucionales) para analizar variables empresariales como tamaño de empresa, número de empleados, presupuesto y nivel de endeudamiento, generando indicadores para apoyar decisiones comerciales.",
-                "Desarrollé soluciones de automatización con Python y Google Apps Script para agilizar tareas de procesamiento, organización y consolidación de información.",
-                "Consulté y realicé seguimiento a un volumen diario de empresas (más de 100 consultadas, cerca de 30 contactadas y entre 30-40 en seguimiento activo), aplicando criterios de análisis de datos para priorizar oportunidades.",
-                "Gestioné información relacionada con productos financieros (créditos, CDT, tarjetas de crédito, depósitos y fiducias) de acuerdo con el perfil de cada empresa/cliente, identificado mediante análisis de datos.",
-            ],
-            "technical_skills": ["Python", "SQL", "Power BI", "Excel", "Pandas", "DAX", "Google Apps Script"],
-            "soft_skills": ["Análisis", "Comunicación", "Organización", "Trabajo en equipo"],
-        },
-        {
-            "company": "Banco de Bogotá",
-            "title": "Asesor Comercial (Prácticas)",
-            "city": "Bogotá, Colombia",
+            "company": "Palmas del Llano S.A.S.",
+            "title": "Ingeniero Agrónomo Junior — Sanidad y Nutrición de Palma",
+            "city": "Villavicencio, Colombia",
             "modality": "Presencial",
-            "start_date": "Oct 2023",
-            "end_date": "Oct 2024",
+            "start_date": "2024-03-01",
+            "end_date": "2025-12-01",
             "is_current": False,
-            "description": "Apoyar procesos comerciales y operativos relacionados con clientes, productos financieros y gestión de información.",
+            "description": "Responder por la sanidad vegetal y la nutrición de 800 hectáreas de palma de aceite: monitoreo de plagas, planes de fertilización y reportes técnicos para la gerencia del cultivo.",
             "bullets": [
-                "Gestioné y validé información de clientes y productos financieros mediante Excel y plataformas internas, realizando consulta y seguimiento de datos.",
-                "Atendí y gestioné clientes, adquiriendo experiencia en productos financieros, operaciones bancarias y procesos comerciales.",
-                "Verifiqué información y documentación de clientes, garantizando el cumplimiento de los procedimientos establecidos por la entidad.",
+                "Monitoreé semanalmente 800 hectáreas con trampas y muestreos foliares, detectando focos de Rhynchophorus palmarum y reduciendo la incidencia de pudrición del cogollo en un 30%.",
+                "Diseñé planes de fertilización por lote a partir de análisis de suelos y foliares, ajustando dosis de NPK y enmiendas según la etapa fenológica del cultivo.",
+                "Coordiné cuadrillas de 12 operarios en aplicaciones fitosanitarias, verificando calibración de equipos de aspersión y cumplimiento de buenas prácticas agrícolas.",
+                "Levanté mapas de vigor con dron multiespectral y QGIS para focalizar fertilización y riego en los lotes de menor rendimiento.",
+                "Consolidé bitácoras de campo en Excel y KoboToolbox, generando reportes mensuales de sanidad, cosecha y costos por hectárea.",
             ],
-            "technical_skills": ["Excel", "Plataformas bancarias", "Análisis financiero"],
-            "soft_skills": ["Atención al cliente", "Comunicación", "Trabajo en equipo"],
-        },
-    ],
-    "education": [
-        {
-            "institution": "Universidad Metropolitana de Tecnología",
-            "degree": "Ingeniería de Software",
-            "level": "bachelor",
-            "status": "finished",
-            "start_date": "2021-01",
-            "end_date": "2025-12",
-            "description": (
-                "Formación profesional en desarrollo de software, bases de "
-                "datos, arquitectura de software, análisis de sistemas y "
-                "gestión de proyectos tecnológicos."),
-            "technical_skills": ["Python", "SQL", "JavaScript",
-                                 "Bases de datos", "Git"],
-            "soft_skills": ["Pensamiento lógico", "Trabajo en equipo",
-                            "Gestión de proyectos"],
+            "technical_skills": ["Manejo integrado de plagas (MIP)", "Fertilidad de suelos", "Nutrición vegetal", "Drones agrícolas", "QGIS", "Excel", "Calibración de equipos de aspersión"],
+            "soft_skills": ["Liderazgo de cuadrillas", "Organización", "Trabajo en equipo", "Atención al detalle"],
             "perspectives": [
                 {
                     "id": "p1",
-                    "label": "Ingeniería de software y datos",
+                    "label": "Sanidad vegetal y MIP",
                     "description": (
-                        "Formación orientada al desarrollo de soluciones "
-                        "tecnológicas y procesamiento de información "
-                        "mediante herramientas de programación y bases de "
-                        "datos."),
-                    "skills": ["Programming", "Databases",
-                               "Software Engineering"],
-                    "tools": ["Python", "SQL", "Git", "JavaScript"],
-                    "domains": ["Software Engineering", "Data",
-                                "Technology"],
-                    "roles": ["Software Engineer", "Data Analyst",
-                              "Backend Developer"],
+                        "Experiencia enfocada en monitoreo fitosanitario, "
+                        "control biológico y químico racional y reducción "
+                        "de incidencia de plagas en palma de aceite."),
+                    "skills": ["Manejo integrado de plagas (MIP)",
+                               "Control biológico", "Monitoreo de cultivos"],
+                    "tools": ["Trampas con feromonas", "Drones agrícolas",
+                              "KoboToolbox"],
+                    "domains": ["Sanidad vegetal", "Palma de aceite",
+                                "Campo"],
+                    "roles": ["Ingeniero Agrónomo",
+                              "Asesor Técnico Agrícola",
+                              "Coordinador de Cultivo"],
+                },
+                {
+                    "id": "p2",
+                    "label": "Agricultura de precisión y datos",
+                    "description": (
+                        "Uso de dron multiespectral, SIG y registros "
+                        "digitales para fertilización y riego por lotes."),
+                    "skills": ["Agricultura de precisión", "QGIS",
+                               "Análisis de datos agrícolas"],
+                    "tools": ["Dron multiespectral", "QGIS", "Excel",
+                              "KoboToolbox"],
+                    "domains": ["Agricultura de precisión", "SIG",
+                                "Datos agrícolas"],
+                    "roles": ["Ingeniero Agrónomo",
+                              "Analista de Datos Agrícolas",
+                              "Coordinador de Cultivo"],
                 },
             ],
         },
         {
-            "institution": "Instituto Técnico Empresarial de Colombia",
-            "degree": "Técnico en Análisis Administrativo y Financiero",
-            "level": "technical",
+            "company": "Agrocampo S.A.S.",
+            "title": "Auxiliar Técnico Agrícola (Prácticas)",
+            "city": "Bogotá, Colombia",
+            "modality": "Presencial",
+            "start_date": "2023-02-01",
+            "end_date": "2023-11-01",
+            "is_current": False,
+            "description": "Apoyar la asistencia técnica a productores de cultivos transitorios: visitas de campo, toma de muestras y recomendaciones básicas de manejo.",
+            "bullets": [
+                "Realicé visitas técnicas a fincas productoras de maíz y soya, levantando diagnósticos de estado nutricional y fitosanitario.",
+                "Tomé y rotulé muestras de suelo y tejido vegetal para laboratorio, siguiendo protocolos de cadena de custodia.",
+                "Acompañé demostraciones de riego por goteo y calibración de aspersoras ante grupos de 20 productores.",
+            ],
+            "technical_skills": ["Muestreos de suelo", "Riego y drenaje", "Buenas prácticas agrícolas"],
+            "soft_skills": ["Comunicación con productores", "Trabajo en campo", "Adaptabilidad"],
+            "perspectives": [],
+        },
+    ],
+    "education": [
+        {
+            "institution": "Universidad de los Llanos",
+            "degree": "Ingeniería Agronómica",
+            "level": "bachelor",
             "status": "finished",
             "start_date": "2019-01",
-            "end_date": "2020-12",
+            "end_date": "2024-06",
             "description": (
-                "Formación en procesos administrativos, análisis "
-                "financiero, manejo de información empresarial y "
-                "herramientas ofimáticas."),
-            "technical_skills": ["Excel", "Análisis financiero",
-                                 "PowerPoint"],
-            "soft_skills": ["Organización", "Atención al detalle"],
+                "Formación profesional en fisiología vegetal, edafología, "
+                "sanidad vegetal, nutrición de cultivos, riego y drenaje, "
+                "maquinaria agrícola y administración de empresas "
+                "agropecuarias."),
+            "technical_skills": ["Fisiología vegetal", "Edafología",
+                                 "Sanidad vegetal", "Riego y drenaje"],
+            "soft_skills": ["Pensamiento científico", "Trabajo en equipo",
+                             "Comunicación técnica"],
+            "perspectives": [
+                {
+                    "id": "p1",
+                    "label": "Sanidad vegetal y suelos",
+                    "description": (
+                        "Formación orientada al diagnóstico fitosanitario, "
+                        "la fertilidad de suelos y el manejo sostenible "
+                        "de cultivos tropicales."),
+                    "skills": ["Sanidad vegetal", "Fertilidad de suelos",
+                               "Manejo integrado de plagas (MIP)"],
+                    "tools": ["QGIS", "Excel", "KoboToolbox"],
+                    "domains": ["Agronomía", "Sanidad vegetal",
+                                "Suelos"],
+                    "roles": ["Ingeniero Agrónomo",
+                              "Asesor Técnico Agrícola",
+                              "Coordinador de Cultivo"],
+                },
+            ],
+        },
+        {
+            "institution": "SENA",
+            "degree": "Tecnólogo en Producción Agrícola",
+            "level": "technical",
+            "status": "finished",
+            "start_date": "2016-01",
+            "end_date": "2017-12",
+            "description": (
+                "Formación tecnológica en establecimiento y manejo de "
+                "cultivos, operación de maquinaria y buenas prácticas "
+                "agrícolas."),
+            "technical_skills": ["Establecimiento de cultivos",
+                                 "Maquinaria agrícola",
+                                 "Buenas prácticas agrícolas"],
+            "soft_skills": ["Disciplina operativa", "Trabajo en equipo"],
             "perspectives": [],
         },
     ],
     "projects": [
         {
-            "name": "Retail Intelligence Dashboard",
-            "url": "https://andresramirez.dev/projects/retail-intelligence",
-            "repo": "https://github.com/andresramirez-dev/retail-intelligence",
-            "technologies": ["Python", "Pandas", "NumPy", "Power BI",
-                             "SQL", "Excel"],
-            "start_date": "2026-02",
-            "end_date": "2026-04",
+            "name": "Mapa NDVI de vigor con dron en palma",
+            "url": "https://andresramirez.agro/proyectos/mapa-ndvi",
+            "repo": "https://github.com/andresramirez-agro/mapa-ndvi",
+            "technologies": ["Dron multiespectral", "QGIS", "Excel",
+                             "GPS"],
+            "start_date": "2025-02",
+            "end_date": "2025-04",
             "description": (
-                "Proyecto de análisis de inventario y demanda para "
-                "identificar tendencias de ventas, productos con riesgo de "
-                "agotamiento y oportunidades de optimización mediante "
-                "indicadores y dashboards interactivos."),
-            "technical_skills": ["Data Analysis", "Data Visualization",
-                                 "Python", "Power BI"],
+                "Vuelos multiespectrales sobre 120 hectáreas para calcular "
+                "NDVI, delimitar zonas de bajo vigor y focalizar la "
+                "fertilización nitrogenada por lotes."),
+            "technical_skills": ["Drones agrícolas", "QGIS",
+                                 "Agricultura de precisión"],
             "soft_skills": ["Pensamiento analítico",
-                            "Resolución de problemas"],
+                             "Resolución de problemas"],
             "perspectives": [
                 {
                     "id": "p1",
-                    "label": "Business Intelligence",
+                    "label": "Agricultura de precisión",
                     "description": (
-                        "Proyecto enfocado en convertir datos operativos en "
-                        "indicadores visuales para facilitar el análisis "
-                        "empresarial."),
-                    "skills": ["BI", "Data Visualization", "KPI Analysis"],
-                    "tools": ["Power BI", "Python", "Pandas", "Excel"],
-                    "domains": ["Retail", "Inventory",
-                                "Business Intelligence"],
-                    "roles": ["Data Analyst", "BI Analyst",
-                              "Reporting Analyst"],
+                        "Proyecto de teledetección aplicado a fertilización "
+                        "variable en palma de aceite."),
+                    "skills": ["Agricultura de precisión", "QGIS",
+                               "Análisis de datos agrícolas"],
+                    "tools": ["Dron multiespectral", "QGIS", "Excel"],
+                    "domains": ["Agricultura de precisión", "SIG",
+                                "Palma de aceite"],
+                    "roles": ["Ingeniero Agrónomo",
+                              "Analista de Datos Agrícolas"],
                 },
             ],
         },
         {
-            "name": "Currency Analytics API",
-            "url": "https://andresramirez.dev/projects/currency-api",
-            "repo": "https://github.com/andresramirez-dev/currency-analytics",
-            "technologies": ["Python", "FastAPI", "REST API", "Pandas",
-                             "JSON"],
-            "start_date": "2026-05",
-            "end_date": "2026-06",
+            "name": "Riego por goteo en 5 ha de cítricos",
+            "url": "https://andresramirez.agro/proyectos/riego-goteo",
+            "repo": "https://github.com/andresramirez-agro/riego-goteo",
+            "technologies": ["Riego por goteo", "Sensores de humedad",
+                             "Excel"],
+            "start_date": "2024-08",
+            "end_date": "2024-10",
             "description": (
-                "Aplicación para consultar y analizar la variación "
-                "histórica de monedas mediante APIs externas, incluyendo "
-                "cálculos de variación porcentual y generación de "
-                "indicadores financieros."),
-            "technical_skills": ["Python", "APIs", "Data Processing"],
-            "soft_skills": ["Investigación", "Pensamiento crítico"],
+                "Diseño e instalación de riego por goteo con programación "
+                "por sensores de humedad, reduciendo el consumo de agua "
+                "en un 25% frente al riego por aspersión."),
+            "technical_skills": ["Riego y drenaje",
+                                 "Programación de riego"],
+            "soft_skills": ["Gestión de recursos", "Trabajo en campo"],
             "perspectives": [
                 {
                     "id": "p1",
-                    "label": "Automatización financiera",
+                    "label": "Riego eficiente",
                     "description": (
-                        "Aplicación orientada al procesamiento automatizado "
-                        "de información financiera obtenida desde servicios "
-                        "externos."),
-                    "skills": ["Financial Analysis", "Automation",
-                               "API Integration"],
-                    "tools": ["Python", "FastAPI", "Pandas"],
-                    "domains": ["Finance", "FinTech", "Data"],
-                    "roles": ["Python Developer", "Data Analyst",
-                              "Financial Data Analyst"],
+                        "Proyecto de uso eficiente del agua en frutales "
+                        "con monitoreo de humedad del suelo."),
+                    "skills": ["Riego y drenaje",
+                               "Monitoreo de cultivos"],
+                    "tools": ["Sensores de humedad", "Excel"],
+                    "domains": ["Riego", "Frutales", "Campo"],
+                    "roles": ["Ingeniero Agrónomo",
+                              "Asesor Técnico Agrícola"],
                 },
             ],
         },
     ],
     "certifications": [
         {
-            "name": "Microsoft Power BI Data Analyst",
-            "institution": "Microsoft",
-            "issued_date": "2026-07-15",
-            "expiry_date": "2028-07-15",
-            "credential_id": "PBI-2026-847291",
-            "credential_url": "https://credentials.example.com/PBI-2026-847291",
+            "name": "Manejo Integrado de Plagas (MIP)",
+            "institution": "ICA",
+            "issued_date": "2025-05-15",
+            "expiry_date": None,
+            "credential_id": "ICA-MIP-2025-3187",
+            "credential_url": "https://credentials.example.com/ICA-MIP-2025-3187",
             "description": (
-                "Certificación relacionada con análisis de datos, modelado, "
-                "visualización y construcción de reportes empresariales "
-                "utilizando Power BI."),
-            "technical_skills": ["Power BI", "DAX", "Data Modeling"],
-            "soft_skills": ["Análisis", "Comunicación"],
-            "perspectives": [
-                {
-                    "id": "p1",
-                    "label": "Business Intelligence",
-                    "description": (
-                        "Certificación orientada al análisis y visualización "
-                        "de información empresarial."),
-                    "skills": ["Business Intelligence", "Data Modeling",
-                               "Visualization"],
-                    "tools": ["Power BI", "DAX"],
-                    "domains": ["BI", "Analytics", "Business"],
-                    "roles": ["Power BI Analyst", "BI Analyst",
-                              "Data Analyst"],
-                },
-            ],
+                "Certificación en monitoreo, diagnóstico y control "
+                "integrado de plagas y enfermedades en cultivos "
+                "tropicales."),
+            "technical_skills": ["Manejo integrado de plagas (MIP)",
+                                 "Control biológico"],
+            "soft_skills": ["Toma de decisiones en campo"],
+            "perspectives": [],
         },
         {
-            "name": "Python for Data Analysis",
-            "institution": "DataCamp",
-            "issued_date": "2026-05-22",
+            "name": "Agricultura de Precisión con SIG",
+            "institution": "SENA",
+            "issued_date": "2024-09-20",
             "expiry_date": None,
-            "credential_id": "DC-PYDA-582941",
-            "credential_url": "https://credentials.example.com/DC-PYDA-582941",
+            "credential_id": "SENA-AP-2024-0912",
+            "credential_url": "https://credentials.example.com/SENA-AP-2024-0912",
             "description": (
-                "Certificación de formación práctica en procesamiento, "
-                "transformación y análisis de datos utilizando Python y "
-                "librerías especializadas."),
-            "technical_skills": ["Python", "Pandas", "NumPy"],
-            "soft_skills": ["Pensamiento analítico",
-                            "Resolución de problemas"],
+                "Formación práctica en QGIS, GPS y drones para "
+                "mapeo de lotes y agricultura por ambientes."),
+            "technical_skills": ["QGIS", "Drones agrícolas", "GPS"],
+            "soft_skills": ["Aprendizaje autónomo"],
             "perspectives": [],
         },
     ],
@@ -1516,10 +1519,16 @@ GUEST_DEMO_RICH: dict = {
 
 
 def _ensure_guest_demo_flat(db) -> None:
-    """Siembra el perfil demo del invitado una sola vez (idempotente)."""
+    """Siembra el perfil demo del invitado (idempotente).
+
+    Resiembra UNA vez si lo guardado es la version anterior intacta
+    (titulo legacy): asi las BD ya sembradas migran al contenido nuevo.
+    Si el invitado edito sus datos, se respetan y no se tocan.
+    """
     from app.services.search_profiles import GUEST_OWNER
 
-    if _stored_user_flat(db, GUEST_OWNER):
+    stored = _stored_user_flat(db, GUEST_OWNER)
+    if stored and not _is_legacy_guest_demo_flat(stored):
         return
     allowed = {key: GUEST_DEMO_FLAT.get(key, DEFAULT_PROFILE[key])
                for key in DEFAULT_PROFILE}
@@ -1528,8 +1537,13 @@ def _ensure_guest_demo_flat(db) -> None:
 
         fs.save_user_profile(db, GUEST_OWNER, allowed)
     else:
-        db.add(UserProfile(
-            uid=GUEST_OWNER, data=json.dumps(allowed, ensure_ascii=False)))
+        row = db.query(UserProfile).filter(
+            UserProfile.uid == GUEST_OWNER).first()
+        if not row:
+            row = UserProfile(uid=GUEST_OWNER, data="{}")
+            db.add(row)
+        row.data = json.dumps(allowed, ensure_ascii=False)
+        db.add(row)
         db.commit()
 
 
@@ -1551,11 +1565,17 @@ def _store_user_rich(db, uid: str, normalized: dict) -> None:
 
 
 def _ensure_guest_demo_rich(db) -> None:
-    """Siembra el perfil estructurado demo una sola vez (idempotente)."""
+    """Siembra el perfil estructurado demo (idempotente).
+
+    Resiembra UNA vez si lo guardado es la version anterior intacta:
+    asi las BD ya sembradas migran al contenido nuevo. Si el invitado
+    edito sus datos, se respetan y no se tocan.
+    """
     from app.profile import schema as profile_schema
     from app.services.search_profiles import GUEST_OWNER
 
-    if _stored_user_rich(db, GUEST_OWNER):
+    stored = _stored_user_rich(db, GUEST_OWNER)
+    if stored and not _is_legacy_guest_demo_rich(stored):
         return
     normalized, _warnings = profile_schema.normalize_rich_profile(
         dict(GUEST_DEMO_RICH))

@@ -226,10 +226,10 @@ def test_guest_gets_demo_profile_not_global():
         guest = jobs.get_profile_for(db, GUEST_UID, GUEST_EMAIL)
         assert guest["scope"] == "demo"
         assert guest["full_name"] == "Andrés Felipe Ramírez"
-        assert guest["title"] == "Ingeniero de Software"
-        assert "REST APIs" in guest["skills"]
-        assert "Consultoría" in guest["sectors"]
-        assert guest["min_salary"] == "3500000"
+        assert guest["title"] == "Ingeniero Agrónomo"
+        assert "QGIS" in guest["skills"]
+        assert "Agroindustria" in guest["sectors"]
+        assert guest["min_salary"] == "3200000"
         # El otro Google sigue en blanco.
         other = jobs.get_profile_for(db, "uid-other-test", OTHER)
         assert other["scope"] == "own"
@@ -253,16 +253,19 @@ def test_guest_demo_rich_seeded():
         assert rich["personal"].get("full_name") == (
             "Andrés Felipe Ramírez Torres")
         assert rich["personal"].get("email") == (
-            "andres.ramirez.dev@example.com")
-        assert rich["personal"].get("title_id") == "software_engineer"
-        assert "Python" in rich["professional_summary"]
-        assert rich["years_experience"] == 1
-        assert len(rich["technical_skills"]) == 12
-        assert len(rich["soft_skills"]) >= 6
-        for skill in ("Pensamiento analítico", "Adaptabilidad",
+            "andres.ramirez.agro@example.com")
+        assert rich["personal"].get("title_id") == "agronomist"
+        assert "palma" in rich["professional_summary"].lower()
+        assert rich["years_experience"] == 2
+        assert len(rich["technical_skills"]) == 14
+        assert len(rich["soft_skills"]) == 8
+        for skill in ("Manejo integrado de plagas (MIP)",
+                      "QGIS", "Riego y drenaje"):
+            assert skill in rich["technical_skills"]
+        for skill in ("Trabajo en campo", "Comunicación con productores",
                       "Organización"):
             assert skill in rich["soft_skills"]
-        assert len(rich["target_roles"]) == 6
+        assert len(rich["target_roles"]) == 4
         assert set(rich["skills"]) >= {
             "analysis", "languages", "bi", "databases", "automation",
             "backend", "ml", "tools"}
@@ -274,19 +277,19 @@ def test_guest_demo_rich_seeded():
         assert len(rich["projects"]) == 2
         assert len(rich["certifications"]) == 2
         exp1 = rich["experience"][0]
-        assert exp1["company"] == "Banco de Bogotá"
-        assert exp1["start_date"] == "2025-03-01"
+        assert exp1["company"] == "Palmas del Llano S.A.S."
+        assert exp1["start_date"] == "2024-03-01"
         assert exp1["end_date"] == "2025-12-01"
-        assert exp1["modality"] == "HYBRID"
-        assert exp1["city"]["id"] == "bogota"
+        assert exp1["modality"] == "ONSITE"
+        assert exp1["city"]["id"] == "villavicencio"
         assert exp1["contract_type"] is None  # el fixture no lo trae
-        assert exp1["technical_skills"][:3] == ["Python", "SQL", "Power BI"]
-        assert rich["certifications"][0]["issued_date"] == "2026-07-15"
+        assert exp1["technical_skills"][:3] == [
+            "Manejo integrado de plagas (MIP)", "Fertilidad de suelos",
+            "Nutrición vegetal"]
+        assert rich["certifications"][0]["issued_date"] == "2025-05-15"
         assert rich["certifications"][1]["expiry_date"] is None
-        # El dataset mezcla ingles en perspectivas con base en ambos
-        # idiomas: el validador lo reporta honestamente (sirve para
-        # probar la UI de advertencias).
-        assert any("no esta en skills base" in w for w in rich["_warnings"])
+        # Datos limpios y en catalogo: sin advertencias de validacion.
+        assert rich["_warnings"] == []
     finally:
         db.close()
 

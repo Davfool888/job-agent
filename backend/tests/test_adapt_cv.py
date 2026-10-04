@@ -16,9 +16,18 @@ def _ensure_tables():
 
 @pytest.fixture(autouse=True)
 def _fresh_guest_demo():
-    """Demo de invitado siempre recien sembrada (la BD de desarrollo
-    puede traer semillas viejas de otras versiones del fixture)."""
+    """Demo de invitado con corpus de DATOS para estos tests.
+
+    Los tests de matching/seleccion/HTML evaluan la logica contra
+    ofertas de datos: siembran su propio corpus (tests/_guest_data_corpus)
+    en vez del seed de produccion (que es de agronomia). Asi quedan
+    aislados de cambios en los datos demo del invitado real.
+    """
+    import json
+
+    from app.services import job_service as jobs
     from app.services.search_profiles import GUEST_OWNER
+    from tests._guest_data_corpus import TEST_DATA_FLAT, TEST_DATA_RICH
 
     db = _db()
     try:
@@ -31,6 +40,18 @@ def _fresh_guest_demo():
             UserRichProfile.uid == GUEST_OWNER).delete(
                 synchronize_session=False)
         db.commit()
+        flat_allowed = {
+            key: TEST_DATA_FLAT.get(key, jobs.DEFAULT_PROFILE[key])
+            for key in jobs.DEFAULT_PROFILE}
+        db.add(UserProfile(
+            uid=GUEST_OWNER,
+            data=json.dumps(flat_allowed, ensure_ascii=False)))
+        db.commit()
+        from app.profile import schema as profile_schema
+
+        normalized, _warnings = profile_schema.normalize_rich_profile(
+            dict(TEST_DATA_RICH))
+        jobs._store_user_rich(db, GUEST_OWNER, normalized)
     finally:
         db.close()
 
