@@ -12,10 +12,12 @@ interface SourceSummary {
 
 interface SearchSession {
   query: string;
+  keywords: string;
   source: string;
   pages: number;
   city: string;
   setQuery: (q: string) => void;
+  setKeywords: (k: string) => void;
   setSource: (s: string) => void;
   setPages: (p: number) => void;
   setCity: (c: string) => void;
@@ -32,10 +34,13 @@ interface SearchSession {
 const SearchSessionContext = createContext<SearchSession | null>(null);
 
 export function SearchSessionProvider({ children }: { children: ReactNode }) {
-  const [query, setQuery] = useState("desarrollador python");
+  // Sin nada predefinido: el buscador es general y solo busca lo que
+  // la persona escribe (cargo + palabras clave), en todas las fuentes.
+  const [query, setQuery] = useState("");
+  const [keywords, setKeywords] = useState("");
   const [source, setSource] = useState("all");
   const [pages, setPages] = useState(1);
-  const [city, setCity] = useState("Bogotá");
+  const [city, setCity] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
   const [multi, setMulti] = useState<SourceSummary[] | null>(null);
   const [discovery, setDiscovery] = useState<DiscoverSummary | null>(null);
@@ -43,10 +48,12 @@ export function SearchSessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       query,
+      keywords,
       source,
       pages,
       city,
       setQuery,
+      setKeywords,
       setSource,
       setPages,
       setCity,
@@ -57,7 +64,7 @@ export function SearchSessionProvider({ children }: { children: ReactNode }) {
       discovery,
       setDiscovery,
     }),
-    [query, source, pages, city, result, multi, discovery],
+    [query, keywords, source, pages, city, result, multi, discovery],
   );
 
   return (

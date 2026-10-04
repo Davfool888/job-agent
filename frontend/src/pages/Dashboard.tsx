@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Archive,
@@ -21,6 +21,7 @@ import { discoverJobs } from "../services/jobs";
 import { fetchSchedulerStatus } from "../services/searchProfiles";
 import type { SchedulerStatus } from "../types/searchProfile";
 import { timeAgo } from "../utils/format";
+import { rankJobs, splitKeywords } from "../utils/searchRank";
 import { COLOMBIAN_CITIES } from "../utils/cities";
 import { STATUS_LABELS, sourceLabel } from "../utils/constants";
 import { canonicalLocation } from "../utils/profileOptions";
@@ -50,10 +51,12 @@ export function Dashboard() {
   // no re-ejecuta scraping al volver y no resetea la consulta.
   const {
     query,
+    keywords,
     source,
     pages,
     city,
     setQuery,
+    setKeywords,
     setSource,
     setPages,
     setCity,
@@ -67,6 +70,10 @@ export function Dashboard() {
   const [discovering, setDiscovering] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [sched, setSched] = useState<SchedulerStatus | null>(null);
+  // Generación de búsqueda: si el usuario sigue escribiendo, la
+  // anterior se abandona y solo la última pinta resultados.
+  const runIdRef = useRef(0);
+  const skipAutoRef = useRef(true);
 
   useEffect(() => {
     fetchSchedulerStatus()
@@ -88,6 +95,26 @@ export function Dashboard() {
     [cityValue],
   );
 
+  // Ranking en vivo: el cargo manda, las palabras clave acercan
+  // puestos relacionados. Agrupa en exactas / similares / resto.
+  const ranked = useMemo(
+    () => rankJobs(search.jobs, query, splitKeywords(keywords).join(" ")),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [search.jobs, query, keywords],
+  );
+  const exactHits = useMemo(
+    () => ranked.filter((r) => r.tier === "exact"),
+    [ranked],
+  );
+  const relatedHits = useMemo(
+    () => ranked.filter((r) => r.tier === "related"),
+    [ranked],
+  );
+  const otherHits = useMemo(
+    () => ranked.filter((r) => r.tier === "other"),
+    [ranked],
+  );
+
   // Actividad reciente = solo nuevas: lo visto/decidido vive en sus
   // secciones (Vistas/Postuladas/Descartadas) y no se repite aquí.
   const recentActivity = useMemo(
@@ -95,22 +122,31 @@ export function Dashboard() {
     [all],
   );
 
-  const runSearch = async () => {
-    if (!query.trim() || search.searching) return;
+  const runSearch = async (runId?: number) => {
+    const myRun = runId ?? ++runIdRef.current;
+    if (!query.trim()) return;
+    // Si hay una búsqueda en curso de otra generación, se cancela.
+    search.cancel();
     setMulti(null);
     setDiscovery(null);
     setResult(null);
+    // Si "todas" aún no cargó (clic manual rapidísimo), se usa
+    // computrabajo para no pedirle "all" al backend (400).
+    const effectiveSource =
+      source === "all" && sources.length === 0 ? "computrabajo" : source;
     try {
-      if (source === "all" && sources.length > 0) {
+      if (effectiveSource === "all" && sources.length > 0) {
         // Todas las fuentes, una por una en streaming: las ofertas se
         // acumulan en vivo a medida que cada fuente las entrega.
         const summaries: SourceSummary[] = [];
         let first = true;
         for (const src of sources) {
+          if (runIdRef.current !== myRun) return; // generación vieja
           try {
             const last = await search.run(
               query.trim(), pages, src, city, maxAge, !first,
             );
+            if (runIdRef.current !== myRun) return;
             first = false;
             summaries.push({
               source: src,
@@ -118,6 +154,7 @@ export function Dashboard() {
               saved: last?.saved ?? 0,
             });
           } catch {
+            if (runIdRef.current !== myRun) return;
             first = false;
             summaries.push({
               source: src,
@@ -129,12 +166,15 @@ export function Dashboard() {
         }
         setMulti(summaries);
       } else {
-        const last = await search.run(query.trim(), pages, source, city, maxAge);
+        const last = await search.run(
+          query.trim(), pages, effectiveSource, city, maxAge,
+        );
+        if (runIdRef.current !== myRun) return;
         if (last) {
           setResult({
             query: query.trim(),
             pages,
-            source,
+            source: effectiveSource,
             location: city || null,
             found: last.found,
             saved: last.saved,
@@ -149,21 +189,41 @@ export function Dashboard() {
     }
   };
 
+  // Búsqueda automática: apenas escribe el cargo (con pausa), busca
+  // en todas las centrales sin esperar el botón. Las palabras clave
+  // solo reordenan (no re-escrapean), asi que no disparan búsqueda.
+  // Incluye `sources`: si escribió antes de que cargaran, re-dispara
+  // cuando llegan (evita pedirle "all" al backend). No dispara al montar.
+  useEffect(() => {
+    if (skipAutoRef.current) {
+      skipAutoRef.current = false;
+      return;
+    }
+    if (query.trim().length < 2) return;
+    const timer = window.setTimeout(() => {
+      void runSearch();
+    }, 900);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, source, pages, city, maxAge, sources]);
+
   // Queries del descubrimiento: SIEMPRE parten del cargo escrito en
-  // el input (mas sus palabras significativas), nunca de packs fijos.
+  // el input (mas palabras clave y variantes), nunca de packs fijos.
   // Asi "abogado junior", "ingeniero civil", etc. traen sus vacantes.
-  const buildDiscoveryQueries = (raw: string): string[] => {
-    const base = raw.trim();
-    if (!base) return [];
-    const out = [base];
-    for (const token of base.split(/[\s,;]+/)) {
-      const t = token.trim();
-      if (
-        t.length > 3 &&
-        !out.some((q) => q.toLowerCase() === t.toLowerCase())
-      ) {
+  const buildDiscoveryQueries = (raw: string, kwRaw: string): string[] => {
+    const out: string[] = [];
+    const push = (q: string) => {
+      const t = q.trim();
+      if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) {
         out.push(t);
       }
+    };
+    const base = raw.trim();
+    if (!base) return [];
+    push(base);
+    for (const kw of splitKeywords(kwRaw)) push(kw);
+    for (const token of base.split(/[\s,;]+/)) {
+      if (token.trim().length > 3) push(token);
     }
     return out.slice(0, 4);
   };
@@ -172,7 +232,7 @@ export function Dashboard() {
     if (discovering) return;
     setDiscoveryError(null);
     setDiscovery(null);
-    const queries = buildDiscoveryQueries(query);
+    const queries = buildDiscoveryQueries(query, keywords);
     if (queries.length === 0) {
       setDiscoveryError(
         "Escribe un cargo en el buscador (ej: abogado junior) para descubrir sus vacantes.",
@@ -213,8 +273,17 @@ export function Dashboard() {
               style={{ width: 200 }}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ej: desarrollador python"
-              onKeyDown={(e) => e.key === "Enter" && runSearch()}
+              placeholder="Ej: abogado junior, enfermera, contador…"
+              title="Cargo o puesto a buscar en todas las centrales. Empieza a buscar solo tras una pausa."
+              onKeyDown={(e) => e.key === "Enter" && void runSearch()}
+            />
+            <input
+              className="input"
+              style={{ width: 190 }}
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+              placeholder="Palabras clave: MIP, riego, QGIS…"
+              title="Secundarias: separadas por coma. No re-buscan: acercan puestos relacionados con esas palabras en los resultados."
             />
             <select
               className="select"
@@ -270,7 +339,7 @@ export function Dashboard() {
             <button
               className="btn btn-primary btn-sm"
               disabled={search.searching}
-              onClick={runSearch}
+              onClick={() => void runSearch()}
               title="Llama a GET /jobs/search del backend"
             >
               {search.searching ? (
@@ -354,26 +423,70 @@ export function Dashboard() {
               )}
             </div>
             {search.jobs.length > 0 && (
-              <ul
-                style={{
-                  margin: "8px 0 0",
-                  paddingLeft: 18,
-                  fontSize: 13,
-                  maxHeight: 300,
-                  overflowY: "auto",
-                }}
-              >
-                {search.jobs.map((j) => (
-                  <li key={j.id} style={{ marginBottom: 4 }}>
-                    <Link to={`/jobs/${j.id}`}>{j.title}</Link>{" "}
-                    <span style={{ color: "var(--text-muted)" }}>
-                      · {j.company || "Empresa no indicada"}
-                      {j.location ? ` · ${j.location}` : ""} ·{" "}
-                      {sourceLabel(j.source)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <>
+                {exactHits.length > 0 && (
+                  <>
+                    <p style={{ margin: "8px 0 4px", fontSize: 13 }}>
+                      🎯 <strong>{exactHits.length}</strong> buscan ese rol
+                    </p>
+                    <ul
+                      style={{
+                        margin: "0 0 4px",
+                        paddingLeft: 18,
+                        fontSize: 13,
+                        maxHeight: 220,
+                        overflowY: "auto",
+                      }}
+                    >
+                      {exactHits.map(({ job, hits }) => (
+                        <li key={job.id} style={{ marginBottom: 4 }}>
+                          <Link to={`/jobs/${job.id}`}>{job.title}</Link>{" "}
+                          <span style={{ color: "var(--text-muted)" }}>
+                            · {job.company || "Empresa no indicada"}
+                            {job.location ? ` · ${job.location}` : ""} ·{" "}
+                            {sourceLabel(job.source)}
+                            {hits.length > 0 && ` · ✓ ${hits.join(", ")}`}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {relatedHits.length > 0 && (
+                  <>
+                    <p style={{ margin: "8px 0 4px", fontSize: 13 }}>
+                      🔎 <strong>{relatedHits.length}</strong> roles similares
+                    </p>
+                    <ul
+                      style={{
+                        margin: "0 0 4px",
+                        paddingLeft: 18,
+                        fontSize: 13,
+                        maxHeight: 220,
+                        overflowY: "auto",
+                      }}
+                    >
+                      {relatedHits.map(({ job, hits }) => (
+                        <li key={job.id} style={{ marginBottom: 4 }}>
+                          <Link to={`/jobs/${job.id}`}>{job.title}</Link>{" "}
+                          <span style={{ color: "var(--text-muted)" }}>
+                            · {job.company || "Empresa no indicada"}
+                            {job.location ? ` · ${job.location}` : ""} ·{" "}
+                            {sourceLabel(job.source)}
+                            {hits.length > 0 && ` · ~ ${hits.join(", ")}`}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {otherHits.length > 0 && (
+                  <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
+                    +{otherHits.length} sin coincidencia directa
+                    (afina con palabras clave).
+                  </p>
+                )}
+              </>
             )}
           </div>
         )}
