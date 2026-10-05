@@ -113,3 +113,31 @@ def test_date_format_applies():
     assert "Marzo 2026" in long
     default = html_renderer.render_cv_html(content, None, {})
     assert "Mar 2026" in default
+
+
+def test_css_texto_negro_sin_pintar_fondo():
+    """Regresion: forzar texto negro jamas debe tocar el fondo.
+
+    El regex viejo convertia `background: #fff` en `#000` y el PDF
+    salia un rectangulo negro ilegible.
+    """
+    import re as _re
+
+    from app.adapt import html_renderer
+
+    content = {
+        "full_name": "Prueba Fondo",
+        "summary": "Resumen.",
+        "experiences": [{
+            "title": "Cargo", "company": "Empresa",
+            "start": "Mar 2025", "end": "Dic 2025",
+            "description": "Hizo cosas.",
+        }],
+        "skills": ["Python"],
+    }
+    html = html_renderer.render_cv_html(
+        content, None, {"font_size_pt": 11, "date_format": "MMM YYYY"})
+    css = _re.search(r"<style>(.*?)</style>", html, _re.S).group(1)
+    assert "background: #fff" in css
+    assert "background: #000" not in css
+    assert "#111" not in css  # todo texto fuerza a negro

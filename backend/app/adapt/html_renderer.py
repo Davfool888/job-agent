@@ -565,10 +565,12 @@ def _apply_pdf_config_to_css(css: str, pdf_config: dict) -> str:
         css
     )
     
-    # Color: siempre negro (sin picker en la UI). Se ignora cualquier
-    # valor guardado para garantizar formato uniforme.
-    css = re.sub(r'#[0-9a-fA-F]{6}', '#000000', css)
-    css = re.sub(r'#[0-9a-fA-F]{3}(?![0-9a-fA-F])', '#000', css)
+    # Color de TEXTO siempre negro (sin picker en la UI). Solo
+    # propiedades `color:`: el lookbehind excluye `background-color`
+    # y bordes. Un regex indiscriminado pintaba `background: #fff`
+    # de negro y el PDF salia un rectangulo negro (bug historico).
+    css = re.sub(r'(?<![a-zA-Z-])color:\s*#[0-9a-fA-F]{3,6}',
+                 'color: #000000', css)
     
     # Márgenes
     margin_top = pdf_config.get("margin_top_mm", 18)
