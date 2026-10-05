@@ -72,9 +72,13 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
 
     # Config de PDF del usuario (Fase 2: servicio dual SQLite/Firestore).
     # Sin UID o sin fila -> {} y el renderer usa sus defaults.
+    # Coercion de tipos exactos del renderer (no toca lo guardado).
+    from app.adapt import content as adapt_content
     from app.services.pdf_config import get_pdf_config_for_renderer
 
-    pdf_config = get_pdf_config_for_renderer(db, uid) if uid else {}
+    raw_config = get_pdf_config_for_renderer(db, uid) if uid else {}
+    pdf_config, config_warnings = adapt_content.coerce_pdf_config(
+        raw_config)
 
     try:
         job = get_job_by_id(db=db, job_id=job_id)
@@ -107,6 +111,11 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
             raise AdaptError(
             "PROFILE_NOT_FOUND",
             "Perfil de invitado no disponible.", http=404)
+
+    # Frontera tipada: copias coercionadas para matcher/selector/
+    # renderer. Lo guardado en Perfil no se modifica aqui.
+    profile, profile_warnings = adapt_content.coerce_profile(profile)
+    adapt_warnings = list(config_warnings) + list(profile_warnings)
 
     offer = {
         "title": job.title or "",
@@ -158,7 +167,8 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
                                "missing_skills", "modality_ok",
                                "location_ok", "target_roles_matched",
                                "years_experience")},
-         "content": content},
+         "content": content,
+          "warnings": adapt_warnings},
         ensure_ascii=False, indent=2), encoding="utf-8")
     (directory / "cv.html").write_text(html_text, encoding="utf-8")
     try:
@@ -168,6 +178,7 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
 
     return {
         "success": True,
+        "warnings": adapt_warnings,
         "job": {"id": job.id, "title": job.title or "",
                 "company": job.company or ""},
         "matching": {

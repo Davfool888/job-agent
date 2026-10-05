@@ -58,6 +58,23 @@ def normalize_date(value) -> str | None:
         month = MESES_ES.get(match_es.group(1))
         if month:
             return date(int(match_es.group(2)), month, 1).isoformat()
+    # Lo que produce la capa display y el habla comun: MM/YYYY,
+    # DD/MM/YYYY (tambien con guiones). Round-trip seguro.
+    match_my = re.match(r"^(\d{1,2})[/-](\d{4})$", text)
+    if match_my:
+        month, year = int(match_my.group(1)), int(match_my.group(2))
+        try:
+            return date(year, month, 1).isoformat()
+        except ValueError:
+            return None
+    match_dmy = re.match(
+        r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$", text)
+    if match_dmy:
+        day, month, year = map(int, match_dmy.groups())
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            return None
     return None
 
 
@@ -241,13 +258,69 @@ def normalize_language(raw: dict | None, index: int = 0) -> tuple[dict, list[str
 def _to_years(value) -> float | None:
     if value is None or value == "":
         return None
+    text = str(value).strip().lower().replace(",", ".")
     try:
-        number = float(str(value).replace(",", "."))
+        number = float(text)
     except ValueError:
-        return None
+        number = _words_to_years(text)
+        if number is None:
+            return None
     if number < 0 or number > 60:
         return None
     return number
+
+
+_NUMBER_WORDS: dict[str, float] = {
+    "cero": 0, "uno": 1, "una": 1, "un": 1, "dos": 2,
+    "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7,
+    "ocho": 8, "nueve": 9, "diez": 10, "once": 11, "doce": 12,
+    "trece": 13, "catorce": 14, "quince": 15, "dieciseis": 16,
+    "diecisiete": 17, "dieciocho": 18, "diecinueve": 19, "veinte": 20,
+    "treinta": 30, "cuarenta": 40, "cincuenta": 50,
+    "medio": 0.5, "media": 0.5, "mitad": 0.5,
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "half": 0.5,
+}
+
+
+def _words_to_years(text: str) -> float | None:
+    """'diez' -> 10, 'dos anos y medio' -> 2.5, '3 anos' -> 3.
+
+    Solo palabras numericas sueltas (con 'ano(s)/year(s)/y medio'
+    opcionales). Cualquier otra prosa -> None (no se adivina).
+    """
+    import re as _re
+    import unicodedata as _ud
+
+    plain = "".join(
+        c for c in _ud.normalize("NFKD", text) if not _ud.combining(c))
+    tokens = _re.findall(r"[a-z0-9.]+", plain)
+    if not tokens:
+        return None
+    total: float = 0.0
+    seen_number = False
+    seen_filler = False
+    for token in tokens:
+        if token in _NUMBER_WORDS:
+            total += _NUMBER_WORDS[token]
+            seen_number = True
+            continue
+        try:
+            total += float(token)
+            seen_number = True
+            continue
+        except ValueError:
+            pass
+        if token in ("anos", "ano", "years", "year", "y", "and", "de"):
+            seen_filler = True
+            continue
+        return None
+    if not seen_number:
+        return None
+    if not seen_filler and len(tokens) > 3:
+        return None
+    return round(total, 2) if seen_number else None
 
 
 def parse_salary(value) -> dict:

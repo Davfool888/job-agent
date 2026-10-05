@@ -78,6 +78,13 @@ def test_years_experience_numeric():
     assert profile["years_experience"] == 2.5
     profile, warnings = profile_schema.normalize_rich_profile(
         {"years_experience": "2 años"})
+    assert profile["years_experience"] == 2.0
+    assert warnings == []
+    profile, warnings = profile_schema.normalize_rich_profile(
+        {"years_experience": "diez"})
+    assert profile["years_experience"] == 10
+    profile, warnings = profile_schema.normalize_rich_profile(
+        {"years_experience": "mucho tiempo"})
     assert profile["years_experience"] is None
     assert any("years_experience" in w for w in warnings)
 
