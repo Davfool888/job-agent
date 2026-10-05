@@ -172,7 +172,9 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
         ensure_ascii=False, indent=2), encoding="utf-8")
     (directory / "cv.html").write_text(html_text, encoding="utf-8")
     try:
-        pdf.html_to_pdf(html_text, directory / "cv.pdf", pdf_config)
+        # timeout_ms es milisegundos (int); pdf_config NO va aqui
+        # (bug historico: pasarlo como 3er arg rompia con int(dict)).
+        pdf.html_to_pdf(html_text, directory / "cv.pdf")
     except pdf.PdfError as error:
         raise AdaptError(error.code, str(error), http=502) from error
 

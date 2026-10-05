@@ -102,7 +102,13 @@ def html_to_pdf(
     out = Path(out_path)
     if not str(html_text or "").strip():
         raise PdfError("PDF_EMPTY_HTML", "HTML vacio, nada que convertir.")
-    timeout = int(timeout_ms or ADAPT_PDF_TIMEOUT_MS)
+    try:
+        timeout = int(
+            timeout_ms if timeout_ms is not None else ADAPT_PDF_TIMEOUT_MS)
+    except (TypeError, ValueError):
+        # Frontera defensiva: un tipo inesperado jamas debe tumbar
+        # la generacion con TypeError crudo (bug int(dict) historico).
+        timeout = ADAPT_PDF_TIMEOUT_MS
     if not _pdf_lock.acquire(timeout=PDF_LOCK_TIMEOUT):
         raise PdfError(
             "PDF_BUSY",

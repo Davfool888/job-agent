@@ -118,6 +118,25 @@ def test_coerce_pdf_config_tipos():
     assert cfg2["section_order"] == ["skills", "experience"]
 
 
+def test_html_to_pdf_tolera_timeout_invalido(tmp_path, monkeypatch):
+    """Regresion del bug int(dict): un timeout con tipo inesperado usa
+    el defecto en vez de reventar con TypeError crudo."""
+    from app.adapt import pdf as pdf_module
+
+    def _fake_render(html_text, out, timeout):
+        assert isinstance(timeout, int)
+        __import__("pathlib").Path(out).write_bytes(b"%PDF-1.4 fake")
+        return out
+
+    monkeypatch.setattr(pdf_module, "_render_locked", _fake_render)
+    out = tmp_path / "cv.pdf"
+    pdf_module.html_to_pdf("<html></html>", out, {"font_size_pt": 11})
+    assert out.exists()
+    pdf_module.html_to_pdf("<html></html>", tmp_path / "b.pdf", None)
+    with __import__("pytest").raises(pdf_module.PdfError):
+        pdf_module.html_to_pdf("   ", tmp_path / "c.pdf")
+
+
 def test_adapt_cableado_coercion_sin_chromium(tmp_path, monkeypatch):
     """Perfil display sucio -> adapt_profile_for_job coerciona, renderiza
     HTML y reporta warnings, sin tocar lo guardado (PDF simulado)."""
@@ -157,10 +176,16 @@ def test_adapt_cableado_coercion_sin_chromium(tmp_path, monkeypatch):
     # (lo que se prueba aqui es la coercion, no el gate).
     monkeypatch.setattr(
         "app.adapt.service._is_profile_complete", lambda raw: True)
+    # Se simula SOLO el render Chromium (_render_locked): el resto
+    # (incluido html_to_pdf con su parseo de timeout) corre de verdad,
+    # asi una regresion tipo int(dict) revienta aqui y no en prod.
+    def _fake_render(html_text, out, timeout):
+        assert isinstance(timeout, int)
+        __import__("pathlib").Path(out).write_bytes(b"%PDF-1.4 fake")
+        return out
+
     monkeypatch.setattr(
-        "app.adapt.pdf.html_to_pdf",
-        lambda html, out, *a, **k: __import__("pathlib").Path(out).write_bytes(
-            b"%PDF-1.4 fake"))
+        "app.adapt.pdf._render_locked", _fake_render)
 
     out = None
     from app.database.connection import SessionLocal

@@ -183,6 +183,12 @@ def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db)):
     except AdaptError as error:
         return JSONResponse(
             status_code=error.http, content=error_body(error))
+    except Exception as error:  # noqa: BLE001
+        # Nunca 500 crudo: el frontend espera {success, error}.
+        return JSONResponse(status_code=502, content={
+            "success": False, "error": {
+                "code": "UNKNOWN_ERROR",
+                "message": f"Fallo inesperado: {error}"[:300]}})
 
 
 @router.post("/jobs/{job_id}/adapt-cv/start", status_code=202)
