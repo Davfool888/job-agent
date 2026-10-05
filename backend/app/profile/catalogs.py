@@ -18,6 +18,20 @@ def norm_text(value: str | None) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def split_spanish_name(full: str | None) -> tuple[str, str]:
+    """Nombre completo -> (nombres, apellidos), convencion hispana.
+
+    Los dos primeros tokens son nombres ('David Santiago'); el resto
+    apellidos ('Herrera Reales'). Con 3 tokens, los dos primeros son
+    nombres y el ultimo apellido. Regla unica y predecible: el usuario
+    la corrige en el formulario si su caso es distinto.
+    """
+    parts = str(full or "").split()
+    if len(parts) <= 2:
+        return (parts[0] if parts else "", " ".join(parts[1:]))
+    return " ".join(parts[:2]), " ".join(parts[2:])
+
+
 def _by_norm(items: list[dict]) -> dict[str, dict]:
     return {norm_text(item["label"]): item for item in items}
 

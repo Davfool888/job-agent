@@ -64,15 +64,23 @@ export const ENTRY_STATUS_FALLBACK: CatalogItem[] = [
 
 export const SOFT_SKILLS_FALLBACK: string[] = [
   "Comunicación",
+  "Comunicación asertiva",
   "Trabajo en equipo",
   "Liderazgo",
   "Pensamiento analítico",
+  "Pensamiento crítico",
   "Resolución de problemas",
+  "Toma de decisiones",
   "Adaptabilidad",
   "Gestión del tiempo",
   "Atención al detalle",
+  "Orientación a resultados",
   "Proactividad",
-  "Comunicación asertiva",
+  "Creatividad",
+  "Negociación",
+  "Inteligencia emocional",
+  "Empatía",
+  "Ética profesional",
 ];
 
 // Categorias de rol que el motor de matching ya detecta
@@ -122,6 +130,18 @@ export function normText(value: string | null | undefined): string {
     .toLowerCase()
     .trim()
     .replace(/\s+/g, " ");
+}
+
+/**
+ * Nombre completo -> [nombres, apellidos], convencion hispana.
+ * Los dos primeros tokens son nombres ("David Santiago Herrera
+ * Reales" -> ["David Santiago", "Herrera Reales"]). Misma regla que
+ * el backend (catalogs.split_spanish_name).
+ */
+export function splitSpanishName(full: string | null | undefined): [string, string] {
+  const parts = (full ?? "").split(/\s+/).filter(Boolean);
+  if (parts.length <= 2) return [parts[0] ?? "", parts.slice(1).join(" ")];
+  return [parts.slice(0, 2).join(" "), parts.slice(2).join(" ")];
 }
 
 /**

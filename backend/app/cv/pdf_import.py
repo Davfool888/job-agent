@@ -358,12 +358,14 @@ def _parse_certifications(raw_lines: list[str],
         lang = _catalogs.norm_language(line.split("–")[0].split("-")[0])
         level_match = _LEVEL_TOKEN.search(line)
         if lang and level_match and len(line) <= 120:
+            # Sin desglose por habilidad: el nivel general aplica a
+            # todas (listening/reading/writing/speaking).
             level = _catalogs.norm_language_level(level_match.group(1))
             langs.append({
                 "id": lang["id"], "language": lang["id"],
                 "language_label": lang["label"], "academy": institution,
-                "level": level, "listening": None, "reading": None,
-                "writing": None, "speaking": level,
+                "level": level, "listening": level, "reading": level,
+                "writing": level, "speaking": level,
             })
             group_desc_pending = False
             continue
@@ -417,8 +419,8 @@ def _parse_languages_block(raw_lines: list[str]) -> list[dict]:
         langs.append({
             "id": lang["id"], "language": lang["id"],
             "language_label": lang["label"], "academy": "",
-            "level": level, "listening": None, "reading": None,
-            "writing": None, "speaking": level,
+            "level": level, "listening": level, "reading": level,
+            "writing": level, "speaking": level,
         })
     return langs
 
@@ -523,6 +525,45 @@ _SKILL_GROUPS = (
             "dashboard", "kpi", "reporte")),
     ("databases", ("base", "database", "sql", "mongo")),
 )
+
+# Blanda canonica -> raices que la evidencian en una descripcion.
+# Raices cortas (<6) exigen palabra completa (+plural); largas van
+# por subcadena. Todo sale del texto, nada se inventa.
+_SOFT_TRIGGERS: list[tuple[str, tuple[str, ...]]] = [
+    ("Trabajo en equipo", ("equipo", "colabor", "trabajo en equipo")),
+    ("Comunicación", ("comunic",)),
+    ("Liderazgo", ("lider", "dirigir", "supervis", "a cargo")),
+    ("Orientación a resultados", ("objetivo", "resultado", "meta",
+                                  "indicador", "cumplimiento")),
+    ("Atención al detalle", ("detalle", "validar", "revisar",
+                             "calidad", "verificar")),
+    ("Pensamiento analítico", ("análisis", "analizar", "interpretar")),
+    ("Resolución de problemas", ("problema", "solución", "resolver")),
+    ("Adaptabilidad", ("adapt",)),
+    ("Gestión del tiempo", ("plazo", "cronograma", "priorizar",
+                            "seguimiento")),
+]
+
+
+def _extract_soft_skills(text: str, limit: int = 6) -> list[str]:
+    lowered = _norm(f" {text} ")
+    found: list[str] = []
+    for label, stems in _SOFT_TRIGGERS:
+        for stem in stems:
+            stem = _norm(stem)
+            if len(stem) < 6:
+                hit = re.search(
+                    rf"(?<![a-záéíóúñ]){re.escape(stem)}(s|es)?"
+                    r"(?![a-záéíóúñ])", lowered)
+            else:
+                hit = stem in lowered
+            if hit:
+                if label not in found:
+                    found.append(label)
+                break
+        if len(found) >= limit:
+            break
+    return found
 
 
 def _parse_skills_block(raw_lines: list[str]) -> dict[str, list[str]]:
@@ -654,6 +695,8 @@ def parse_pdf_profile(text: str) -> dict:
             profile["languages"].extend(_parse_languages_block(body))
         elif kind == "experience":
             for entry in _split_dated_entries(body):
+                tech = _extract_technologies(
+                    f"{entry['title']} {entry['description']}")[:20]
                 profile["experience"].append({
                     "title": entry["title"],
                     "company": entry["company"],
@@ -663,6 +706,9 @@ def parse_pdf_profile(text: str) -> dict:
                     "is_current": entry["is_current"],
                     "modality": None,
                     "description": entry["description"],
+                    "technical_skills": tech,
+                    "soft_skills": _extract_soft_skills(
+                        entry["description"]),
                     "contract_type": ("Prácticas" if re.search(
                         r"practic", entry["title"], re.IGNORECASE)
                         else None),

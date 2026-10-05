@@ -133,8 +133,9 @@ def test_personal_split_and_title():
         "title": "data analyst",
         "email": "a@b.co",
     })
-    assert personal["first_name"] == "Ana"
-    assert personal["last_name"] == "María Torres"
+    # Convencion hispana: los dos primeros son nombres.
+    assert personal["first_name"] == "Ana María"
+    assert personal["last_name"] == "Torres"
     assert personal["full_name"] == "Ana María Torres"
     assert personal["title_id"] == "data_analyst"
     assert personal["title"] == "Analista de Datos"

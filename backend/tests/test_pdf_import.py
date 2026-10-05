@@ -18,7 +18,8 @@ def _parsed():
 def test_personal_completo():
     personal = _parsed()["profile"]["personal"]
     assert personal["full_name"] == "David Santiago Herrera Reales"
-    assert personal["first_name"] == "David"
+    assert personal["first_name"] == "David Santiago"
+    assert personal["last_name"] == "Herrera Reales"
     assert personal["email"] == \
         "davidsantiagoherrerareales@gmail.com"
     assert personal["phone"] == "+57 319 565 2138"
@@ -96,6 +97,9 @@ def test_cursos_a_certificaciones_idioma_a_idiomas():
     assert ingles, "Ingles B1 debe extraerse de Otros Estudios"
     assert ingles[0]["level"] == "B1"
     assert ingles[0]["academy"] == "Smart Language Academy"
+    # Sin desglose: el nivel general aplica a todas las habilidades.
+    for key in ("listening", "reading", "writing", "speaking"):
+        assert ingles[0][key] == "B1", key
 
 
 def test_proyectos_tres_con_tecnologias():
@@ -176,6 +180,51 @@ English – C1
     assert profile["certifications"][0]["institution"] == "Coursera"
     assert profile["languages"][0]["language"] == "en"
     assert profile["languages"][0]["level"] == "C1"
+
+
+def test_nombres_compuestos():
+    from app.profile import catalogs as _catalogs
+
+    assert _catalogs.split_spanish_name(
+        "David Santiago Herrera Reales") == (
+        "David Santiago", "Herrera Reales")
+    assert _catalogs.split_spanish_name("Ana Torres") == (
+        "Ana", "Torres")
+    assert _catalogs.split_spanish_name("Luis Herrera Reales") == (
+        "Luis Herrera", "Reales")
+    assert _catalogs.split_spanish_name("Pedro") == ("Pedro", "")
+
+
+def test_experiencia_con_skills_tecnicas_y_blandas():
+    exp = _parsed()["profile"]["experience"]
+    primero = exp[0]
+    assert "Python" in primero["technical_skills"]
+    assert "Excel" in primero["technical_skills"] or \
+        "Excel avanzado" in primero["technical_skills"]
+    assert len(primero["technical_skills"]) <= 20
+    assert len(primero["soft_skills"]) >= 2
+    # Solo lo que la descripcion evidencia ('análisis' -> analitico,
+    # 'indicadores' -> resultados). Sin mencion no hay skill.
+    assert "Pensamiento analítico" in primero["soft_skills"]
+    assert "Trabajo en equipo" not in primero["soft_skills"]
+    # Toda skill de la entrada esta evidenciada en su descripcion o
+    # titulo (etiqueta canonica o una de sus variantes de signals).
+    import re as _re
+
+    from app.analysis import signals as _signals
+    from app.profile import catalogs as _catalogs
+
+    variants: dict[str, list[str]] = {}
+    for label, aliases, _ in _signals.SKILLS:
+        variants.setdefault(label, []).extend([label, *aliases])
+    for entry in exp:
+        blob = _catalogs.norm_text(
+            _re.sub(r"\s+",
+                    " ", f"{entry['title']} {entry['description']}"))
+        for skill in entry["technical_skills"]:
+            options = variants.get(skill, [skill])
+            assert any(_catalogs.norm_text(o) in blob for o in options), \
+                f"invento en entrada: {skill}"
 
 
 def _make_pdf_bytes(lines: list[str]) -> bytes:

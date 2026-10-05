@@ -15,6 +15,7 @@ import {
   SOFT_SKILLS_FALLBACK,
   TITLE_CATEGORY_SUGGESTIONS,
   resolveOptionId,
+  splitSpanishName,
 } from "../../utils/profileOptions";
 import type {
   CatalogItem,
@@ -111,11 +112,9 @@ export function StructuredProfileManager({
           pp[k] = pick(pp[k], flat[k]);
         }
         if (!String(pp.first_name ?? "").trim() && !String(pp.last_name ?? "").trim()) {
-          const parts = String(pp.full_name ?? "").trim().split(/\s+/).filter(Boolean);
-          if (parts.length > 0) {
-            pp.first_name = parts[0];
-            pp.last_name = parts.slice(1).join(" ");
-          }
+          const [first, last] = splitSpanishName(String(pp.full_name ?? ""));
+          pp.first_name = first;
+          pp.last_name = last;
         }
         mergedData.personal = pp as typeof mergedData.personal;
       } catch {
@@ -124,17 +123,21 @@ export function StructuredProfileManager({
 
       if (simpleExperiences.length > 0) {
         const richExperiences = mergedData.experience || [];
+        // Lo guardado aqui gana (no vacio); el simple solo rellena
+        // huecos. Asi lo editado en este tab sobrevive recargas.
+        const nonEmpty = (v: unknown) =>
+          v !== undefined && v !== null && String(v).trim() !== "";
         const mergedExperiences = simpleExperiences.map((simpleExp: any, idx: number) => {
           const richExp = richExperiences[idx];
           if (richExp) {
             return {
               ...richExp,
-              company: simpleExp.company || richExp.company,
-              title: simpleExp.title || richExp.title,
-              start_date: simpleExp.start_date || richExp.start_date,
-              end_date: simpleExp.end_date || richExp.end_date,
-              is_current: simpleExp.is_current ?? richExp.is_current,
-              description: simpleExp.description || richExp.description,
+              company: nonEmpty(richExp.company) ? richExp.company : simpleExp.company,
+              title: nonEmpty(richExp.title) ? richExp.title : simpleExp.title,
+              start_date: richExp.start_date || simpleExp.start_date,
+              end_date: richExp.end_date || simpleExp.end_date,
+              is_current: richExp.is_current ?? simpleExp.is_current,
+              description: nonEmpty(richExp.description) ? richExp.description : simpleExp.description,
             };
           }
           return {
@@ -142,21 +145,27 @@ export function StructuredProfileManager({
             perspectives: [],
           };
         });
+        // Conserva las agregadas aqui (mas alla del largo del simple).
+        for (let k = simpleExperiences.length; k < richExperiences.length; k++) {
+          mergedExperiences.push(richExperiences[k]);
+        }
         mergedData.experience = mergedExperiences;
       }
 
       if (simpleEducation.length > 0) {
         const richEducation = mergedData.education || [];
+        const nonEmpty = (v: unknown) =>
+          v !== undefined && v !== null && String(v).trim() !== "";
         const mergedEducation = simpleEducation.map((simpleEdu: any, idx: number) => {
           const richEdu = richEducation[idx];
           if (richEdu) {
             return {
               ...richEdu,
-              institution: simpleEdu.institution || richEdu.institution,
-              degree: simpleEdu.degree || richEdu.degree,
-              start_date: simpleEdu.start_date || richEdu.start_date,
-              end_date: simpleEdu.end_date || richEdu.end_date,
-              description: simpleEdu.description || richEdu.description,
+              institution: nonEmpty(richEdu.institution) ? richEdu.institution : simpleEdu.institution,
+              degree: nonEmpty(richEdu.degree) ? richEdu.degree : simpleEdu.degree,
+              start_date: richEdu.start_date || simpleEdu.start_date,
+              end_date: richEdu.end_date || simpleEdu.end_date,
+              description: nonEmpty(richEdu.description) ? richEdu.description : simpleEdu.description,
             };
           }
           return {
@@ -164,6 +173,9 @@ export function StructuredProfileManager({
             perspectives: [],
           };
         });
+        for (let k = simpleEducation.length; k < richEducation.length; k++) {
+          mergedEducation.push(richEducation[k]);
+        }
         mergedData.education = mergedEducation;
       }
 
@@ -440,10 +452,9 @@ export function StructuredProfileManager({
 
           <h4 style={{ margin: "12px 0 8px" }}>Experiencia, educación, proyectos y certificaciones</h4>
           <p className="card-sub" style={{ marginBottom: 12 }}>
-            <strong>Experiencia y Educación:</strong> La información base (empresa/institución, cargo/título, fechas, descripción general)
-            proviene del <strong>Perfil Simple</strong>. Aquí solo añades <strong>perspectivas</strong> con tareas específicas,
-            skills y herramientas por óptica profesional. Los botones "Agregar entrada" crean entradas vacías solo para
-            proyectos/certificaciones; para experiencia/educación usa el Perfil Simple.
+            Todo se puede <strong>editar, agregar y quitar aquí</strong> y se guarda con
+            “Guardar perfil estructurado”. Las perspectivas añaden ópticas por vacante
+            sin duplicar la información base.
           </p>
           <div className="toolbar-row" style={{ marginBottom: 12 }}>
             {SECTIONS.map((s) => (
@@ -464,14 +475,18 @@ export function StructuredProfileManager({
             catalogs={catalogs}
             onPatch={patchEntry}
             onAdd={() => {
-              if (section === "projects") {
-                setEntries([...entries, { name: "", perspectives: [] } as ProfileEntry]);
-              } else if (section === "certifications") {
-                setEntries([...entries, { name: "", perspectives: [] } as ProfileEntry]);
+              const base = { perspectives: [] } as ProfileEntry;
+              if (section === "experience") {
+                setEntries([...entries, { ...base, title: "", company: "" }]);
+              } else if (section === "education") {
+                setEntries([...entries, { ...base, degree: "", institution: "" }]);
+              } else if (section === "projects") {
+                setEntries([...entries, { ...base, name: "" }]);
+              } else {
+                setEntries([...entries, { ...base, name: "" }]);
               }
             }}
             onRemove={(i) => setEntries(entries.filter((_, j) => j !== i))}
-            isExperienceOrEducation={section === "experience" || section === "education"}
           />
 
           <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
@@ -1267,7 +1282,6 @@ function EntrySection({
   onPatch,
   onAdd,
   onRemove,
-  isExperienceOrEducation = false,
 }: {
   entries: ProfileEntry[];
   section: "experience" | "education" | "projects" | "certifications";
@@ -1275,16 +1289,13 @@ function EntrySection({
   onPatch: (i: number, patch: Partial<ProfileEntry>) => void;
   onAdd: () => void;
   onRemove: (i: number) => void;
-  isExperienceOrEducation?: boolean;
 }) {
   const [open, setOpen] = useState<number | null>(null);
   return (
     <div>
       {entries.length === 0 && (
         <p className="card-sub">
-          {isExperienceOrEducation
-            ? "Agrega experiencias/educación en el <strong>Perfil Simple</strong> para verlas aquí y añadir perspectivas."
-            : "Sin entradas en esta sección."}
+          Sin entradas en esta sección.
         </p>
       )}
       {entries.map((entry, i) => {
@@ -1300,7 +1311,7 @@ function EntrySection({
             title={title}
             subtitle={[org, dates || entry.period || ""].filter(Boolean).join(" · ")}
             badge={`${(entry.perspectives ?? []).length} perspectiva(s)`}
-            onRemove={isExperienceOrEducation ? undefined : () => onRemove(i)}
+            onRemove={() => onRemove(i)}
             defaultOpen={open === i}
           >
             <div onClick={() => setOpen(i)}>
@@ -1309,7 +1320,6 @@ function EntrySection({
                   entry={entry}
                   catalogs={catalogs}
                   onPatch={(p) => onPatch(i, p)}
-                  readOnly={isExperienceOrEducation}
                 />
               )}
               {section === "education" && (
@@ -1317,7 +1327,6 @@ function EntrySection({
                   entry={entry}
                   catalogs={catalogs}
                   onPatch={(p) => onPatch(i, p)}
-                  readOnly={isExperienceOrEducation}
                 />
               )}
               {section === "projects" && (
@@ -1341,11 +1350,9 @@ function EntrySection({
           </EntryCard>
         );
       })}
-      {!isExperienceOrEducation && (
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onAdd}>
-          + Agregar entrada
-        </button>
-      )}
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onAdd}>
+        + Agregar entrada
+      </button>
     </div>
   );
 }

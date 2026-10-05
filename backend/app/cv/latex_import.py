@@ -374,8 +374,12 @@ def parse_latex_profile(tex_text: str) -> dict:
             name = line.split("\n")[0][:120]
             break
     name_parts = name.split()
-    first_name = name_parts[0] if name_parts else ""
-    last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+    if name_parts:
+        from app.profile import catalogs as _catalogs
+
+        first_name, last_name = _catalogs.split_spanish_name(name)
+    else:
+        first_name, last_name = "", ""
 
     profile: dict = {
         "personal": {
@@ -445,6 +449,7 @@ def parse_latex_profile(tex_text: str) -> dict:
                 )
                 if match:
                     lang = _catalogs.norm_language(match.group(1))
+                    level = _catalogs.norm_language_level(match.group(2))
                     profile["languages"].append({
                         "id": (lang["id"] if lang else
                                _catalogs.norm_text(match.group(1))[:30]),
@@ -452,13 +457,11 @@ def parse_latex_profile(tex_text: str) -> dict:
                         "language_label": (lang["label"] if lang
                                            else match.group(1).strip()),
                         "academy": "",
-                        "level": None,
-                        "listening": None,
-                        "reading": None,
-                        "writing": None,
-                        "speaking": (
-                            _catalogs.norm_language_level(match.group(2))
-                        ),
+                        "level": level,
+                        "listening": level,
+                        "reading": level,
+                        "writing": level,
+                        "speaking": level,
                     })
                 else:
                     lang = _catalogs.norm_language(item)

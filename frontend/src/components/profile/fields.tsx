@@ -181,6 +181,10 @@ export function TagInput({
       .replace(/[̀-ͯ]/g, "")
       .toLowerCase()
       .trim();
+  const trimmedText = text.trim();
+  const exactMatch =
+    trimmedText !== "" &&
+    [...value, ...suggestions].some((s) => norm(s) === norm(trimmedText));
   const filtered = useMemo(() => {
     const seen = new Set(value);
     const uniq = [...new Set(suggestions.map((s) => s.trim()).filter(Boolean))].filter(
@@ -197,7 +201,7 @@ export function TagInput({
     }
     return [...starts, ...contains].slice(0, 8);
   }, [suggestions, text, value]);
-  const showList = open && filtered.length > 0;
+  const showList = open && (filtered.length > 0 || (allowCustom && trimmedText !== ""));
   return (
     <div>
       <div className="skill-chips" style={{ marginBottom: 6 }}>
@@ -283,6 +287,24 @@ export function TagInput({
                 {s}
               </button>
             ))}
+            {allowCustom && trimmedText !== "" && !exactMatch && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  border: "none",
+                  borderRadius: 0,
+                  fontStyle: "italic",
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => add()}
+              >
+                ➕ Agregar “{trimmedText}”
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -88,9 +88,7 @@ def normalize_personal(raw: dict | None) -> tuple[dict, list[str]]:
     last = _clean_str(raw.get("last_name"), 100)
     full = _clean_str(raw.get("full_name"), 200)
     if not first and not last and full:
-        parts = full.split()
-        first = parts[0]
-        last = " ".join(parts[1:])
+        first, last = catalogs.split_spanish_name(full)
     personal = {
         "first_name": first,
         "last_name": last,
