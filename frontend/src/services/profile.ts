@@ -33,6 +33,35 @@ export async function tailorJob(jobId: number | string): Promise<TailorResult> {
   return data;
 }
 
+export interface PdfImportResult {
+  filename: string;
+  profile: RichProfile;
+  warnings: string[];
+  applied: boolean;
+}
+
+export async function importPdfPreview(file: File): Promise<PdfImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<PdfImportResult>(
+    "/profile/import-pdf",
+    form,
+    { headers: { "Content-Type": "multipart/form-data" }, timeout: 120000 },
+  );
+  return data;
+}
+
+export async function importPdfApply(file: File): Promise<PdfImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<PdfImportResult>(
+    "/profile/import-pdf?apply=true",
+    form,
+    { headers: { "Content-Type": "multipart/form-data" }, timeout: 120000 },
+  );
+  return data;
+}
+
 let _catalogsCache: Catalogs | null = null;
 
 export async function fetchCatalogs(): Promise<Catalogs> {

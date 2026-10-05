@@ -1,0 +1,98 @@
+David Santiago Herrera Reales
+Analista de Datos | Business Intelligence | Ingeniero de Software
+Bogotá, Colombia | +57 319 565 2138 | davidsantiagoherrerareales@gmail.com
+linkedin.com/in/david-herrera-reales | github.com/Davfool888 | davidherrera-dev.vercel.app
+Perfil Profesional
+Ingeniero de Software con experiencia en análisis y gestión de información en el sector financiero, orientado a Data
+Analytics y Business Intelligence. Experiencia consolidando y analizando bases de datos de más de 10.000 registros,
+utilizando Python, SQL, Power BI y Excel Avanzado para limpieza, transformación, segmentación, cruce y
+análisis de información proveniente de múltiples fuentes. He trabajado en la construcción de indicadores y reportes que
+apoyan la toma de decisiones, combinando capacidad técnica de programación con comprensión de negocio financiero
+y comercial.
+Conocimientos en Python, Pandas, NumPy, SQL, Power BI, Power Query, DAX, bases de datos relacionales y APIs REST, con experiencia desarrollando soluciones de automatización para reducir tareas manuales y
+mejorar procesos de análisis de información. Inglés B1 en formación.
+Competencias Técnicas
+Análisis de Datos: EDA (análisis exploratorio de datos), limpieza, transformación, segmentación, filtrado, consolidación, cruces de información, KPIs, indicadores, reportes y análisis comercial.
+Lenguajes y Análisis: Python, SQL, JavaScript, Pandas, NumPy.
+BI y Visualización: Power BI, Power Query, DAX, Excel avanzado, tablas dinámicas, dashboards, KPIs, indicadores,
+reportes y visualización de datos.
+Bases de Datos: SQL, MySQL, MariaDB, PostgreSQL, SQLite, MongoDB.
+Automatización y APIs: Python, Google Apps Script, APIs REST, consumo de APIs, automatización de procesos
+y procesamiento de información.
+Desarrollo Backend (proyectos personales): FastAPI, Flask
+Herramientas: Git, GitHub, Docker, Linux, WSL, Google Colab, Visual Studio Code.
+Machine Learning / Computer Vision (proyectos personales): Scikit-learn, YOLOv8, OpenCV, Roboflow,
+procesamiento de imágenes.
+Habilidades Blandas
+Pensamiento analítico: análisis e interpretación de información para apoyar la toma de decisiones.
+Comunicación y trabajo en equipo: capacidad para comunicar información y colaborar con diferentes áreas y
+equipos.
+Orientación a resultados: enfoque en el cumplimiento de objetivos e indicadores.
+Atención al detalle: validación, revisión y organización de información para mantener la calidad de los datos.
+Experiencia Profesional / Professional Experience
+Ejecutivo de Nómina para Empresas Cooperativas – Análisis de Información Empresarial y Comercial
+Mar 2025 – Dic 2025
+Banco de Bogotá – Bogotá, Colombia
+Responsabilidad General: Analizar información empresarial y financiera de más de 10.000 registros para apoyar la
+toma de decisiones comerciales, utilizando herramientas de análisis de datos y automatización.
+Analicé y consolidé bases de datos con más de 10.000 registros utilizando Excel avanzado y Python para
+limpieza, validación, eliminación de duplicados, filtrado y segmentación de información.
+Realicé cruces de información entre fuentes internas y externas (incluyendo fuentes institucionales) para analizar
+variables empresariales como tamaño de empresa, número de empleados, presupuesto y nivel de endeudamiento,
+generando indicadores para apoyar decisiones comerciales.
+Desarrollé soluciones de automatización con Python y Google Apps Script para agilizar tareas de procesamiento, organización y consolidación de información,
+Consulté y realicé seguimiento a un volumen diario de empresas (más de 100 consultadas, cerca de 30 contactadas
+y entre 30-40 en seguimiento activo), aplicando criterios de análisis de datos para priorizar oportunidades.
+Gestioné información relacionada con productos financieros (créditos, CDT, tarjetas de crédito, depósitos y fiducias)
+de acuerdo con el perfil de cada empresa/cliente, identificado mediante análisis de datos.
+Asesor Comercial (Prácticas)
+Oct 2023 – Oct 2024
+Banco de Bogotá – Bogotá, Colombia
+Responsabilidad General: Apoyar procesos comerciales y operativos relacionados con clientes, productos financieros
+y gestión de información.
+Gestioné y validé información de clientes y productos financieros mediante Excel y plataformas internas,
+realizando consulta y seguimiento de datos.
+Atendí y gestioné clientes, adquiriendo experiencia en productos financieros, operaciones bancarias y procesos
+comerciales.
+Verifiqué información y documentación de clientes, garantizando el cumplimiento de los procedimientos establecidos
+por la entidad.
+Proyectos Destacados
+Sistema de Análisis de Fluctuaciones USD/COP
+Desarrollé una aplicación en Python para consultar datos de la tasa de cambio USD/COP mediante APIs, procesar
+información financiera y analizar fluctuaciones, tendencias y escenarios de inversión. Implementé automatización de
+consultas, cálculos financieros, análisis estadístico y una interfaz de línea de comandos (CLI).
+Retail Intelligence – Análisis de Inventario y Demanda (en desarrollo)
+Proyecto de análisis de datos orientado al sector retail, utilizando Python, Pandas y NumPy para limpieza, transformación, análisis exploratorio y generación de métricas sobre inventario, ventas, demanda, precios y promociones.
+Sistema de Detección de Estructuras con Inteligencia Artificial
+Desarrollé una solución de detección de objetos utilizando Python, FastAPI, YOLOv8, OpenCV y REST APIs.
+Entrené modelos de visión por computador con un conjunto de datos superior a 500 imágenes, utilizando Google
+Colab y Roboflow, y desarrollé un backend para procesar imágenes y retornar resultados de detección.
+Educación / Education
+Ingeniería de Software
+Abr 2022 – Sep 2026
+Politécnico Grancolombiano – Bogotá, Colombia
+Formación en desarrollo de software, bases de datos, programación y análisis de información. Participación en proyectos
+académicos orientados al procesamiento de datos, desarrollo de soluciones tecnológicas y automatización de procesos.
+Técnico en Servicios Comerciales y Financieros
+Oct 2023 – Oct 2024
+Servicio Nacional de Aprendizaje (SENA) – Bogotá, Colombia
+Formación enfocada en procesos comerciales y financieros, con manejo y análisis de grandes volúmenes de información.
+Experiencia formativa en el uso de Excel y Power BI para organizar, analizar y visualizar información, generar
+indicadores y apoyar procesos de toma de decisiones.
+Otros Estudios
+Platzi – 2021 – 2026
+Formación complementaria enfocada en análisis de datos, programación y desarrollo de soluciones tecnológicas.
+Curso de DAX para Power BI
+Curso de Excel Analytics con AI y Python
+Curso de Power BI
+Curso de Python Intermedio: Comprehensions, Lambdas y Manejo de Errores
+Curso Básico de Algoritmos y Pensamiento Lógico
+Curso de Introducción al Desarrollo Backend
+Curso de Docker: Fundamentos
+Curso Práctico de JavaScript
+Fundamentos de Ingeniería de Software
+Curso de Introducción a la Terminal y Línea de Comandos
+Smart Language Academy – 2025 – Actualidad
+Inglés – Nivel B1 en formación.
+Otros Conocimientos
+Metodologías y conceptos: Lógica de programación, programación orientada a objetos, estructuras de datos, algoritmos, APIs REST, arquitectura cliente-servidor y fundamentos de desarrollo de software.

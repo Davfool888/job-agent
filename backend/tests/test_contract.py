@@ -34,6 +34,7 @@ REQUIRED_ROUTES = [
     ("POST", "/scheduler/tick"),
     ("GET", "/scheduler/jobs"),
     ("GET", "/scheduler/jobs/{job_id}"),
+    ("POST", "/profile/import-pdf"),
 ]
 
 

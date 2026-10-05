@@ -76,12 +76,13 @@ ENTRY_STATUS: list[dict] = [
 ]
 
 LANGUAGES: list[dict] = [
-    {"id": "es", "label": "Español"},
-    {"id": "en", "label": "Inglés"},
-    {"id": "pt", "label": "Portugués"},
-    {"id": "fr", "label": "Francés"},
-    {"id": "de", "label": "Alemán"},
-    {"id": "it", "label": "Italiano"},
+    {"id": "es", "label": "Español", "aliases": ["spanish", "castellano"]},
+    {"id": "en", "label": "Inglés", "aliases": ["english"]},
+    {"id": "pt", "label": "Portugués",
+     "aliases": ["portuguese", "portugues", "brasileno"]},
+    {"id": "fr", "label": "Francés", "aliases": ["french", "frances"]},
+    {"id": "de", "label": "Alemán", "aliases": ["german", "aleman"]},
+    {"id": "it", "label": "Italiano", "aliases": ["italian"]},
 ]
 
 SENIORITY_LEVELS: list[dict] = [

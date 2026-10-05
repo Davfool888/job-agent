@@ -9,7 +9,8 @@ import { StructuredProfileManager } from "../components/profile/StructuredProfil
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useApi";
 import { ADMIN_EMAIL } from "../lib/firebase";
-import { fetchCatalogs, fetchFullProfile, saveFullProfile } from "../services/profile";
+import { fetchCatalogs, fetchFullProfile, importPdfApply, importPdfPreview, saveFullProfile } from "../services/profile";
+import type { PdfImportResult } from "../services/profile";
 import { canonicalLocation } from "../utils/profileOptions";
 import type {
   Catalogs,
@@ -59,6 +60,50 @@ export function ProfilePage() {
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
   const [listsHydrated, setListsHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<"simple" | "structured">("simple");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<PdfImportResult | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const runPdfPreview = async (file: File) => {
+    setImportFile(file);
+    setImportError(null);
+    setImportPreview(null);
+    setImportLoading(true);
+    try {
+      setImportPreview(await importPdfPreview(file));
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "No se pudo leer el PDF.");
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const runPdfApply = async () => {
+    if (!importFile || locked) return;
+    setImportError(null);
+    setImportLoading(true);
+    try {
+      const result = await importPdfApply(importFile);
+      setImportPreview(result);
+      // Refresca el formulario y las listas desde lo guardado.
+      const rich = await fetchFullProfile().catch(() => null);
+      if (rich) {
+        setSimpleExperiences(((rich.experience || []) as ProfileEntry[]));
+        setSimpleEducation(((rich.education || []) as ProfileEntry[]));
+        setSimpleLanguages(((rich.languages || []) as LanguageEntry[]));
+      }
+      setForm(null);
+      setHydratedFor(null);
+      setListsHydrated(false);
+      reload();
+      setSaved(true);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "No se pudo aplicar el perfil.");
+    } finally {
+      setImportLoading(false);
+    }
+  };
 
   // Hidrata los estados editables cuando llega data (los inicializadores
   // de useState solo corren en el primer render, con data=null).
@@ -226,6 +271,67 @@ export function ProfilePage() {
             </p>
           </div>
         )}
+
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <strong>Subir currículum</strong>
+              <p className="card-sub" style={{ margin: "4px 0 0" }}>
+                Escanea tu PDF y precarga el perfil. Revisa la vista previa antes de aplicar.
+              </p>
+            </div>
+            <label className="btn btn-sm btn-primary" style={{ marginLeft: "auto", cursor: "pointer" }}>
+              {importLoading ? "Leyendo…" : "Subir currículum"}
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                hidden
+                disabled={locked || importLoading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) void runPdfPreview(f);
+                }}
+              />
+            </label>
+          </div>
+          {importError && (
+            <p style={{ color: "var(--danger, #c00)", fontSize: 13 }}>⚠ {importError}</p>
+          )}
+          {importPreview && (
+            <div style={{ marginTop: 12, fontSize: 13 }}>
+              <p style={{ margin: "0 0 8px" }}>
+                📄 <strong>{importPreview.filename || importFile?.name}</strong>
+                {importPreview.applied ? " — aplicado al perfil ✅" : " — vista previa (sin guardar)"}
+              </p>
+              <ul style={{ margin: "0 0 8px 18px", padding: 0 }}>
+                <li>Experiencia: {importPreview.profile.experience?.length ?? 0}</li>
+                <li>Educación formal: {importPreview.profile.education?.length ?? 0}</li>
+                <li>Cursos: {importPreview.profile.certifications?.length ?? 0}</li>
+                <li>Idiomas: {importPreview.profile.languages?.length ?? 0}</li>
+                <li>Proyectos: {importPreview.profile.projects?.length ?? 0}</li>
+              </ul>
+              {importPreview.warnings.length > 0 && (
+                <details style={{ marginBottom: 8 }}>
+                  <summary>Avisos ({importPreview.warnings.length})</summary>
+                  <ul style={{ margin: "8px 0 0 18px", padding: 0 }}>
+                    {importPreview.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                  </ul>
+                </details>
+              )}
+              {!importPreview.applied && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  disabled={locked || importLoading}
+                  onClick={() => void runPdfApply()}
+                >
+                  Aplicar al perfil
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="card" style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", marginBottom: 16 }}>

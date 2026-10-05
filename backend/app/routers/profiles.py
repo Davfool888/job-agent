@@ -146,6 +146,83 @@ def write_full_profile(
         raise HTTPException(status_code=400, detail=str(error))
 
 
+@router.post("/profile/import-pdf")
+async def import_pdf_profile(
+    request: Request,
+    apply: bool = Query(
+        False,
+        description="Si true, persiste lo extraido en el perfil del "
+        "usuario (o base_cv.json si es admin). Si false (defecto), solo "
+        "devuelve vista previa para revision.",
+    ),
+    file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
+    """Importa un CV en PDF y lo convierte a perfil estructurado.
+
+    Acepta multipart 'file' (.pdf) o JSON {'text': '...'} (texto ya
+    extraido, util para reintentos). Las mismas garantias que
+    /profile/import-latex: nada inventado, educacion formal separada
+    de cursos, una descripcion por entrada.
+    """
+    from app.cv.pdf_import import extract_pdf_text, parse_pdf_profile
+
+    text = ""
+    filename = ""
+    if file is not None:
+        filename = file.filename or ""
+        raw = await file.read()
+        if not raw.startswith(b"%PDF-"):
+            raise HTTPException(
+                status_code=400, detail="El archivo no es un PDF valido.")
+        if len(raw) > 10 * 1024 * 1024:
+            raise HTTPException(
+                status_code=400, detail="El PDF supera el maximo de 10 MB.")
+        try:
+            text = extract_pdf_text(raw)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error))
+    elif request is not None:
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            body = {}
+        if isinstance(body, dict):
+            text = str(body.get("text") or "")
+    if not text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Envia un archivo .pdf (multipart 'file') o "
+            "JSON {'text': '...'} con el contenido.",
+        )
+    try:
+        result = parse_pdf_profile(text)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    response: dict = {
+        "filename": filename,
+        "profile": result["profile"],
+        "warnings": result["warnings"],
+        "applied": False,
+    }
+    if apply:
+        from app.config import is_admin_email
+        from app.services.job_service import save_rich_profile
+        from app.services.job_service import save_rich_profile_for
+
+        uid, email = _profile_identity(request)
+        if uid and not is_admin_email(email):
+            saved = save_rich_profile_for(db, uid, email, result["profile"])
+        else:
+            saved = save_rich_profile(result["profile"])
+        response["applied"] = True
+        if isinstance(saved, dict):
+            response["warnings"] = saved.get("warnings",
+                                             result["warnings"])
+    return response
+
+
 @router.post("/profile/import-latex")
 async def import_latex_profile(
     request: Request,
