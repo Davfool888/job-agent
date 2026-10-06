@@ -107,6 +107,18 @@ def ensure_columns():
                     text("ALTER TABLE search_profiles "
                          "ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0")
                 )
+            # Filtros de ajuste (fit): jerarquia perfil > global.
+            for column, ddl in (
+                ("seniority", "VARCHAR(20)"),
+                ("experience_years", "FLOAT"),
+                ("salary_min_cop", "INTEGER"),
+                ("contract_types", "TEXT"),
+            ):
+                if column not in existing_sp:
+                    conn.execute(
+                        text(f"ALTER TABLE search_profiles "
+                             f"ADD COLUMN {column} {ddl}")
+                    )
 
 
 def get_db():

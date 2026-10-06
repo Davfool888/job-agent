@@ -114,6 +114,10 @@ OPENAI_COMPAT_BASE_URL = os.getenv(
 OPENAI_COMPAT_API_KEY = os.getenv("OPENAI_COMPAT_API_KEY", "")
 OPENAI_COMPAT_MODEL = os.getenv("OPENAI_COMPAT_MODEL", "gpt-4o-mini")
 
+# --- Salario minimo legal vigente (COP). Actualizar cada enero por
+# decreto; tambien sobreescribible con env SMMLV_COP.
+SMMLV_COP = int(os.getenv("SMMLV_COP", "1423500"))
+
 # --- Scheduler de busqueda automatica ---
 # En Render (gratuito) la instancia duerme: ademas del scheduler interno,
 # un cron externo puede llamar POST /scheduler/tick (ver SCHEDULER_CRON_SECRET).

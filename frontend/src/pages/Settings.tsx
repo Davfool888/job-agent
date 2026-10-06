@@ -4,6 +4,8 @@ import { API_URL } from "../services/api";
 import { checkHealth } from "../services/jobs";
 import { useTheme, type Theme } from "../hooks/useTheme";
 import { fetchPDFConfig, updatePDFConfig, resetPDFConfig, type PDFConfig, type PDFConfigUpdate } from "../services/pdfConfig";
+import { fetchSearchConfig, fetchSearchOptions, updateSearchConfig, type FitConfig, type FitOptions } from "../services/searchConfig";
+import { FitFields } from "../components/search/FitFields";
 
 const FONT_FAMILIES = [
   { value: "georgia", label: "Georgia (clásica, serif)" },
@@ -182,6 +184,9 @@ export function Settings() {
   const [pdfConfig, setPdfConfig] = useState<PDFConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [fitConfig, setFitConfig] = useState<FitConfig | null>(null);
+  const [fitOptions, setFitOptions] = useState<FitOptions | null>(null);
+  const [fitSaving, setFitSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const ping = async () => {
@@ -199,6 +204,31 @@ export function Settings() {
       console.error("Error cargando config PDF:", e);
     } finally {
       setLoading(false);
+    }
+    try {
+      const [fit, options] = await Promise.all([
+        fetchSearchConfig().catch(() => null),
+        fetchSearchOptions().catch(() => null),
+      ]);
+      if (fit) setFitConfig(fit);
+      if (options) setFitOptions(options);
+    } catch (e) {
+      console.error("Error cargando config de búsqueda:", e);
+    }
+  };
+
+  const handleFitUpdate = async (patch: Partial<FitConfig>) => {
+    setFitSaving(true);
+    setMessage(null);
+    try {
+      const updated = await updateSearchConfig(patch);
+      setFitConfig(updated);
+      setMessage({ type: "success", text: "Búsqueda configurada correctamente" });
+    } catch (e: any) {
+      console.error(e);
+      setMessage({ type: "error", text: e.response?.data?.detail || "Error al guardar" });
+    } finally {
+      setFitSaving(false);
     }
   };
 
@@ -289,6 +319,25 @@ export function Settings() {
             </select>
           </div>
         </div>
+
+        {fitConfig && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h3 className="card-title">Configuración de búsqueda</h3>
+            <p className="card-sub">
+              Vale para el <strong>Dashboard</strong> y como base de las{" "}
+              <strong>búsquedas automáticas</strong>. Cada perfil puede
+              sobreescribirla (vacío = usa esta). Solo se descartan ofertas
+              que <strong>contradigan</strong> el rango en título o
+              descripción; sin dato, la oferta pasa.
+            </p>
+            <FitFields
+              value={fitConfig}
+              options={fitOptions}
+              disabled={fitSaving}
+              onChange={(patch) => void handleFitUpdate(patch)}
+            />
+          </div>
+        )}
 
         {pdfConfig && (
           <div className="card" style={{ marginBottom: 16 }}>

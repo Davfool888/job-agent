@@ -327,6 +327,31 @@ class SearchProfile(Base):
         default=0,
     )
 
+    # --- Filtros de ajuste (fit) por perfil. None = hereda global. ---
+    # Nivel profesional: trainee|junior|mid|senior (None = sin filtro).
+    seniority = Column(
+        String(20),
+        nullable=True,
+    )
+
+    # Experiencia propia en años (0.5, 1..5, 99 = +5). None = sin filtro.
+    experience_years = Column(
+        Float,
+        nullable=True,
+    )
+
+    # Salario minimo aceptado en COP. None = sin filtro.
+    salary_min_cop = Column(
+        Integer,
+        nullable=True,
+    )
+
+    # Tipos de contrato aceptados (JSON array). Vacio/None = sin filtro.
+    contract_types = Column(
+        Text,
+        nullable=True,
+    )
+
     # Dueño del perfil (uid Firebase). None = legado/global. Los
     # invitados (anonimos) comparten el dueño especial GUEST_OWNER.
     owner_uid = Column(
@@ -553,6 +578,28 @@ class PDFConfig(Base):
 
     # Color siempre negro (sin picker en la UI)
     accent_color = Column(String(7), nullable=False, default="#000000")
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
+class SearchConfig(Base):
+    """Configuracion GLOBAL de busqueda por usuario (Dashboard y base
+    de automaticas). Cada perfil puede heredar (None) o sobreescribir.
+    Jerarquia: perfil > global > sin filtro."""
+
+    __tablename__ = "search_configs"
+
+    uid = Column(String(128), primary_key=True, index=True)
+
+    seniority = Column(String(20), nullable=True)
+    experience_years = Column(Float, nullable=True)
+    salary_min_cop = Column(Integer, nullable=True)
+    contract_types = Column(Text, nullable=True)  # JSON array
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(

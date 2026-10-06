@@ -13,6 +13,11 @@ export interface SearchProfile {
   frequency_minutes: number;
   // Antigüedad maxima de vacantes a traer (dias). 0 = sin limite.
   max_age_days: number;
+  // Ajuste oferta<->perfil (None/[] = hereda la global). Ver search-config.
+  seniority: string | null;
+  experience_years: number | null;
+  salary_min_cop: number | null;
+  contract_types: string[];
   // Dueño (uid) y marca de demo (datos de prueba de invitado).
   owner_uid?: string | null;
   is_demo?: boolean;
@@ -33,6 +38,7 @@ export interface SearchProfileRun {
   analyzed: number;
   relevant: number;
   errors: string[];
+  fit_filtered?: Record<string, number>;
 }
 
 // CV de referencia subido al perfil (PDF). has_cv=false si no hay.

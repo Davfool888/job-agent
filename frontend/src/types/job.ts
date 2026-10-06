@@ -61,6 +61,7 @@ export interface SearchResult {
   max_age_days?: number;
   found: number;
   filtered_out?: number;
+  fit_filtered?: Record<string, number>;
   saved: number;
   jobs: Array<{
     id: string;
@@ -91,7 +92,8 @@ export type StreamEvent =
   | { type: "done"; query: string; pages: number; source: string;
       location?: string | null; max_age_days?: number; found: number;
       saved_unique: number; analyzed: number; relevant: number;
-      details_fetched: number; analysis_error?: string }
+      details_fetched: number; fit_filtered?: Record<string, number>;
+      analysis_error?: string }
   | { type: "error"; message: string };
 
 export interface JobDetailExtra {

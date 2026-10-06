@@ -35,6 +35,9 @@ REQUIRED_ROUTES = [
     ("GET", "/scheduler/jobs"),
     ("GET", "/scheduler/jobs/{job_id}"),
     ("POST", "/profile/import-pdf"),
+    ("GET", "/search-config"),
+    ("PUT", "/search-config"),
+    ("GET", "/search-config/options"),
 ]
 
 
@@ -91,3 +94,18 @@ def test_openapi_incluye_buscador_y_pdf():
     assert "/jobs/search/stream" in paths
     assert "/jobs/{job_id}/adapt-cv/start" in paths
     assert "/health/detailed" in paths
+
+
+def test_modulos_criticos_importan():
+    """Los imports lazy ocultan SyntaxError hasta ejecucion: este test
+    importa directo cada modulo del pipeline de busqueda."""
+    import app.adapt.content  # noqa: F401
+    import app.adapt.service  # noqa: F401
+    import app.analysis.fit  # noqa: F401
+    import app.routers.discovery  # noqa: F401
+    import app.routers.search_profiles  # noqa: F401
+    import app.scheduler  # noqa: F401
+    import app.services.run_queue  # noqa: F401
+    import app.services.search_config  # noqa: F401
+    import app.services.search_orchestrator  # noqa: F401
+    import app.services.search_profiles  # noqa: F401

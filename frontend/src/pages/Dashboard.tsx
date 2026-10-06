@@ -539,6 +539,13 @@ export function Dashboard() {
               {result.filtered_out ? (
                 <> ({result.filtered_out} viejas filtradas)</>
               ) : null}
+              {result.fit_filtered &&
+              Object.values(result.fit_filtered).reduce((a, b) => a + b, 0) > 0 ? (
+                <>
+                  {" "}({Object.values(result.fit_filtered).reduce((a, b) => a + b, 0)}{" "}
+                  fuera de tu rango)
+                </>
+              ) : null}
               , {result.saved} guardadas/actualizadas (sin duplicar links).{" "}
               <Link to="/jobs">Ver ofertas</Link>
             </p>

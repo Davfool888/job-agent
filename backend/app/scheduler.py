@@ -91,6 +91,7 @@ def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | Non
     summary = {
         "profile_id": str(profile_id), "found": 0, "new": 0,
         "analyzed": 0, "relevant": 0, "errors": [],
+        "fit_filtered": {},
     }
     try:
         profile = profiles.get_profile(db, profile_id)
@@ -114,6 +115,11 @@ def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | Non
             sources = profile.get("sources") or ["computrabajo"]
             location = profile.get("location")
             max_age_days = int(profile.get("max_age_days") or 0)
+            # Ajuste jerarquico perfil > global (Dashboard/automaticas).
+            from app.services.search_config import resolve_for_request
+
+            fit_config = resolve_for_request(db, uid, profile)
+            fit_discarded: dict = {}
             all_rows: list = []
 
             for source in sources:
@@ -140,6 +146,10 @@ def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | Non
                         continue
                     # Antigüedad del perfil: lo viejo ni se guarda.
                     found = orch.filter_by_age(found, max_age_days)
+                    found, _fit = orch.filter_by_fit(found, fit_config)
+                    for reason, count in _fit.items():
+                        fit_discarded[reason] = fit_discarded.get(
+                            reason, 0) + count
                     summary["found"] += len(found)
                     try:
                         saved = orch.save_batch(
@@ -171,6 +181,7 @@ def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | Non
             # Nuevas = vistas por primera vez en esta ejecucion.
             new_ids = _count_new(db, started_at, str(profile_id))
             summary["new"] = len(new_ids)
+            summary["fit_filtered"] = dict(fit_discarded)
             profiles.touch_run(
                 db, profile_id, status="ok", found=summary["found"],
                 new=summary["new"], now=datetime.utcnow(),

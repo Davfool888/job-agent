@@ -1042,6 +1042,22 @@ def save_profile_cv(db, profile_id, meta: dict) -> dict:
     return get_profile_cv(db, profile_id)
 
 
+def get_search_config(db, uid: str) -> dict | None:
+    snap = _col(db, "search_configs").document(str(uid)).get()
+    if not snap.exists:
+        return None
+    return dict(snap.to_dict() or {})
+
+
+def save_search_config(db, uid: str, fields: dict) -> dict:
+    ref = _col(db, "search_configs").document(str(uid))
+    snap = ref.get()
+    current = dict(snap.to_dict() or {}) if snap.exists else {}
+    merged = {**current, **{k: v for k, v in fields.items() if v is not None}}
+    ref.set(merged, merge=True)
+    return get_search_config(db, uid) or {"uid": str(uid), **merged}
+
+
 def delete_profile_cv(db, profile_id) -> bool:
     ref = _col(db, "profile_cvs").document(str(profile_id))
     if not ref.get().exists:

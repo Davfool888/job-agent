@@ -165,8 +165,17 @@ def search_jobs(
     # guarda lo viejo). Sin fecha de publicacion se conserva.
     found_total = len(jobs)
     jobs = orch.filter_by_age(jobs, max_age_days)
+    aged_out = found_total - len(jobs)
+
+    # Ajuste a la configuracion de busqueda (jerarquia perfil >
+    # global): solo descarta ante contradiccion explicita en
+    # titulo/descripcion; sin dato la oferta pasa al analisis.
+    from app.services.search_config import resolve_for_request
 
     uid, email = _profile_identity(request)
+    fit_config = resolve_for_request(db, uid)
+    jobs, fit_filtered = orch.filter_by_fit(jobs, fit_config)
+
     saved_jobs = orch.save_batch(
         db, jobs, search_query=q, uid=uid, email=email)
 
@@ -201,7 +210,9 @@ def search_jobs(
         "location": location,
         "max_age_days": max_age_days,
         "found": found_total,
-        "filtered_out": found_total - len(jobs),
+        "filtered_out": aged_out,
+        "fit_filtered": fit_filtered,
+        "fit_config": {k: v for k, v in fit_config.items()},
         "saved": len(saved_jobs),
         "analyzed": analyzed,
         "relevant": relevant,
@@ -294,6 +305,13 @@ def search_jobs_stream(
     # frontend solo veia "Se perdio la conexion...".
     events: queue.Queue = queue.Queue()
 
+    # Ajuste global del usuario (sin perfil aqui): se resuelve una vez
+    # con la sesion del request; el worker la reutiliza por lote.
+    from app.services.search_config import resolve_for_request
+
+    stream_fit = resolve_for_request(db, uid)
+    fit_discarded: dict = {}
+
     def _worker() -> None:
         from app.scheduler import _close_db
         from app.scheduler import _new_db
@@ -303,6 +321,10 @@ def search_jobs_stream(
             def on_page(jobs: list, page: int) -> None:
                 try:
                     batch = orch.filter_batch(jobs, location, max_age_days)
+                    batch, _fit = orch.filter_by_fit(batch, stream_fit)
+                    for reason, count in _fit.items():
+                        fit_discarded[reason] = fit_discarded.get(
+                            reason, 0) + count
                     saved = orch.save_batch(
                         db=handle, jobs=batch, search_query=q,
                         uid=uid, email=email)
@@ -392,6 +414,7 @@ def search_jobs_stream(
                               "max_age_days": max_age_days, "found": found_total,
                               "saved_unique": len(saved_ids), "analyzed": 0,
                               "relevant": 0, "details_fetched": 0,
+                              "fit_filtered": dict(fit_discarded),
                               "analysis_error": str(error)[:200]})
                 return
         yield _event({"type": "done", "query": q, "pages": pages,
@@ -399,7 +422,8 @@ def search_jobs_stream(
                       "max_age_days": max_age_days, "found": found_total,
                       "saved_unique": len(saved_ids), "analyzed": analyzed,
                       "relevant": relevant,
-                      "details_fetched": details_fetched})
+                      "details_fetched": details_fetched,
+                      "fit_filtered": dict(fit_discarded)})
 
     return StreamingResponse(
         gen(), media_type="text/event-stream",

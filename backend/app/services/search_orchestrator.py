@@ -123,6 +123,19 @@ def filter_by_age(jobs: list, max_age_days: int = 0) -> list:
     return filter_by_max_age(jobs, max_age_days)
 
 
+def filter_by_fit(jobs: list, config: dict | None = None) -> tuple[list, dict]:
+    """Filtro de ajuste oferta<->config (seniority, experiencia,
+    salario, contrato) sobre titulo+descripcion. Sin config no filtra.
+
+    Devuelve (aptas, descartadas_por_motivo). Lo usa REST, stream y
+    scheduler despues de los filtros de edad/ubicacion.
+    """
+    from app.analysis import fit as fit_module
+    from app.config import SMMLV_COP
+
+    return fit_module.apply_fit(jobs, config or {}, SMMLV_COP)
+
+
 def filter_batch(jobs: list, location=None,
                  max_age_days: int = 0) -> list:
     """Filtro por lote del stream (ubicacion + edad, como hasta ahora)."""

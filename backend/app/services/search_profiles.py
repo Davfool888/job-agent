@@ -21,6 +21,7 @@ DEFAULT_SOURCES = ["computrabajo", "magneto", "linkedin"]
 PROFILE_FIELDS = (
     "name", "title", "location", "modality", "keywords", "sources",
     "active", "frequency_minutes", "max_age_days", "owner_uid", "is_demo",
+    "seniority", "experience_years", "salary_min_cop", "contract_types",
 )
 
 # Dueño compartido de todo lo demo/test de invitados (anonimos).
@@ -75,6 +76,9 @@ def validate_profile_data(data: dict) -> dict:
     max_age = max(0, min(max_age, MAX_AGE_DAYS_LIMIT))
     owner = data.get("owner_uid")
     owner = str(owner).strip()[:128] or None if owner else None
+    from app.services.search_config import validate_fit_fields
+
+    fit = validate_fit_fields(data)
     return {
         "name": _clean_str(data.get("name") or title, 200),
         "title": title,
@@ -87,6 +91,10 @@ def validate_profile_data(data: dict) -> dict:
         "max_age_days": max_age,
         "owner_uid": owner,
         "is_demo": 1 if data.get("is_demo") else 0,
+        "seniority": fit["seniority"],
+        "experience_years": fit["experience_years"],
+        "salary_min_cop": fit["salary_min_cop"],
+        "contract_types": fit["contract_types"],
     }
 
 
@@ -103,6 +111,14 @@ def _record_to_dict(record_id, data: dict) -> dict:
             sources = json.loads(sources)
         except ValueError:
             sources = []
+    contracts = data.get("contract_types")
+    if isinstance(contracts, str):
+        try:
+            contracts = json.loads(contracts)
+        except ValueError:
+            contracts = []
+    exp = data.get("experience_years")
+    salary = data.get("salary_min_cop")
     return {
         "id": str(record_id),
         "name": data.get("name") or "",
@@ -116,6 +132,10 @@ def _record_to_dict(record_id, data: dict) -> dict:
         "max_age_days": int(data.get("max_age_days") or 0),
         "owner_uid": data.get("owner_uid"),
         "is_demo": bool(data.get("is_demo")),
+        "seniority": data.get("seniority"),
+        "experience_years": exp,
+        "salary_min_cop": salary,
+        "contract_types": list(contracts or []),
         "last_run_at": _iso(data.get("last_run_at")),
         "next_run_at": _iso(data.get("next_run_at")),
         "last_run_status": data.get("last_run_status"),
@@ -144,6 +164,10 @@ def _orm_to_dict(row: SearchProfile) -> dict:
         "max_age_days": getattr(row, "max_age_days", 0) or 0,
         "owner_uid": getattr(row, "owner_uid", None),
         "is_demo": bool(getattr(row, "is_demo", 0)),
+        "seniority": getattr(row, "seniority", None),
+        "experience_years": getattr(row, "experience_years", None),
+        "salary_min_cop": getattr(row, "salary_min_cop", None),
+        "contract_types": getattr(row, "contract_types", None),
         "last_run_at": row.last_run_at, "next_run_at": row.next_run_at,
         "last_run_status": row.last_run_status,
         "last_found": row.last_found, "last_new": row.last_new,
@@ -193,7 +217,9 @@ def create_profile(
     row = SearchProfile(
         **{**cleaned,
            "keywords": json.dumps(cleaned["keywords"], ensure_ascii=False),
-           "sources": json.dumps(cleaned["sources"], ensure_ascii=False)},
+           "sources": json.dumps(cleaned["sources"], ensure_ascii=False),
+           "contract_types": json.dumps(
+               cleaned["contract_types"], ensure_ascii=False)},
         next_run_at=now if cleaned["active"] else None,
     )
     db.add(row)
@@ -227,6 +253,11 @@ def update_profile(db: Session, profile_id, data: dict) -> dict | None:
     row.active = 1 if cleaned["active"] else 0
     row.frequency_minutes = cleaned["frequency_minutes"]
     row.max_age_days = cleaned["max_age_days"]
+    row.seniority = cleaned["seniority"]
+    row.experience_years = cleaned["experience_years"]
+    row.salary_min_cop = cleaned["salary_min_cop"]
+    row.contract_types = json.dumps(
+        cleaned["contract_types"], ensure_ascii=False)
     # Si se reactiva sin proxima ejecucion, programarla ya.
     if cleaned["active"] and not row.next_run_at:
         row.next_run_at = now

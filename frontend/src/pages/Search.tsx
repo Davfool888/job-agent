@@ -32,6 +32,9 @@ import {
 } from "../services/searchProfiles";
 import { fetchSources } from "../services/jobs";
 import { fetchCatalogs } from "../services/profile";
+import { fetchSearchOptions } from "../services/searchConfig";
+import type { FitOptions } from "../services/searchConfig";
+import { FitFields } from "../components/search/FitFields";
 import type { Catalogs } from "../types/profile";
 import type {
   ProfileCvStatus,
@@ -55,6 +58,10 @@ const EMPTY_FORM = {
   active: true,
   frequency_minutes: 10,
   max_age_days: 0,
+  seniority: null as string | null,
+  experience_years: null as number | null,
+  salary_min_cop: null as number | null,
+  contract_types: [] as string[],
 };
 
 const FREQUENCY_OPTIONS = [
@@ -121,6 +128,7 @@ export function Search() {
   // Palabras relacionadas: una por fila, con autocompletado y botón +.
   const [kwRows, setKwRows] = useState<string[]>([""]);
   const [catalogs, setCatalogs] = useState<Catalogs | null>(null);
+  const [fitOptions, setFitOptions] = useState<FitOptions | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -162,6 +170,9 @@ export function Search() {
     fetchCatalogs()
       .then(setCatalogs)
       .catch(() => setCatalogs(null));
+    fetchSearchOptions()
+      .then(setFitOptions)
+      .catch(() => setFitOptions(null));
   }, []);
 
   const titleOptions = useMemo(
@@ -209,6 +220,10 @@ export function Search() {
       active: p.active,
       frequency_minutes: p.frequency_minutes,
       max_age_days: p.max_age_days ?? 0,
+      seniority: p.seniority ?? null,
+      experience_years: p.experience_years ?? null,
+      salary_min_cop: p.salary_min_cop ?? null,
+      contract_types: p.contract_types ?? [],
     });
     setKwRows(p.keywords.length > 0 ? [...p.keywords] : [""]);
     setEditing(p.id);
@@ -238,6 +253,12 @@ export function Search() {
         active: form.active,
         frequency_minutes: Number(form.frequency_minutes) || 10,
         max_age_days: Number(form.max_age_days) || 0,
+        seniority: form.seniority || null,
+        experience_years:
+          form.experience_years === null ? null : Number(form.experience_years),
+        salary_min_cop:
+          form.salary_min_cop === null ? null : Number(form.salary_min_cop),
+        contract_types: form.contract_types,
       };
       if (editing) {
         await updateSearchProfile(editing, payload);
@@ -546,6 +567,23 @@ export function Search() {
                       ))}
                     </select>
                   </label>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <p style={{ fontSize: 12.5, margin: "0 0 6px" }}>
+                    Ajuste a tu medida (vacío = usa la Configuración global).
+                    Se revisa título y descripción; sin dato, la oferta pasa.
+                  </p>
+                  <FitFields
+                    value={{
+                      seniority: form.seniority,
+                      experience_years: form.experience_years,
+                      salary_min_cop: form.salary_min_cop,
+                      contract_types: form.contract_types,
+                    }}
+                    options={fitOptions}
+                    emptyLabel="Usar global"
+                    onChange={(patch) => setForm({ ...form, ...patch })}
+                  />
                 </div>
                 <div style={{ marginTop: 8 }}>
                   <label

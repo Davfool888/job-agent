@@ -326,3 +326,38 @@ def scheduler_job(job_id: str):
     return job
 
 
+@router.get("/search-config/options")
+def search_config_options():
+    """Catalogo de bandas para la UI (fuente unica, sin duplicar)."""
+    from app.services.search_config import search_options
+
+    return search_options()
+
+
+@router.get("/search-config")
+def get_search_config(request: Request, db: Session = Depends(get_db)):
+    """Config global del usuario (Dashboard y base de automaticas)."""
+    from app.auth import verify_bearer_token
+    from app.services.search_config import get_search_config as _get
+
+    claims = verify_bearer_token(request.headers.get("authorization"))
+    return _get(db, claims["uid"])
+
+
+@router.put("/search-config")
+def update_search_config(
+    payload: dict[str, Any],
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Actualiza parcial la config global (solo claves enviadas)."""
+    from app.auth import verify_bearer_token
+    from app.services.search_config import update_search_config as _update
+
+    claims = verify_bearer_token(request.headers.get("authorization"))
+    try:
+        return _update(db, claims["uid"], payload or {})
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+

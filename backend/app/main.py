@@ -20,6 +20,8 @@ from app.database.models import Job  # noqa: F401
 from app.database.models import PDFConfig  # noqa: F401
 from app.database.models import Profile  # noqa: F401
 from app.database.models import ProfileCV  # noqa: F401
+from app.database.models import SearchConfig  # noqa: F401
+from app.database.models import SearchProfile  # noqa: F401
 from app.database.models import User  # noqa: F401
 from app.database.models import UserProfile  # noqa: F401
 from app.database.models import UserRichProfile  # noqa: F401
