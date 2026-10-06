@@ -167,7 +167,8 @@ def tailor_job_profile(job_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/jobs/{job_id}/adapt-cv")
-def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db)):
+def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db),
+                 token: str | None = Query(None)):
     """Adaptar-perfil: matching deterministico + seleccion + HTML/CSS
     + PDF (Chromium) con el perfil ficticio de invitado. Sin LaTeX,
     sin LLM obligatorio. Errores controlados {success, error}."""
@@ -176,7 +177,7 @@ def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db)):
     from app.adapt.service import adapt_profile_for_job, AdaptError, error_body
 
     # UID+email de la sesion (invitado = demo, Google = su perfil).
-    uid, email = _adapt_identity(request)
+    uid, email = _adapt_identity(request, token)
 
     try:
         return adapt_profile_for_job(db, job_id, uid, email)
@@ -192,7 +193,8 @@ def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/jobs/{job_id}/adapt-cv/start", status_code=202)
-def start_adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db)):
+def start_adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db),
+                       token: str | None = Query(None)):
     """Inicia la adaptacion en segundo plano. Responde 202 de inmediato
     (valida job + perfil sin Chromium); el cliente hace polling a
     GET /jobs/{job_id}/adapt-cv/status hasta done/error y luego descarga
@@ -202,7 +204,7 @@ def start_adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_
     from app.adapt.jobs import prevalidate_adapt_job, start_adapt_job
     from app.adapt.service import AdaptError, error_body
 
-    uid, email = _adapt_identity(request)
+    uid, email = _adapt_identity(request, token)
 
     try:
         prevalidate_adapt_job(db, job_id, uid, email)
@@ -215,7 +217,8 @@ def start_adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_
 
 @router.get("/jobs/{job_id}/adapt-cv/status")
 def adapt_job_cv_status(
-    job_id: str, request: Request, db: Session = Depends(get_db)
+    job_id: str, request: Request, db: Session = Depends(get_db),
+    token: str | None = Query(None),
 ):
     """Estado para polling: idle | processing | done (+result) | error
     (+error {code, message}). done incluye download_url del PDF."""
@@ -224,7 +227,7 @@ def adapt_job_cv_status(
     from app.adapt.jobs import get_adapt_status
     from app.adapt.service import AdaptError
 
-    uid, email = _adapt_identity(request)
+    uid, email = _adapt_identity(request, token)
     try:
         return get_adapt_status(db, job_id, uid, email)
     except AdaptError as error:
@@ -239,6 +242,8 @@ def adapt_job_cv_status(
 def download_adapt_cv(
     job_id: str,
     format: str = Query("pdf", pattern="^(pdf|html)$"),
+    token: str | None = Query(
+        None, description="Firebase ID token (el iframe no envia headers)"),
     request: Request = None,
     db: Session = Depends(get_db),
 ):
@@ -256,7 +261,7 @@ def download_adapt_cv(
     from app.adapt.service import adapt_dir, legacy_adapt_dir
     from app.services.job_service import get_job_by_id
 
-    uid, email = _adapt_identity(request)
+    uid, email = _adapt_identity(request, token)
     job = None
     try:
         job = get_job_by_id(db=db, job_id=job_id)
@@ -272,9 +277,13 @@ def download_adapt_cv(
     except ValueError:
         raise HTTPException(status_code=404, detail="Archivo no disponible.")
     if not Path(target).exists():
-        legacy = legacy_adapt_dir(job.id) / (f"cv.{format}")
-        if Path(legacy).exists():
-            target = legacy
+        # El archivo legacy (sin subdirectorio) solo lo puede reclamar
+        # el invitado: a un usuario autenticado NUNCA se le sirve el
+        # archivo de otro (ni el demo). Se le regenera el suyo.
+        if uid is None:
+            legacy = legacy_adapt_dir(job.id) / (f"cv.{format}")
+            if Path(legacy).exists():
+                target = legacy
     if not Path(target).exists():
         # Disco efimero: la oferta existe pero el archivo se perdio.
         # Regenerar es mas util que un 404.

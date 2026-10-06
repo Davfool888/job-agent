@@ -267,6 +267,11 @@ export async function adaptCv(
 export function adaptDownloadUrl(
   jobId: number | string,
   format: "pdf" | "html" = "pdf",
+  idToken?: string | null,
 ): string {
-  return `${API_URL}/jobs/${jobId}/adapt-cv/download?format=${format}`;
+  const base = `${API_URL}/jobs/${jobId}/adapt-cv/download?format=${format}`;
+  // El iframe/<a> no envia Authorization: el token viaja como ?token=
+  // (mismo patron que el stream de busqueda). Sin token el backend
+  // resuelve como invitado y jamas debe mostrarse archivo ajeno.
+  return idToken ? `${base}&token=${encodeURIComponent(idToken)}` : base;
 }

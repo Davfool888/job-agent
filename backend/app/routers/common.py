@@ -110,24 +110,40 @@ def _profile_identity(request: Request) -> tuple:
         raise
 
 
-def _adapt_identity(request: Request | None) -> tuple[str | None, str | None]:
+def _adapt_identity(request: Request | None,
+                    token: str | None = None) -> tuple[str | None, str | None]:
     """(uid, email) de la sesion para Adaptar-perfil.
 
-    Invitado = sin token o anonimo sin email: usa el demo y comparte la
-    carpeta "guest". Google = uid + email: usa solo su perfil y sus
-    archivos. Centraliza la lectura del Bearer para que sync/start/
-    status/download usen siempre EL MISMO perfil.
+    Invitado = sin token (header ni ?token=) o anonimo sin email: usa
+    el demo y comparte la carpeta "guest". Google = uid + email: usa
+    solo su perfil y sus archivos. Centraliza la lectura del Bearer
+    para que sync/start/status/download usen siempre EL MISMO perfil.
+
+    Fail-closed: un token PRESENTE pero invalido/expirado (401) o un
+    backend sin Firebase (503) NUNCA degradan a invitado — se
+    propaga el error. Servir el demo como si fuera tuyo es justo la
+    fuga que esto evita.
     """
-    if request is None:
-        return None, None
-    auth_header = request.headers.get("authorization")
-    if not auth_header or not auth_header.lower().startswith("bearer "):
+    from fastapi import HTTPException as _HTTPException
+
+    auth_header = (request.headers.get("authorization")
+                   if request is not None else None)
+    raw = auth_header
+    if (not raw or not raw.lower().startswith("bearer ")) and token:
+        raw = f"Bearer {token}"
+    if not raw or not raw.lower().startswith("bearer "):
         return None, None
     try:
         from app.auth import verify_bearer_token
-        claims = verify_bearer_token(auth_header)
+        claims = verify_bearer_token(raw)
         return claims.get("uid"), claims.get("email")
-    except Exception:
-        return None, None  # Sin auth válido, usar defaults
+    except _HTTPException:
+        raise
+    except Exception as exc:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=503,
+            detail=f"No se pudo verificar la sesión: {exc}")
 
 

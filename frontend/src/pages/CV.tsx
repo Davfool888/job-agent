@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Header } from "../components/layout/Header";
 import { MatchBadge } from "../components/jobs/MatchBadge";
+import { useAdaptToken } from "../hooks/useAdaptToken";
 import {
   EmptyState,
   ErrorState,
@@ -55,6 +56,7 @@ function loadBatchIds(): string[] {
 
 export function CV() {
   const { data, loading, error, reload, mutate } = useJobs("kept");
+  const dlToken = useAdaptToken();
   const allProfiles = useProfileOptions();
   const kept = useMemo(() => data ?? [], [data]);
   const [filters, setFilters] = useState<JobFilterState>(DEFAULT_FILTERS);
@@ -304,7 +306,7 @@ export function CV() {
                       <>
                         <a
                           className="btn btn-ghost btn-sm"
-                          href={adaptDownloadUrl(b.jobId, "pdf")}
+                          href={adaptDownloadUrl(b.jobId, "pdf", dlToken)}
                           target="_blank"
                           rel="noreferrer"
                           title="Ver/descargar PDF adaptado"
@@ -313,7 +315,7 @@ export function CV() {
                         </a>{" "}
                         <a
                           className="btn btn-ghost btn-sm"
-                          href={adaptDownloadUrl(b.jobId, "html")}
+                          href={adaptDownloadUrl(b.jobId, "html", dlToken)}
                           target="_blank"
                           rel="noreferrer"
                           title="Ver HTML adaptado"
@@ -466,7 +468,7 @@ export function CV() {
                       </button>
                       <a
                         className="btn btn-ghost btn-sm"
-                        href={adaptDownloadUrl(j.id, "pdf")}
+                        href={adaptDownloadUrl(j.id, "pdf", dlToken)}
                         target="_blank"
                         rel="noreferrer"
                         title="Ver/descargar PDF adaptado"

@@ -25,6 +25,7 @@ import {
   LoadingState,
 } from "../components/jobs/States";
 import { useJob, useJobExtra } from "../hooks/useApi";
+import { useAdaptToken } from "../hooks/useAdaptToken";
 import { analyzeJob, updateJobStatus } from "../services/jobs";
 import {
   ADAPT_STAGES,
@@ -274,6 +275,9 @@ function AdaptResultCard({
   result: AdaptCvResult;
 }) {
   const [showPreview, setShowPreview] = useState(false);
+  const dlToken = useAdaptToken();
+  const pdfUrl = adaptDownloadUrl(jobId, "pdf", dlToken);
+  const htmlUrl = adaptDownloadUrl(jobId, "html", dlToken);
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <h3 className="card-title">CV personalizado</h3>
@@ -345,7 +349,7 @@ function AdaptResultCard({
         </button>
         <a
           className="btn btn-primary btn-sm"
-          href={adaptDownloadUrl(jobId, "pdf")}
+          href={pdfUrl}
           target="_blank"
           rel="noreferrer"
         >
@@ -353,7 +357,7 @@ function AdaptResultCard({
         </a>
         <a
           className="btn btn-ghost btn-sm"
-          href={adaptDownloadUrl(jobId, "html")}
+          href={htmlUrl}
           target="_blank"
           rel="noreferrer"
           title="Ver HTML si PDF no está disponible"
@@ -361,25 +365,30 @@ function AdaptResultCard({
           <FileText size={14} /> HTML
         </a>
       </div>
-      {showPreview && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-            <span className="card-sub" style={{ fontSize: 13, alignSelf: "center" }}>
-              Vista previa del PDF:
-            </span>
-            <a
-              className="btn btn-ghost btn-xs"
-              href={adaptDownloadUrl(jobId, "pdf")}
-              target="_blank"
-              rel="noreferrer"
-              title="Abrir en nueva pestaña"
-            >
-              <ExternalLink size={12} /> Abrir en pestaña nueva
-            </a>
-          </div>
-          <iframe
-            title="CV personalizado"
-            src={adaptDownloadUrl(jobId, "pdf")}
+      {showPreview && dlToken === undefined ? (
+        <p className="card-sub" style={{ marginTop: 10 }}>
+          Cargando vista previa…
+        </p>
+      ) : (
+        showPreview && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+              <span className="card-sub" style={{ fontSize: 13, alignSelf: "center" }}>
+                Vista previa del PDF:
+              </span>
+              <a
+                className="btn btn-ghost btn-xs"
+                href={pdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                title="Abrir en nueva pestaña"
+              >
+                <ExternalLink size={12} /> Abrir en pestaña nueva
+              </a>
+            </div>
+            <iframe
+              title="CV personalizado"
+              src={pdfUrl}
             style={{
               width: "100%",
               height: 600,
@@ -394,7 +403,8 @@ function AdaptResultCard({
           <p className="card-sub" style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
             Si no se ve el PDF, usa <strong>«Abrir en pestaña nueva»</strong> o el botón <strong>HTML</strong> arriba.
           </p>
-        </div>
+          </div>
+        )
       )}
       <p className="card-sub" style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
         Si el PDF no está disponible (Chromium no instalado en el servidor),
