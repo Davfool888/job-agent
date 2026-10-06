@@ -84,6 +84,12 @@ def test_health_detailed_no_500():
     assert "chromium" in body
     assert "pdflatex" in body
     assert "scheduler" in body
+    # Semáforo de persistencia: backend + alcanzabilidad real.
+    database = body["database"]
+    assert database["backend"] == body["db_backend"]
+    assert database["reachable"] is True
+    if database["backend"] == "sqlite":
+        assert "url" in database
 
 
 def test_openapi_incluye_buscador_y_pdf():
