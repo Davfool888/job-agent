@@ -53,6 +53,7 @@ class PDFConfigOut(BaseModel):
     show_languages: bool = True
     show_links: bool = True
     max_pages: int = 0
+    ai_rewrite_bullets: bool = False
 
     class Config:
         from_attributes = True
@@ -82,6 +83,7 @@ class PDFConfigIn(BaseModel):
     show_languages: bool | None = None
     show_links: bool | None = None
     max_pages: int | None = None
+    ai_rewrite_bullets: bool | None = None
 
 
 def _pdf_config_to_out(cfg) -> PDFConfigOut:
@@ -123,6 +125,9 @@ def _pdf_config_to_out(cfg) -> PDFConfigOut:
                         if get("show_links") is not None else True),
         max_pages=get("max_pages") if get("max_pages")
         is not None else 0,
+        ai_rewrite_bullets=bool(get("ai_rewrite_bullets")
+                                if get("ai_rewrite_bullets") is not None
+                                else False),
     )
 
 

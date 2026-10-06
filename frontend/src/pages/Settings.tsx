@@ -557,6 +557,7 @@ export function Settings() {
                   ["show_courses", "Mostrar formación complementaria"],
                   ["show_languages", "Mostrar idiomas"],
                   ["show_links", "Mostrar enlaces (LinkedIn/GitHub/portafolio)"],
+                  ["ai_rewrite_bullets", "Reformulación con IA (opt-in): reordena y enfatiza bullets por vacante, verificado término a término; si algo no cuadra se conserva el original"],
                 ] as Array<[keyof PDFConfig, string]>
               ).map(([key, label]) => (
                 <div className="field" style={{ display: "flex", alignItems: "flex-end" }} key={key}>

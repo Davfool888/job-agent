@@ -599,6 +599,8 @@ class PDFConfig(Base):
     show_links = Column(Integer, nullable=False, default=1)
     # Tope de paginas (0 = sin limite).
     max_pages = Column(Integer, nullable=False, default=0)
+    # Reformulacion de bullets con LLM supervisado (opt-in, 0 = off).
+    ai_rewrite_bullets = Column(Integer, nullable=False, default=0)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(

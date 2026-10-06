@@ -45,6 +45,7 @@ DEFAULTS = {
     "show_languages": 1,
     "show_links": 1,
     "max_pages": 0,
+    "ai_rewrite_bullets": 0,
 }
 
 
@@ -74,6 +75,7 @@ def _orm_to_dict(row) -> dict:
         "show_languages": row.show_languages,
         "show_links": row.show_links,
         "max_pages": row.max_pages,
+        "ai_rewrite_bullets": row.ai_rewrite_bullets,
     }
 
 
@@ -123,7 +125,7 @@ def _apply_fields(current: dict, fields: dict) -> dict:
                 "profile_length debe ser short|medium|full.")
         out["profile_length"] = fields["profile_length"]
     for key in ("show_soft_skills", "show_courses", "show_languages",
-                "show_links"):
+                "show_links", "ai_rewrite_bullets"):
         if fields.get(key) is not None:
             out[key] = 1 if fields[key] else 0
     return out
@@ -248,4 +250,5 @@ def get_pdf_config_for_renderer(db, uid: str | None) -> dict:
         "show_languages": bool(cfg.get("show_languages", True)),
         "show_links": bool(cfg.get("show_links", True)),
         "max_pages": cfg.get("max_pages", 0),
+        "ai_rewrite_bullets": bool(cfg.get("ai_rewrite_bullets", False)),
     }

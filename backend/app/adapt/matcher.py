@@ -79,6 +79,18 @@ def match_offer_profile(offer: dict, profile: dict) -> dict:
 
     text_norm = norm(offer_text(offer))
     keywords = {t for t in text_norm.split(" ") if len(t) > 1}
+    try:
+        from app.adapt.vacancy import analyze_vacancy
+
+        vacancy = analyze_vacancy(offer)
+        title_keywords = {norm(t) for t in vacancy["title_keywords"]}
+    except Exception:  # noqa: BLE001
+        vacancy = {"role": str(offer.get("title") or ""),
+                   "requirements": [], "keywords_high": [],
+                   "keywords_medium": [], "keywords_low": [],
+                   "keywords_all": [], "title_keywords": [],
+                   "sector": None, "seniority": None}
+        title_keywords = set()
     skills = profile_skills(profile)
 
     matched: list[str] = []
@@ -106,10 +118,10 @@ def match_offer_profile(offer: dict, profile: dict) -> dict:
         total = len(matched) + len(missing)
         percentage = round(100 * len(matched) / total) if total else 0
 
-    experiences = _ranked((profile.get("experience") or profile.get("experiences") or []), keywords)
-    projects = _ranked(profile.get("projects") or [], keywords)
-    certifications = _ranked(profile.get("certifications") or [], keywords)
-    education = _ranked(profile.get("education") or [], keywords)
+    experiences = _ranked((profile.get("experience") or profile.get("experiences") or []), keywords, title_keywords)
+    projects = _ranked(profile.get("projects") or [], keywords, title_keywords)
+    certifications = _ranked(profile.get("certifications") or [], keywords, title_keywords)
+    education = _ranked(profile.get("education") or [], keywords, title_keywords)
 
     modality_offer = norm(offer.get("modality"))
     modality_profile = norm(profile.get("modality"))
@@ -135,6 +147,7 @@ def match_offer_profile(offer: dict, profile: dict) -> dict:
         "percentage": percentage,
         "matched_skills": matched,
         "missing_skills": missing,
+        "vacancy": vacancy,
         "experiences": experiences,
         "projects": projects,
         "certifications": certifications,
@@ -209,14 +222,23 @@ def _item_text(item: dict) -> str:
     return " ".join(str(p) for p in parts if p)
 
 
-def _ranked(items: list[dict], keywords: set[str]) -> list[dict]:
+def _ranked(items: list[dict], keywords: set[str],
+            title_keywords: set[str] | None = None) -> list[dict]:
+    """Ordena por coincidencia ponderada: titulo x3, resto x1.
+
+    Estable: a igual puntaje conserva el orden del perfil. Solo
+    reordena, jamas filtra ni reescribe.
+    """
     from app.analysis.signals import norm
 
+    title_keywords = title_keywords or set()
     scored = []
     for i, item in enumerate(items or []):
         if not isinstance(item, dict):
             continue
         tokens = {t for t in norm(_item_text(item)).split(" ") if len(t) > 1}
-        scored.append((len(tokens & keywords), i, item))
+        base = len(tokens & keywords)
+        title_hits = len(tokens & title_keywords)
+        scored.append((base + 2 * title_hits, i, item))
     scored.sort(key=lambda row: (-row[0], row[1]))
     return [{"score": score, "item": item} for score, _, item in scored]

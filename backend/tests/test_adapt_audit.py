@@ -219,3 +219,203 @@ def test_servicio_guarda_auditoria(tmp_path, monkeypatch):
                          .read_text(encoding="utf-8"))
     assert stored["audit"]["passed"] is True
 
+
+def test_verify_rechaza_tecnologia_y_metrica_nueva():
+    from app.adapt import rewrite as rewrite_module
+
+    originals = ["Analicé datos con Python para reportes.",
+                 "Automaticé 30 reportes mensuales con Excel."]
+    ok, _ = rewrite_module.verify_rewrite(
+        originals, ["Analicé datos con Python y Go para reportes.",
+                    "Automaticé 30 reportes mensuales con Excel."])
+    assert ok is False
+    ok, _ = rewrite_module.verify_rewrite(
+        originals, ["Analicé datos con Python para reportes.",
+                    "Automaticé 500 reportes mensuales con Excel."])
+    assert ok is False
+    ok, _ = rewrite_module.verify_rewrite(
+        originals, ["Analicé datos con Python para reportes.",
+                    "Automaticé 30 reportes mensuales con Excel."])
+    assert ok is True
+
+
+def test_rewrite_apagado_conserva_original():
+    from app.adapt import rewrite as rewrite_module
+
+    originals = ["Hice cosas con Python."]
+    out = rewrite_module.rewrite_bullets(originals, ["Python"], "Dev")
+    assert out["bullets"] == originals
+    assert out["provider"] == "none"
+
+
+def test_rewrite_acepta_limpio_y_rechaza_sucio(monkeypatch):
+    from app.adapt import rewrite as rewrite_module
+
+    monkeypatch.setattr(rewrite_module, "rewrite_available", lambda: True)
+    import json as _json
+
+    seen = {}
+
+    class _FakeProvider:
+        def available(self):
+            return True
+
+        def _generate(self, prompt, timeout):
+            return _json.dumps({"bullets": seen["out"]})
+
+    monkeypatch.setattr("app.adapt.rewrite.GeminiProvider",
+                        _FakeProvider, raising=False)
+    # GeminiProvider se importa dentro de la funcion; se parcha el modulo.
+    import app.ai.providers.gemini as gemini_module
+
+    monkeypatch.setattr(gemini_module.GeminiProvider, "available",
+                        lambda self: True)
+    monkeypatch.setattr(gemini_module.GeminiProvider, "_generate",
+                        _FakeProvider()._generate)
+    originals = ["Analicé datos con Python."]
+    seen["out"] = ["Con Python, analicé datos."]
+    out = rewrite_module.rewrite_bullets(originals, ["Python"], "Dev")
+    assert out["verified"] is True
+    assert out["bullets"] == seen["out"]
+    seen["out"] = ["Analicé datos con Rust."]
+    out = rewrite_module.rewrite_bullets(originals, ["Python"], "Dev")
+    assert out["bullets"] == originals
+    assert out["verified"] is False
+
+
+def test_servicio_sin_optin_no_reescribe(tmp_path, monkeypatch):
+    import json as _json
+    from types import SimpleNamespace
+
+    from app.adapt import service as adapt_service
+
+    monkeypatch.setattr("app.config.ADAPT_CVS_DIR", tmp_path)
+    monkeypatch.setattr(
+        "app.services.job_service.get_job_by_id",
+        lambda db, job_id: SimpleNamespace(
+            id="10", title="Dev", company="Acme",
+            description="Python", location="", modality="",
+            requirements=[], responsibilities=[]),
+    )
+    monkeypatch.setattr(
+        "app.adapt.guest.get_profile_for_cv",
+        lambda *a, **k: {"full_name": "Ana", "summary": "Dev.",
+                         "skills_technical": ["Python"],
+                         "experiences": [{
+                             "title": "Dev", "company": "Acme",
+                             "description": "Hice A. Hice B con Python."}]})
+    monkeypatch.setattr(
+        "app.adapt.service._is_profile_complete", lambda raw: True)
+
+    def _fake_render(html_text, out, timeout):
+        __import__("pathlib").Path(out).write_bytes(b"%PDF-1.4 fake")
+        return out
+
+    monkeypatch.setattr("app.adapt.pdf._render_locked", _fake_render)
+    from app.database.connection import SessionLocal
+
+    db = SessionLocal()
+    try:
+        out = adapt_service.adapt_profile_for_job(
+            db, "10", uid="u10", email="u@x.co")
+    finally:
+        from app.database.models import PDFConfig
+
+        db.query(PDFConfig).filter(PDFConfig.uid == "u10").delete(
+            synchronize_session=False)
+        db.commit()
+        db.close()
+    assert out["success"] is True
+    stored = _json.loads((tmp_path / "job_10" / "u10" / "adapt.json")
+                         .read_text(encoding="utf-8"))
+    assert stored["content"].get("adaptations") == []
+
+
+def _offer_data():
+    return {
+        "title": "Analista de Datos",
+        "company": "Banco",
+        "description": "Buscamos analista de datos con Power BI y SQL "
+                       "para reportes. Mínimo 2 años de experiencia.",
+        "requirements": ["Power BI", "SQL"],
+        "location": "Bogotá",
+    }
+
+
+def test_vacancy_niveles_y_sector():
+    from app.adapt.vacancy import analyze_vacancy
+
+    vacancy = analyze_vacancy(_offer_data())
+    assert vacancy["role"] == "Analista de Datos"
+    assert "Power BI" in vacancy["keywords_high"]
+    assert vacancy["sector"] == "financiero"
+    assert set(vacancy["requirements"]) == {"Power BI", "SQL"}
+
+
+def test_compose_title_solo_con_evidencia():
+    from app.adapt.selector import compose_title
+
+    vacancy = {"role": "Analista de Datos"}
+    assert compose_title("Ingeniero de Software", vacancy,
+                         ["Power BI"]) == \
+        "Ingeniero de Software | Analista de Datos"
+    # Sin evidencia: conserva el del perfil.
+    assert compose_title("Ingeniero de Software", vacancy, []) == \
+        "Ingeniero de Software"
+    # Rol ya contenido: no duplica.
+    assert compose_title("Analista de Datos Senior", vacancy,
+                         ["SQL"]) == "Analista de Datos Senior"
+    # Sin rol: conserva base.
+    assert compose_title("Ingeniero", {}, ["SQL"]) == "Ingeniero"
+
+
+def test_summary_y_bullets_reordenan_sin_recortar():
+    from app.adapt.selector import order_bullets, order_summary
+
+    summary = ("Vivo en Bogotá. Domino Python y SQL para análisis. "
+               "Me gusta el café.")
+    ordered = order_summary(summary, {"python", "sql"})
+    assert ordered.index("Domino Python") < ordered.index("Vivo en Bogotá")
+    assert "café" in ordered  # nada se elimina
+
+    bullets = order_bullets(
+        "General. Consulté clientes a diario. Automaticé reportes con "
+        "Python y SQL.", {"python", "sql"})
+    assert bullets[0].startswith("Automaticé")
+    assert len(bullets) == 2
+
+
+def test_proyectos_secundarios_recortados_y_skills_priorizadas():
+    from app.adapt import selector
+
+    profile = {"skills_technical": ["Excel", "Power BI", "SQL", "Python"],
+               "target_roles": [], "title": "Ingeniero de Software"}
+    offer = _offer_data()
+    from app.adapt import matcher
+
+    matching = matcher.match_offer_profile(offer, profile)
+    content = selector.select_cv_content(profile, offer, matching, {})
+    # Skills exigidas primero (orden de la oferta).
+    assert content["skills"][0] == "Power BI"
+    assert "Python" in content["skills"]  # real no exigida: sigue al final
+    # Titulo compuesto con evidencia.
+    assert content["title_line"] == \
+        "Ingeniero de Software | Analista de Datos"
+
+
+def test_audit_checklist_titulo_e_intro():
+    from app.adapt import audit as audit_module
+
+    profile = {"full_name": "Ana", "skills_technical": ["Power BI"]}
+    content = {"title": "Ingeniero de Software | Analista de Datos",
+               "summary": "Analista de Datos con Power BI para reportes.",
+               "skills": ["Power BI"],
+               "experiences": [], "education": [], "projects": [],
+               "certifications": []}
+    report = audit_module.audit_cv(
+        content, profile, _offer_data(), {}, None)
+    assert any("Titulo alineado" in a
+               for a in report["improvements_allowed"])
+    assert any("menciona el rol" in a
+               for a in report["improvements_allowed"])
+

@@ -158,6 +158,7 @@ def ensure_columns():
                 ("show_languages", "INTEGER NOT NULL DEFAULT 1"),
                 ("show_links", "INTEGER NOT NULL DEFAULT 1"),
                 ("max_pages", "INTEGER NOT NULL DEFAULT 0"),
+                ("ai_rewrite_bullets", "INTEGER NOT NULL DEFAULT 0"),
             ):
                 if column not in existing_pdf:
                     conn.execute(

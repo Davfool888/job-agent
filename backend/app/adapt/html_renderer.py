@@ -683,7 +683,8 @@ def render_cv_html(content: dict, job: dict | None = None, pdf_config: dict | No
     adapted = str(content.get("target_role") or "").strip()
     own = str(content.get("title") or "").strip()
     professional_title = own or _missing_text("title")
-    if adapted and adapted.lower() != own.lower():
+    if adapted and adapted.lower() != own.lower() \
+            and adapted.lower() not in own.lower():
         objective_line = f"Cargo objetivo: {adapted}"
     else:
         objective_line = ""

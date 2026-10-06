@@ -147,6 +147,41 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
     for key in ("full_name", "title", "email", "phone", "linkedin",
                 "github", "portfolio", "location"):
         content[key] = profile.get(key, "")
+    # Titulo compuesto oferta<->perfil (solo con evidencia real).
+    if content.get("title_line"):
+        content["title"] = content["title_line"]
+
+    # Reformulacion opt-in con LLM supervisado: reordena/enfatiza
+    # bullets por experiencia. Verificada termino a termino o se
+    # conservan los originales. El diff queda en adapt.json.
+    adaptations: list[dict] = []
+    if pdf_config.get("ai_rewrite_bullets"):
+        from app.adapt import rewrite as adapt_rewrite
+
+        allowed = list(content.get("skills") or [])
+        role = str(content.get("target_role") or "")
+        for exp in content.get("experiences") or []:
+            if not isinstance(exp, dict):
+                continue
+            current = [str(b) for b in (exp.get("bullets") or []) if b]
+            if not current:
+                continue
+            result = adapt_rewrite.rewrite_bullets(current, allowed, role)
+            if result["bullets"] != current:
+                adaptations.append({
+                    "experience": str(exp.get("title") or ""),
+                    "original": current,
+                    "adapted": result["bullets"],
+                    "provider": result["provider"],
+                    "verified": result["verified"],
+                    "note": result["note"],
+                })
+            exp["bullets"] = result["bullets"]
+        if adaptations:
+            adapt_warnings = list(adapt_warnings) + [
+                f"IA reformulo bullets en {len(adaptations)} experiencia(s) "
+                f"(verificado; diff en adapt.json)."]
+    content["adaptations"] = adaptations
 
     # Lo que falte IMPORTANTE no se inventa: se marca en el PDF con
     # "(falta información de ...)" en el mismo pedazo (ver renderer).

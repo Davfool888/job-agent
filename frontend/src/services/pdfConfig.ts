@@ -24,6 +24,7 @@ export interface PDFConfig {
   show_languages: boolean;
   show_links: boolean;
   max_pages: number;
+  ai_rewrite_bullets: boolean;
 }
 
 export interface PDFConfigUpdate {
@@ -50,6 +51,7 @@ export interface PDFConfigUpdate {
   show_languages?: boolean;
   show_links?: boolean;
   max_pages?: number;
+  ai_rewrite_bullets?: boolean;
 }
 
 export async function fetchPDFConfig(): Promise<PDFConfig> {

@@ -253,7 +253,7 @@ def coerce_pdf_config(pdf_config: dict | None) -> tuple[dict, list[str]]:
     if length and length not in ("short", "medium", "full"):
         warnings.append(f"profile_length '{length}' desconocido: full.")
     for key in ("show_soft_skills", "show_courses", "show_languages",
-                "show_links"):
+                "show_links", "ai_rewrite_bullets"):
         out[key] = False if src.get(key) in (False, 0, "0", "false",
                                              "False") else True
     return out, warnings

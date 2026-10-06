@@ -250,7 +250,28 @@ def audit_cv(content: dict, profile: dict, offer: dict,
     except Exception:  # noqa: BLE001
         coverage, present, missing_real, keywords = 0, [], [], []
 
-    # 6. PDF: paginas, legibilidad ATS y densidad.
+    # 6. Checklist §10: titulo e introduccion alineados al cargo.
+    vacancy_role = str(((offer or {}).get("title")) or "").strip()
+    header_title = str(content.get("title") or "")
+    summary_text = str(content.get("summary") or "")
+    if vacancy_role:
+        if vacancy_role.lower() in header_title.lower():
+            allowed.append("Titulo alineado al cargo de la vacante.")
+        else:
+            issue("personalizacion",
+                  "El titulo no refleja el cargo (sin evidencia comun: "
+                  "se conserva el del perfil).")
+        role_mentioned = vacancy_role.lower() in summary_text.lower()
+        summary_hits = [k for k in present
+                        if k.lower() in summary_text.lower()]
+        if role_mentioned or summary_hits:
+            allowed.append("La introduccion menciona el rol y/o keywords "
+                           "relevantes.")
+        else:
+            issue("personalizacion",
+                  "La introduccion no menciona el rol ni keywords "
+                  "de la oferta.")
+    # 7. PDF: paginas, legibilidad ATS y densidad.
     facts = _pdf_facts(pdf_path) if pdf_path else {
         "pages": 0, "chars": 0, "readable": False, "text": ""}
     try:
