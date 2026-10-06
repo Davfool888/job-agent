@@ -140,6 +140,30 @@ def ensure_columns():
                         text(f"ALTER TABLE search_configs "
                              f"ADD COLUMN {column} {ddl}")
                     )
+        # Config de PDF adaptado: columnas nuevas en tablas viejas.
+        if "pdf_configs" in tables:
+            existing_pdf = {
+                row[1]
+                for row in conn.execute(
+                    text("PRAGMA table_info(pdf_configs)")
+                ).fetchall()
+            }
+            for column, ddl in (
+                ("max_projects", "INTEGER NOT NULL DEFAULT 3"),
+                ("max_experiences", "INTEGER NOT NULL DEFAULT 3"),
+                ("max_bullets", "INTEGER NOT NULL DEFAULT 0"),
+                ("profile_length", "VARCHAR(10) NOT NULL DEFAULT 'full'"),
+                ("show_soft_skills", "INTEGER NOT NULL DEFAULT 1"),
+                ("show_courses", "INTEGER NOT NULL DEFAULT 1"),
+                ("show_languages", "INTEGER NOT NULL DEFAULT 1"),
+                ("show_links", "INTEGER NOT NULL DEFAULT 1"),
+                ("max_pages", "INTEGER NOT NULL DEFAULT 0"),
+            ):
+                if column not in existing_pdf:
+                    conn.execute(
+                        text(f"ALTER TABLE pdf_configs "
+                             f"ADD COLUMN {column} {ddl}")
+                    )
 
 
 def get_db():

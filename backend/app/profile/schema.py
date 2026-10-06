@@ -480,9 +480,35 @@ def normalize_flat_profile(data: dict | None) -> tuple[dict, list[str]]:
 def normalize_rich_profile(data: dict | None) -> tuple[dict, list[str]]:
     """Normaliza el documento completo del perfil modular."""
     from app.profile.perspectives import SECTIONS
+    from app.profile.textfix import fix_spacing
 
-    data = data or {}
+    data = dict(data or {})
     warnings: list[str] = []
+    # Repara palabras pegadas de copiar-desde-PDF ('utilizandoExcel').
+    # Transparente: cada cambio se reporta, nada silencioso.
+    if isinstance(data.get("professional_summary"), str):
+        fixed, changes = fix_spacing(data["professional_summary"])
+        if changes:
+            data["professional_summary"] = fixed
+            shown = "; ".join(changes[:5])
+            warnings.append(
+                f"Resumen: se separaron {len(changes)} palabras pegadas "
+                f"({shown}).")
+    for section in SECTIONS:
+        items = data.get(section)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if isinstance(item, dict) and isinstance(
+                    item.get("description"), str):
+                fixed, changes = fix_spacing(item["description"])
+                if changes:
+                    item["description"] = fixed
+                    shown = "; ".join(changes[:3])
+                    warnings.append(
+                        f"Descripcion de "
+                        f"'{str(item.get('title') or item.get('name') or item.get('degree') or '')[:40]}': "
+                        f"se separaron {len(changes)} palabras ({shown}).")
     personal, personal_warnings = normalize_personal(data.get("personal"))
     warnings.extend(personal_warnings)
     normalized: dict = {

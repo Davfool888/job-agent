@@ -44,6 +44,15 @@ class PDFConfigOut(BaseModel):
     margin_right_mm: int
     section_spacing_pt: int
     accent_color: str
+    max_projects: int = 3
+    max_experiences: int = 3
+    max_bullets: int = 0
+    profile_length: str = "full"
+    show_soft_skills: bool = True
+    show_courses: bool = True
+    show_languages: bool = True
+    show_links: bool = True
+    max_pages: int = 0
 
     class Config:
         from_attributes = True
@@ -64,6 +73,15 @@ class PDFConfigIn(BaseModel):
     margin_right_mm: int | None = None
     section_spacing_pt: int | None = None
     accent_color: str | None = None
+    max_projects: int | None = None
+    max_experiences: int | None = None
+    max_bullets: int | None = None
+    profile_length: str | None = None
+    show_soft_skills: bool | None = None
+    show_courses: bool | None = None
+    show_languages: bool | None = None
+    show_links: bool | None = None
+    max_pages: int | None = None
 
 
 def _pdf_config_to_out(cfg) -> PDFConfigOut:
@@ -87,6 +105,24 @@ def _pdf_config_to_out(cfg) -> PDFConfigOut:
         margin_right_mm=get("margin_right_mm"),
         section_spacing_pt=get("section_spacing_pt"),
         accent_color=get("accent_color"),
+        max_projects=get("max_projects") if get("max_projects")
+        is not None else 3,
+        max_experiences=get("max_experiences") if get("max_experiences")
+        is not None else 3,
+        max_bullets=get("max_bullets") if get("max_bullets")
+        is not None else 0,
+        profile_length=get("profile_length") or "full",
+        show_soft_skills=bool(get("show_soft_skills")
+                              if get("show_soft_skills") is not None
+                              else True),
+        show_courses=bool(get("show_courses")
+                          if get("show_courses") is not None else True),
+        show_languages=bool(get("show_languages")
+                            if get("show_languages") is not None else True),
+        show_links=bool(get("show_links")
+                        if get("show_links") is not None else True),
+        max_pages=get("max_pages") if get("max_pages")
+        is not None else 0,
     )
 
 

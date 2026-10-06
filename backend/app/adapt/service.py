@@ -133,7 +133,9 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
             http=400)
 
     matching = matcher.match_offer_profile(offer, profile)
-    content = selector.select_cv_content(profile, offer, matching)
+    # La config manda: topes del usuario sobre la relevancia.
+    content = selector.select_cv_content(
+        profile, offer, matching, pdf_config)
 
     polished = llm.polish_summary(
         content.get("summary", ""), content.get("target_role", ""),
@@ -156,6 +158,45 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
         raise AdaptError("HTML_FAILED", str(error), http=502) from error
 
     directory = adapt_dir(job.id, uid, email)
+    (directory / "cv.html").write_text(html_text, encoding="utf-8")
+    try:
+        # timeout_ms es milisegundos (int); pdf_config NO va aqui
+        # (bug historico: pasarlo como 3er arg rompia con int(dict)).
+        pdf.html_to_pdf(html_text, directory / "cv.pdf")
+    except pdf.PdfError as error:
+        raise AdaptError(error.code, str(error), http=502) from error
+
+    # Auditoria config-driven (no modifica datos, solo reporta).
+    from app.adapt import audit as adapt_audit
+
+    audit = adapt_audit.audit_cv(
+        content, profile, offer, pdf_config, directory / "cv.pdf")
+    # Unico reintento permitido: si excede max_pages y el compacto esta
+    # apagado, regenerar compacto (mismo contenido, CSS denso). Jamas
+    # recorta informacion obligatoria por configuracion.
+    try:
+        max_pages = int(pdf_config.get("max_pages", 0) or 0)
+    except (TypeError, ValueError):
+        max_pages = 0
+    if max_pages > 0 and audit["facts"]["pages"] > max_pages \
+            and not pdf_config.get("compact_mode"):
+        compact_config = dict(pdf_config, compact_mode=True)
+        try:
+            retry_html = html_renderer.render_cv_html(
+                content, offer, compact_config)
+            (directory / "cv.html").write_text(
+                retry_html, encoding="utf-8")
+            pdf.html_to_pdf(retry_html, directory / "cv.pdf")
+            html_text = retry_html
+            audit = adapt_audit.audit_cv(
+                content, profile, offer, compact_config,
+                directory / "cv.pdf")
+            adapt_warnings = list(adapt_warnings) + [
+                "Se excedia el maximo de paginas: se regenero en modo "
+                "compacto (mismo contenido)."]
+        except (ValueError, pdf.PdfError):
+            pass
+
     (directory / "adapt.json").write_text(json.dumps(
         {"job_id": job.id,
          "created_at": datetime.utcnow().isoformat(),
@@ -168,19 +209,14 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
                                "location_ok", "target_roles_matched",
                                "years_experience")},
          "content": content,
-          "warnings": adapt_warnings},
+         "warnings": adapt_warnings,
+         "audit": audit},
         ensure_ascii=False, indent=2), encoding="utf-8")
-    (directory / "cv.html").write_text(html_text, encoding="utf-8")
-    try:
-        # timeout_ms es milisegundos (int); pdf_config NO va aqui
-        # (bug historico: pasarlo como 3er arg rompia con int(dict)).
-        pdf.html_to_pdf(html_text, directory / "cv.pdf")
-    except pdf.PdfError as error:
-        raise AdaptError(error.code, str(error), http=502) from error
 
     return {
         "success": True,
         "warnings": adapt_warnings,
+        "audit": audit,
         "job": {"id": job.id, "title": job.title or "",
                 "company": job.company or ""},
         "matching": {

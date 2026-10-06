@@ -236,4 +236,24 @@ def coerce_pdf_config(pdf_config: dict | None) -> tuple[dict, list[str]]:
     out["header_style"] = _str(src.get("header_style")) or "classic"
     out["section_divider"] = _str(src.get("section_divider")) or "line"
     out["accent_color"] = _str(src.get("accent_color")) or "#000000"
+    # Personalizacion de contenido (limites y visibilidad). Defaults =
+    # comportamiento historico: sin recortes, todo visible.
+    for key in ("max_projects", "max_experiences", "max_bullets",
+                "max_pages"):
+        try:
+            out[key] = int(src.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            out[key] = 0
+            warnings.append(f"{key} invalido: sin limite.")
+        if out[key] < 0:
+            out[key] = 0
+    length = _str(src.get("profile_length")).lower()
+    out["profile_length"] = length if length in (
+        "short", "medium", "full") else "full"
+    if length and length not in ("short", "medium", "full"):
+        warnings.append(f"profile_length '{length}' desconocido: full.")
+    for key in ("show_soft_skills", "show_courses", "show_languages",
+                "show_links"):
+        out[key] = False if src.get(key) in (False, 0, "0", "false",
+                                             "False") else True
     return out, warnings

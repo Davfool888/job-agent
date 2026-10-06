@@ -15,6 +15,15 @@ export interface PDFConfig {
   margin_right_mm: number;
   section_spacing_pt: number;
   accent_color: string;
+  max_projects: number;
+  max_experiences: number;
+  max_bullets: number;
+  profile_length: string;
+  show_soft_skills: boolean;
+  show_courses: boolean;
+  show_languages: boolean;
+  show_links: boolean;
+  max_pages: number;
 }
 
 export interface PDFConfigUpdate {
@@ -32,6 +41,15 @@ export interface PDFConfigUpdate {
   margin_right_mm?: number;
   section_spacing_pt?: number;
   accent_color?: string;
+  max_projects?: number;
+  max_experiences?: number;
+  max_bullets?: number;
+  profile_length?: string;
+  show_soft_skills?: boolean;
+  show_courses?: boolean;
+  show_languages?: boolean;
+  show_links?: boolean;
+  max_pages?: number;
 }
 
 export async function fetchPDFConfig(): Promise<PDFConfig> {

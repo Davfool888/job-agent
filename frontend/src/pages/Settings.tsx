@@ -481,6 +481,95 @@ export function Settings() {
                 value={pdfConfig.section_order}
                 onChange={v => handleUpdate({ section_order: v })}
               />
+
+              {/* Contenido del CV adaptado (manda sobre la relevancia) */}
+              <div className="field">
+                <label>Máx. experiencias</label>
+                <select
+                  className="select"
+                  value={String(pdfConfig.max_experiences ?? 3)}
+                  onChange={e => handleUpdate({ max_experiences: Number(e.target.value) })}
+                  title="Aunque haya más relevantes, salen estas"
+                >
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Máx. proyectos</label>
+                <select
+                  className="select"
+                  value={String(pdfConfig.max_projects ?? 3)}
+                  onChange={e => handleUpdate({ max_projects: Number(e.target.value) })}
+                >
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Bullets por experiencia (0 = sin límite)</label>
+                <select
+                  className="select"
+                  value={String(pdfConfig.max_bullets ?? 0)}
+                  onChange={e => handleUpdate({ max_bullets: Number(e.target.value) })}
+                >
+                  {[0, 2, 3, 4, 5, 6].map(n => (
+                    <option key={n} value={n}>{n === 0 ? "Sin límite" : n}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Longitud del perfil</label>
+                <select
+                  className="select"
+                  value={pdfConfig.profile_length ?? "full"}
+                  onChange={e => handleUpdate({ profile_length: e.target.value })}
+                  title="Corto/medio recortan por oraciones, sin reescribir"
+                >
+                  <option value="short">Corto (~450 caracteres)</option>
+                  <option value="medium">Medio (~900 caracteres)</option>
+                  <option value="full">Completo</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <label>Máx. páginas (0 = sin límite)</label>
+                <select
+                  className="select"
+                  value={String(pdfConfig.max_pages ?? 0)}
+                  onChange={e => handleUpdate({ max_pages: Number(e.target.value) })}
+                  title="Si se excede, se regenera compacto una vez"
+                >
+                  {[0, 1, 2, 3].map(n => (
+                    <option key={n} value={n}>{n === 0 ? "Sin límite" : n}</option>
+                  ))}
+                </select>
+              </div>
+
+              {(
+                [
+                  ["show_soft_skills", "Mostrar habilidades blandas"],
+                  ["show_courses", "Mostrar formación complementaria"],
+                  ["show_languages", "Mostrar idiomas"],
+                  ["show_links", "Mostrar enlaces (LinkedIn/GitHub/portafolio)"],
+                ] as Array<[keyof PDFConfig, string]>
+              ).map(([key, label]) => (
+                <div className="field" style={{ display: "flex", alignItems: "flex-end" }} key={key}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!pdfConfig[key]}
+                      onChange={e => handleUpdate({ [key]: e.target.checked } as PDFConfigUpdate)}
+                    />
+                    <span className="card-sub">{label}</span>
+                  </label>
+                </div>
+              ))}
             </div>
           </div>
         )}

@@ -125,11 +125,34 @@ def _split_sentences(text: str) -> list[str]:
     return sentences
 
 
-def _contact_lines(content: dict) -> tuple[str, str]:
+def _fit_profile_length(text: str, length: str) -> str:
+    """Recorta el perfil a short (~450) o medium (~900) por oraciones.
+
+    Subconjunto honesto: nunca reescribe, solo corta en frontera de
+    oracion. 'full' (defecto) no recorta.
+    """
+    budgets = {"short": 450, "medium": 900}
+    budget = budgets.get(str(length or "").lower())
+    cleaned = str(text or "").strip()
+    if not budget or len(cleaned) <= budget:
+        return cleaned
+    kept: list[str] = []
+    total = 0
+    for sentence in _split_sentences(cleaned):
+        if total + len(sentence) > budget and kept:
+            break
+        kept.append(sentence)
+        total += len(sentence) + 1
+    out = " ".join(kept).strip()
+    return out + (" …" if len(out) < len(cleaned) else "")
+
+
+def _contact_lines(content: dict, show_links: bool = True) -> tuple[str, str]:
     """Dos lineas como el ejemplo: ubicacion|tel|email y enlaces.
 
     Lo importante que falte no se inventa: se marca en el mismo
-    pedazo con '(falta información de ...)'.
+    pedazo con '(falta información de ...)'. Con show_links=False
+    se omite la linea de enlaces.
     """
     missing = set(content.get("missing") or [])
     line1 = [content.get("location"), content.get("phone"),
@@ -138,9 +161,9 @@ def _contact_lines(content: dict) -> tuple[str, str]:
         line1.append(_missing_text("phone"))
     if "email" in missing:
         line1.append(_missing_text("email"))
-    line2 = [_display_url(content.get("linkedin")),
-             _display_url(content.get("github")),
-             _display_url(content.get("portfolio"))]
+    line2 = ([_display_url(content.get("linkedin")),
+              _display_url(content.get("github")),
+              _display_url(content.get("portfolio"))] if show_links else [])
     first = " | ".join(esc(p) for p in line1 if str(p).strip())
     second = " | ".join(esc(p) for p in line2 if str(p).strip())
     return first, second
@@ -276,7 +299,8 @@ def _soft_skills_block(content: dict) -> str:
     )
 
 
-def _experience_block(content: dict, fmt: str = "MMM YYYY") -> str:
+def _experience_block(content: dict, fmt: str = "MMM YYYY",
+                      max_bullets: int = 0) -> str:
     """Experiencia estilo ejemplo: cargo, fechas, empresa, Responsabilidad
     General (primera oracion) + bullets con el resto. Sin chips: las
     skills van en su seccion; aqui una linea discreta las conserva."""
@@ -309,6 +333,8 @@ def _experience_block(content: dict, fmt: str = "MMM YYYY") -> str:
                     if str(b).strip()]
         rest = sentences[1:] if len(sentences) > 1 else []
         items = explicit or rest
+        if max_bullets > 0:
+            items = items[:max_bullets]
         bullets = ""
         if items:
             bullets = '<ul class="item-bullets">' + "".join(
@@ -662,14 +688,19 @@ def render_cv_html(content: dict, job: dict | None = None, pdf_config: dict | No
     else:
         objective_line = ""
 
-    line1, line2 = _contact_lines(content)
+    cfg = pdf_config or {}
+    show_links = cfg.get("show_links", True) not in (
+        False, 0, "0", "false", "False")
+    line1, line2 = _contact_lines(content, show_links=show_links)
 
     # Summary: del perfil (con o sin pulido LLM). Si falta, se marca.
+    # profile_length recorta por oraciones (subconjunto, no reescritura).
     summary = ""
     if str(content.get("summary") or "").strip():
         summary = _section(
             "Perfil Profesional",
-            f'<p class="summary">{esc(content.get("summary"))}</p>'
+            f'<p class="summary">'
+            f"{esc(_fit_profile_length(content.get('summary'), cfg.get('profile_length')))}</p>"
         )
     else:
         summary = _section(
@@ -686,15 +717,26 @@ def render_cv_html(content: dict, job: dict | None = None, pdf_config: dict | No
         section_order = default_order
 
     fmt = str((pdf_config or {}).get("date_format") or "MMM YYYY")
+    try:
+        max_bullets = int(cfg.get("max_bullets", 0) or 0)
+    except (TypeError, ValueError):
+        max_bullets = 0
+    show_soft = cfg.get("show_soft_skills", True) not in (
+        False, 0, "0", "false", "False")
+    show_courses = cfg.get("show_courses", True) not in (
+        False, 0, "0", "false", "False")
+    show_langs = cfg.get("show_languages", True) not in (
+        False, 0, "0", "false", "False")
     blocks = {
         "summary": summary,
-        "experience": _experience_block(content, fmt),
+        "experience": _experience_block(content, fmt, max_bullets),
         "education": _education_block(content, fmt),
         "projects": _projects_block(content, fmt),
         "skills": _technical_skills_block(content),
-        "soft_skills": _soft_skills_block(content),
-        "languages": _languages_block(content),
-        "other_studies": _other_studies_block(content, fmt),
+        "soft_skills": _soft_skills_block(content) if show_soft else "",
+        "languages": _languages_block(content) if show_langs else "",
+        "other_studies": _other_studies_block(content, fmt)
+        if show_courses else "",
         "other_knowledge": _other_knowledge_block(content),
     }
 

@@ -36,6 +36,15 @@ DEFAULTS = {
     "margin_right_mm": 25,
     "section_spacing_pt": 14,
     "accent_color": "#000000",
+    "max_projects": 3,
+    "max_experiences": 3,
+    "max_bullets": 0,
+    "profile_length": "full",
+    "show_soft_skills": 1,
+    "show_courses": 1,
+    "show_languages": 1,
+    "show_links": 1,
+    "max_pages": 0,
 }
 
 
@@ -56,6 +65,15 @@ def _orm_to_dict(row) -> dict:
         "margin_right_mm": row.margin_right_mm,
         "section_spacing_pt": row.section_spacing_pt,
         "accent_color": row.accent_color,
+        "max_projects": row.max_projects,
+        "max_experiences": row.max_experiences,
+        "max_bullets": row.max_bullets,
+        "profile_length": row.profile_length,
+        "show_soft_skills": row.show_soft_skills,
+        "show_courses": row.show_courses,
+        "show_languages": row.show_languages,
+        "show_links": row.show_links,
+        "max_pages": row.max_pages,
     }
 
 
@@ -89,6 +107,25 @@ def _apply_fields(current: dict, fields: dict) -> dict:
     out["margin_left_mm"] = 25
     out["margin_right_mm"] = 25
     out["accent_color"] = "#000000"
+    for key in ("max_projects", "max_experiences", "max_bullets",
+                "max_pages"):
+        if fields.get(key) is not None:
+            try:
+                value = int(fields[key])
+            except (TypeError, ValueError):
+                raise ValueError(f"{key} debe ser entero.")
+            if value < 0:
+                raise ValueError(f"{key} no puede ser negativo.")
+            out[key] = value
+    if fields.get("profile_length") is not None:
+        if fields["profile_length"] not in ("short", "medium", "full"):
+            raise ValueError(
+                "profile_length debe ser short|medium|full.")
+        out["profile_length"] = fields["profile_length"]
+    for key in ("show_soft_skills", "show_courses", "show_languages",
+                "show_links"):
+        if fields.get(key) is not None:
+            out[key] = 1 if fields[key] else 0
     return out
 
 
@@ -202,4 +239,13 @@ def get_pdf_config_for_renderer(db, uid: str | None) -> dict:
         "margin_right_mm": cfg.get("margin_right_mm"),
         "section_spacing_pt": cfg.get("section_spacing_pt"),
         "accent_color": cfg.get("accent_color"),
+        "max_projects": cfg.get("max_projects", 3),
+        "max_experiences": cfg.get("max_experiences", 3),
+        "max_bullets": cfg.get("max_bullets", 0),
+        "profile_length": cfg.get("profile_length") or "full",
+        "show_soft_skills": bool(cfg.get("show_soft_skills", True)),
+        "show_courses": bool(cfg.get("show_courses", True)),
+        "show_languages": bool(cfg.get("show_languages", True)),
+        "show_links": bool(cfg.get("show_links", True)),
+        "max_pages": cfg.get("max_pages", 0),
     }

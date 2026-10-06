@@ -585,6 +585,21 @@ class PDFConfig(Base):
     # Color siempre negro (sin picker en la UI)
     accent_color = Column(String(7), nullable=False, default="#000000")
 
+    # --- Personalizacion de contenido adaptado (auditoria config-driven).
+    # Defaults = comportamiento historico (sin recortes).
+    max_projects = Column(Integer, nullable=False, default=3)
+    max_experiences = Column(Integer, nullable=False, default=3)
+    # Bullets por experiencia (0 = sin limite).
+    max_bullets = Column(Integer, nullable=False, default=0)
+    # Longitud del perfil: short|medium|full.
+    profile_length = Column(String(10), nullable=False, default="full")
+    show_soft_skills = Column(Integer, nullable=False, default=1)
+    show_courses = Column(Integer, nullable=False, default=1)
+    show_languages = Column(Integer, nullable=False, default=1)
+    show_links = Column(Integer, nullable=False, default=1)
+    # Tope de paginas (0 = sin limite).
+    max_pages = Column(Integer, nullable=False, default=0)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(
         DateTime,

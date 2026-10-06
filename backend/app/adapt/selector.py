@@ -12,14 +12,31 @@ MAX_EDUCATION = 2
 MAX_SKILLS = 12
 
 
+def _limit(config: dict | None, key: str, default: int) -> int:
+    """Limite desde pdf_config. 0/faltante = default historico."""
+    if not config:
+        return default
+    try:
+        value = int(config.get(key, default))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
 def _top(ranked: list[dict], limit: int) -> list[dict]:
     return [row["item"] for row in (ranked or [])[:limit]]
 
 
 def select_cv_content(
-    profile: dict, offer: dict, matching: dict
+    profile: dict, offer: dict, matching: dict,
+    config: dict | None = None,
 ) -> dict:
-    """Arma el JSON personalizado del CV (forma FASE 4)."""
+    """Arma el JSON personalizado del CV (forma FASE 4).
+
+    `config` (pdf_config coercionada) manda sobre los topes: si el
+    usuario fijo maximo 2 proyectos, salen 2 aunque haya 3 buenos.
+    Sin config, topes historicos.
+    """
     matched = list(matching.get("matched_skills") or [])
     skills: list[str] = []
     seen: set[str] = set()
@@ -38,8 +55,10 @@ def select_cv_content(
     for skill in profile.get("skills_soft") or []:
         add(skill)
 
-    experiences = _top(matching.get("experiences"), MAX_EXPERIENCE)
-    projects = _top(matching.get("projects"), MAX_PROJECTS)
+    experiences = _top(matching.get("experiences"),
+                       _limit(config, "max_experiences", MAX_EXPERIENCE))
+    projects = _top(matching.get("projects"),
+                    _limit(config, "max_projects", MAX_PROJECTS))
     certifications = _top(matching.get("certifications"), MAX_CERTIFICATIONS)
     education = _top(matching.get("education"), MAX_EDUCATION)
 
