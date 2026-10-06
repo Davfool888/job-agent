@@ -112,11 +112,32 @@ def ensure_columns():
                 ("seniority", "VARCHAR(20)"),
                 ("experience_years", "FLOAT"),
                 ("salary_min_cop", "INTEGER"),
+                ("salary_max_cop", "INTEGER"),
                 ("contract_types", "TEXT"),
             ):
                 if column not in existing_sp:
                     conn.execute(
                         text(f"ALTER TABLE search_profiles "
+                             f"ADD COLUMN {column} {ddl}")
+                    )
+        # Config global de busqueda: columnas nuevas en tablas viejas.
+        if "search_configs" in tables:
+            existing_sc = {
+                row[1]
+                for row in conn.execute(
+                    text("PRAGMA table_info(search_configs)")
+                ).fetchall()
+            }
+            for column, ddl in (
+                ("seniority", "VARCHAR(20)"),
+                ("experience_years", "FLOAT"),
+                ("salary_min_cop", "INTEGER"),
+                ("salary_max_cop", "INTEGER"),
+                ("contract_types", "TEXT"),
+            ):
+                if column not in existing_sc:
+                    conn.execute(
+                        text(f"ALTER TABLE search_configs "
                              f"ADD COLUMN {column} {ddl}")
                     )
 

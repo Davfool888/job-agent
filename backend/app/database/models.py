@@ -346,6 +346,12 @@ class SearchProfile(Base):
         nullable=True,
     )
 
+    # Salario maximo aceptado en COP (rango). None = sin tope.
+    salary_max_cop = Column(
+        Integer,
+        nullable=True,
+    )
+
     # Tipos de contrato aceptados (JSON array). Vacio/None = sin filtro.
     contract_types = Column(
         Text,
@@ -599,6 +605,7 @@ class SearchConfig(Base):
     seniority = Column(String(20), nullable=True)
     experience_years = Column(Float, nullable=True)
     salary_min_cop = Column(Integer, nullable=True)
+    salary_max_cop = Column(Integer, nullable=True)
     contract_types = Column(Text, nullable=True)  # JSON array
 
     created_at = Column(DateTime, default=datetime.utcnow)

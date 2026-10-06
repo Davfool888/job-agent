@@ -47,16 +47,37 @@ CONTRACT_TYPES = [
 CONTRACT_IDS = {item["id"] for item in CONTRACT_TYPES}
 
 
+def _cop_label(value: int) -> str:
+    return "$" + f"{value:,}".replace(",", ".")
+
+
 def salary_bands() -> list[dict]:
-    """Bandas de salario minimo (SMMLV sale de env SMMLV_COP)."""
+    """Bandas legacy (piso). Ver salary_options() para min/max."""
     from app.config import SMMLV_COP
 
     return [
-        {"min_cop": SMMLV_COP, "label": "1 SMMLV"},
-        {"min_cop": 2_000_000, "label": "Desde $2.000.000"},
-        {"min_cop": 2_500_000, "label": "Desde $2.500.000"},
-        {"min_cop": 3_500_000, "label": "Desde $3.500.000"},
+        {"min_cop": SMMLV_COP, "label": f"1 SMMLV ({_cop_label(SMMLV_COP)})"},
+        {"min_cop": 2_000_000, "label": f"Desde {_cop_label(2_000_000)}"},
+        {"min_cop": 2_500_000, "label": f"Desde {_cop_label(2_500_000)}"},
+        {"min_cop": 3_500_000, "label": f"Desde {_cop_label(3_500_000)}"},
     ]
+
+
+def salary_options() -> dict:
+    """Listas independientes para minimo y maximo.
+
+    Minimo: desde 1 SMMLV hasta 9.5M. Maximo: 1M hasta 10M.
+    Pasos de 500 mil.
+    """
+    from app.config import SMMLV_COP
+
+    mins = [{"min_cop": SMMLV_COP,
+             "label": f"1 SMMLV ({_cop_label(SMMLV_COP)})"}]
+    mins += [{"min_cop": v, "label": f"Desde {_cop_label(v)}"}
+             for v in range(2_000_000, 10_000_000, 500_000)]
+    maxs = [{"max_cop": v, "label": f"Hasta {_cop_label(v)}"}
+            for v in range(1_000_000, 10_500_000, 500_000)]
+    return {"min_options": mins, "max_options": maxs}
 
 
 def search_options() -> dict:
@@ -70,6 +91,8 @@ def search_options() -> dict:
             for i in EXPERIENCE_BUCKETS
         ],
         "salary_bands": salary_bands(),
+        "salary_min_options": salary_options()["min_options"],
+        "salary_max_options": salary_options()["max_options"],
         "contract_types": CONTRACT_TYPES,
     }
 
@@ -123,6 +146,22 @@ def validate_fit_fields(data: dict) -> dict:
         if salary < 0:
             raise ValueError("salary_min_cop no puede ser negativo.")
 
+    salary_max = data.get("salary_max_cop")
+    if salary_max in (None, ""):
+        salary_max = None
+    else:
+        try:
+            salary_max = int(salary_max)
+        except (TypeError, ValueError):
+            raise ValueError("salary_max_cop debe ser entero en COP.")
+        if salary_max < 0:
+            raise ValueError("salary_max_cop no puede ser negativo.")
+
+    if salary is not None and salary_max is not None \
+            and salary > salary_max:
+        raise ValueError(
+            "salary_min_cop no puede superar a salary_max_cop.")
+
     contracts = data.get("contract_types")
     if contracts in (None, ""):
         contracts = []
@@ -138,6 +177,7 @@ def validate_fit_fields(data: dict) -> dict:
         "seniority": seniority,
         "experience_years": exp,
         "salary_min_cop": salary,
+        "salary_max_cop": salary_max,
         "contract_types": contracts,
     }
 
@@ -154,6 +194,7 @@ def _to_dict(uid: str, data: dict) -> dict:
         "seniority": data.get("seniority"),
         "experience_years": data.get("experience_years"),
         "salary_min_cop": data.get("salary_min_cop"),
+        "salary_max_cop": data.get("salary_max_cop"),
         "contract_types": list(contracts or []),
     }
 
@@ -169,18 +210,20 @@ def get_search_config(db, uid: str) -> dict:
         if current is None:
             return {"uid": uid, "seniority": None,
                     "experience_years": None, "salary_min_cop": None,
-                    "contract_types": []}
+                    "salary_max_cop": None, "contract_types": []}
         return _to_dict(uid, current)
     from app.database.models import SearchConfig
 
     row = db.query(SearchConfig).filter(SearchConfig.uid == uid).first()
     if row is None:
         return {"uid": uid, "seniority": None, "experience_years": None,
-                "salary_min_cop": None, "contract_types": []}
+                "salary_min_cop": None, "salary_max_cop": None,
+                "contract_types": []}
     return _to_dict(uid, {
         "seniority": row.seniority,
         "experience_years": row.experience_years,
         "salary_min_cop": row.salary_min_cop,
+        "salary_max_cop": row.salary_max_cop,
         "contract_types": row.contract_types,
     })
 
@@ -209,6 +252,7 @@ def update_search_config(db, uid: str, fields: dict) -> dict:
     row.seniority = merged["seniority"]
     row.experience_years = merged["experience_years"]
     row.salary_min_cop = merged["salary_min_cop"]
+    row.salary_max_cop = merged["salary_max_cop"]
     row.contract_types = json.dumps(merged["contract_types"])
     row.updated_at = datetime.utcnow()
     db.commit()
@@ -217,6 +261,7 @@ def update_search_config(db, uid: str, fields: dict) -> dict:
         "seniority": row.seniority,
         "experience_years": row.experience_years,
         "salary_min_cop": row.salary_min_cop,
+        "salary_max_cop": row.salary_max_cop,
         "contract_types": row.contract_types,
     })
 
@@ -231,6 +276,7 @@ def resolve_fit_config(global_cfg: dict, profile: dict | None) -> dict:
         "seniority": global_cfg.get("seniority"),
         "experience_years": global_cfg.get("experience_years"),
         "salary_min_cop": global_cfg.get("salary_min_cop"),
+        "salary_max_cop": global_cfg.get("salary_max_cop"),
         "contract_types": list(global_cfg.get("contract_types") or []),
     }
     if profile.get("seniority"):
@@ -239,6 +285,8 @@ def resolve_fit_config(global_cfg: dict, profile: dict | None) -> dict:
         out["experience_years"] = profile["experience_years"]
     if profile.get("salary_min_cop") not in (None, ""):
         out["salary_min_cop"] = profile["salary_min_cop"]
+    if profile.get("salary_max_cop") not in (None, ""):
+        out["salary_max_cop"] = profile["salary_max_cop"]
     if profile.get("contract_types"):
         contracts = profile["contract_types"]
         if isinstance(contracts, str):
@@ -257,5 +305,6 @@ def resolve_for_request(db, uid: str | None,
     if not uid:
         return resolve_fit_config(
             {"seniority": None, "experience_years": None,
-             "salary_min_cop": None, "contract_types": []}, profile)
+             "salary_min_cop": None, "salary_max_cop": None,
+             "contract_types": []}, profile)
     return resolve_fit_config(get_search_config(db, uid), profile)

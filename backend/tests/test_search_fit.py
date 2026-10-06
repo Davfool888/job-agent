@@ -40,12 +40,27 @@ def test_experiencia_titulo_y_descripcion():
     assert fit.parse_experience_required("Sin experiencia previa") == 0.0
     assert fit.parse_experience_required("6 meses de experiencia") == 0.5
     assert fit.parse_experience_required("Buscamos analista.") is None
+    # Palabras, abreviaturas y combinaciones (titulo o descripcion).
+    assert fit.parse_experience_required("dos años de experiencia") == 2.0
+    assert fit.parse_experience_required("2 años de exp") == 2.0
+    assert fit.parse_experience_required("+2 años exp") == 2.0
+    assert fit.parse_experience_required("2+ años exp") == 2.0
+    assert fit.parse_experience_required("Se requiere 1.5 años") == 1.5
+    assert fit.parse_experience_required(
+        "año y medio de experiencia") == 1.5
+    assert fit.parse_experience_required(
+        "entre 2 y 4 años de exp") == 2.0
+    assert fit.parse_experience_required("Dev Senior con 5 años") == 5.0
 
     cfg = {"experience_years": 2.0}
     assert fit.check_job(
         _job("Dev", "Piden 5 años de experiencia."), cfg, SMMLV)[0] is False
     assert fit.check_job(
         _job("Dev", "Con 1 año de experiencia basta."), cfg, SMMLV)[0] is True
+    assert fit.check_job(
+        _job("Dev", "Piden dos años de experiencia."), cfg, SMMLV)[0] is True
+    assert fit.check_job(
+        _job("Dev +2 años exp", ""), cfg, SMMLV)[0] is True
     assert fit.check_job(_job("Dev", "Sin requisitos."), cfg, SMMLV)[0] is True
 
 
@@ -66,6 +81,24 @@ def test_salario_rangos_y_smmlv():
     assert fit.check_job(
         _job("Dev", "", "$3.000.000 a $4.000.000"), cfg, SMMLV)[0] is True
     assert fit.check_job(_job("Dev", "Salario a convenir"), cfg, SMMLV)[0] is True
+
+
+def test_salario_rango_min_max_solapa():
+    rango = {"salary_min_cop": 2_000_000, "salary_max_cop": 3_000_000}
+    assert fit.check_job(
+        _job("Dev", "", "$2.500.000"), rango, SMMLV)[0] is True
+    assert fit.check_job(
+        _job("Dev", "", "$1.000.000"), rango, SMMLV)[0] is False
+    assert fit.check_job(
+        _job("Dev", "", "$5.000.000"), rango, SMMLV)[0] is False
+    # Solo tope: descarta lo que lo supera, conserva lo demas.
+    solo_max = {"salary_max_cop": 3_000_000}
+    assert fit.check_job(
+        _job("Dev", "", "$5.000.000"), solo_max, SMMLV)[0] is False
+    assert fit.check_job(
+        _job("Dev", "", "$2.000.000"), solo_max, SMMLV)[0] is True
+    assert fit.check_job(
+        _job("Dev", "A convenir"), solo_max, SMMLV)[0] is True
 
 
 def test_contrato_solo_mencion_explicita():
@@ -124,13 +157,19 @@ def test_search_config_endpoints():
             assert bad.status_code == 400
             ok = client.put("/search-config", json={
                 "seniority": "junior", "experience_years": 2,
-                "salary_min_cop": 2000000,
+                "salary_min_cop": 2000000, "salary_max_cop": 3500000,
                 "contract_types": ["indefinido"],
             }, headers=headers)
             assert ok.status_code == 200, ok.text
             body = ok.json()
             assert body["seniority"] == "junior"
             assert body["experience_years"] == 2.0
+            assert body["salary_max_cop"] == 3500000
+            # Minimo mayor que maximo: 400.
+            bad_range = client.put("/search-config", json={
+                "salary_min_cop": 5000000, "salary_max_cop": 3000000,
+            }, headers=headers)
+            assert bad_range.status_code == 400
             # PUT parcial conserva lo demas.
             again = client.put("/search-config", json={"seniority": "mid"},
                                headers=headers).json()
@@ -157,6 +196,7 @@ def test_perfil_crud_con_fit():
             "name": "FitTest", "title": "Analista",
             "sources": ["computrabajo"], "seniority": "junior",
             "experience_years": 1, "salary_min_cop": 2500000,
+            "salary_max_cop": 4000000,
             "contract_types": ["aprendizaje"],
         })
         assert created.status_code == 201, created.text
@@ -165,6 +205,7 @@ def test_perfil_crud_con_fit():
             body = created.json()
             assert body["seniority"] == "junior"
             assert body["contract_types"] == ["aprendizaje"]
+            assert body["salary_max_cop"] == 4000000
             bad = client.post("/search-profiles", json={
                 "name": "FitTest2", "title": "X",
                 "sources": ["computrabajo"], "seniority": "emperador"})

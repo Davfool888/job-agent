@@ -4,6 +4,7 @@ export interface FitConfig {
   seniority: string | null;
   experience_years: number | null;
   salary_min_cop: number | null;
+  salary_max_cop: number | null;
   contract_types: string[];
 }
 
@@ -11,6 +12,8 @@ export interface FitOptions {
   seniority_levels: Array<{ id: string; label: string }>;
   experience_buckets: Array<{ years: number; label: string }>;
   salary_bands: Array<{ min_cop: number; label: string }>;
+  salary_min_options: Array<{ min_cop: number; label: string }>;
+  salary_max_options: Array<{ max_cop: number; label: string }>;
   contract_types: Array<{ id: string; label: string }>;
 }
 

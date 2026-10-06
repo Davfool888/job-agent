@@ -48,19 +48,24 @@ def detect_seniority(text: str) -> str | None:
     return None
 
 
+_UNIT = r"(?:a[nñ]os?|anos?|exp(?:eriencia)?\.?|yrs?|years?)"
+
 _EXP_PATTERNS = [
     # "sin experiencia" / "no requiere experiencia" -> 0.
     (re.compile(r"sin experiencia|no (?:se )?requiere experiencia|"
                 r"no es necesaria experiencia"), lambda m: 0.0),
-    # "de 2 a 4 años" -> minimo 2.
-    (re.compile(r"de\s+(\d+(?:[.,]\d+)?)\s+a\s+\d+(?:[.,]\d+)?\s*"
-                r"a[nñ]os?"), lambda m: float(m.group(1).replace(",", "."))),
-    # "mínimo 3 años", "3+ años", "3 años de experiencia".
-    (re.compile(r"(\d+(?:[.,]\d+)?)\s*\+\s*a[nñ]os?"),
+    # "año y medio de experiencia" -> 1.5.
+    (re.compile(r"a[nñ]o\s+y\s+medio"), lambda m: 1.5),
+    # "de 2 a 4 años" / "entre 2 y 4 años" -> minimo 2.
+    (re.compile(r"(?:de|entre)\s+(\d+(?:[.,]\d+)?)\s+(?:a|y)\s+"
+                r"\d+(?:[.,]\d+)?\s*" + _UNIT),
      lambda m: float(m.group(1).replace(",", "."))),
-    (re.compile(r"(\d+(?:[.,]\d+)?)\s*a[nñ]os?(?:\s+de experiencia)?"),
+    # "+2 años", "2+ años", "mínimo 2 años", "2 años de exp".
+    (re.compile(r"[+]\s*(\d+(?:[.,]\d+)?)\s*" + _UNIT),
      lambda m: float(m.group(1).replace(",", "."))),
-    (re.compile(r"(\d+(?:[.,]\d+)?)\s*years?"),
+    (re.compile(r"(\d+(?:[.,]\d+)?)\s*[+]\s*" + _UNIT),
+     lambda m: float(m.group(1).replace(",", "."))),
+    (re.compile(r"(\d+(?:[.,]\d+)?)\s*" + _UNIT),
      lambda m: float(m.group(1).replace(",", "."))),
     # "6 meses de experiencia" -> 0.5.
     (re.compile(r"(\d+(?:[.,]\d+)?)\s*meses?(?:\s+de experiencia)?"),
@@ -68,8 +73,21 @@ _EXP_PATTERNS = [
 ]
 
 
+def _words_to_years_safe(text: str) -> float | None:
+    try:
+        from app.profile.schema import _words_to_years
+
+        return _words_to_years(text)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def parse_experience_required(text: str) -> float | None:
-    """Años exigidos o None si no se declaran."""
+    """Años exigidos o None si no se declaran.
+
+    Digitos, palabras ('dos años', 'dos años y medio') y
+    abreviaturas ('2 exp', '+2 años exp'), en titulo o descripcion.
+    """
     lowered = _norm(text)
     for pattern, build in _EXP_PATTERNS:
         match = pattern.search(lowered)
@@ -78,6 +96,11 @@ def parse_experience_required(text: str) -> float | None:
                 return build(match)
             except (TypeError, ValueError):
                 continue
+    # "dos años de experiencia": palabras antes de la unidad.
+    for match in re.finditer(r"([a-z\s]{1,30}?)\s*" + _UNIT, lowered):
+        value = _words_to_years_safe(match.group(1))
+        if value is not None:
+            return value
     return None
 
 
@@ -168,10 +191,17 @@ def check_job(job, config: dict, smmlv: int) -> tuple[bool, str | None]:
             return False, "experience"
 
     want_min = (config or {}).get("salary_min_cop")
-    if want_min not in (None, ""):
+    want_max = (config or {}).get("salary_max_cop")
+    if want_min not in (None, "") or want_max not in (None, ""):
         salary = parse_salary_range(text, smmlv)
-        if salary is not None and salary[1] < float(want_min):
-            return False, "salary"
+        if salary is not None:
+            offer_min, offer_max = salary
+            if want_min not in (None, "") \
+                    and offer_max < float(want_min):
+                return False, "salary"
+            if want_max not in (None, "") \
+                    and offer_min > float(want_max):
+                return False, "salary"
 
     want_contracts = list((config or {}).get("contract_types") or [])
     if want_contracts:
@@ -187,6 +217,7 @@ def apply_fit(jobs: list, config: dict, smmlv: int) -> tuple[list, dict]:
     if not any([(config or {}).get("seniority"),
                 (config or {}).get("experience_years") not in (None, ""),
                 (config or {}).get("salary_min_cop") not in (None, ""),
+                (config or {}).get("salary_max_cop") not in (None, ""),
                 (config or {}).get("contract_types")]):
         return list(jobs), {}
     kept: list = []

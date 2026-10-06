@@ -94,6 +94,7 @@ def validate_profile_data(data: dict) -> dict:
         "seniority": fit["seniority"],
         "experience_years": fit["experience_years"],
         "salary_min_cop": fit["salary_min_cop"],
+        "salary_max_cop": fit["salary_max_cop"],
         "contract_types": fit["contract_types"],
     }
 
@@ -119,6 +120,7 @@ def _record_to_dict(record_id, data: dict) -> dict:
             contracts = []
     exp = data.get("experience_years")
     salary = data.get("salary_min_cop")
+    salary_max = data.get("salary_max_cop")
     return {
         "id": str(record_id),
         "name": data.get("name") or "",
@@ -135,6 +137,7 @@ def _record_to_dict(record_id, data: dict) -> dict:
         "seniority": data.get("seniority"),
         "experience_years": exp,
         "salary_min_cop": salary,
+        "salary_max_cop": salary_max,
         "contract_types": list(contracts or []),
         "last_run_at": _iso(data.get("last_run_at")),
         "next_run_at": _iso(data.get("next_run_at")),
@@ -167,6 +170,7 @@ def _orm_to_dict(row: SearchProfile) -> dict:
         "seniority": getattr(row, "seniority", None),
         "experience_years": getattr(row, "experience_years", None),
         "salary_min_cop": getattr(row, "salary_min_cop", None),
+        "salary_max_cop": getattr(row, "salary_max_cop", None),
         "contract_types": getattr(row, "contract_types", None),
         "last_run_at": row.last_run_at, "next_run_at": row.next_run_at,
         "last_run_status": row.last_run_status,
@@ -256,6 +260,7 @@ def update_profile(db: Session, profile_id, data: dict) -> dict | None:
     row.seniority = cleaned["seniority"]
     row.experience_years = cleaned["experience_years"]
     row.salary_min_cop = cleaned["salary_min_cop"]
+    row.salary_max_cop = cleaned["salary_max_cop"]
     row.contract_types = json.dumps(
         cleaned["contract_types"], ensure_ascii=False)
     # Si se reactiva sin proxima ejecucion, programarla ya.

@@ -17,6 +17,7 @@ export interface SearchProfile {
   seniority: string | null;
   experience_years: number | null;
   salary_min_cop: number | null;
+  salary_max_cop: number | null;
   contract_types: string[];
   // Dueño (uid) y marca de demo (datos de prueba de invitado).
   owner_uid?: string | null;

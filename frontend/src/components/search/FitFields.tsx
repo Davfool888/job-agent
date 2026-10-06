@@ -76,8 +76,29 @@ export function FitFields({ value, options, onChange, emptyLabel, disabled }: Pr
           title="Descarta ofertas que paguen menos (solo si declaran salario)"
         >
           <option value="">{none}</option>
-          {(options?.salary_bands ?? []).map((b) => (
+          {(options?.salary_min_options ?? []).map((b) => (
             <option key={b.min_cop} value={b.min_cop}>
+              {b.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Salario máximo
+        <select
+          className="select"
+          value={value.salary_max_cop ?? ""}
+          disabled={disabled}
+          onChange={(e) =>
+            onChange({
+              salary_max_cop: e.target.value === "" ? null : Number(e.target.value),
+            })
+          }
+          title="Descarta ofertas que paguen más (solo si declaran salario)"
+        >
+          <option value="">{none}</option>
+          {(options?.salary_max_options ?? []).map((b) => (
+            <option key={b.max_cop} value={b.max_cop}>
               {b.label}
             </option>
           ))}

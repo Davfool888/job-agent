@@ -61,6 +61,7 @@ const EMPTY_FORM = {
   seniority: null as string | null,
   experience_years: null as number | null,
   salary_min_cop: null as number | null,
+  salary_max_cop: null as number | null,
   contract_types: [] as string[],
 };
 
@@ -223,6 +224,7 @@ export function Search() {
       seniority: p.seniority ?? null,
       experience_years: p.experience_years ?? null,
       salary_min_cop: p.salary_min_cop ?? null,
+      salary_max_cop: p.salary_max_cop ?? null,
       contract_types: p.contract_types ?? [],
     });
     setKwRows(p.keywords.length > 0 ? [...p.keywords] : [""]);
@@ -258,6 +260,8 @@ export function Search() {
           form.experience_years === null ? null : Number(form.experience_years),
         salary_min_cop:
           form.salary_min_cop === null ? null : Number(form.salary_min_cop),
+        salary_max_cop:
+          form.salary_max_cop === null ? null : Number(form.salary_max_cop),
         contract_types: form.contract_types,
       };
       if (editing) {
@@ -578,6 +582,7 @@ export function Search() {
                       seniority: form.seniority,
                       experience_years: form.experience_years,
                       salary_min_cop: form.salary_min_cop,
+                      salary_max_cop: form.salary_max_cop,
                       contract_types: form.contract_types,
                     }}
                     options={fitOptions}
