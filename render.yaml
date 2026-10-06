@@ -17,9 +17,9 @@ services:
       - key: DB_BACKEND
         value: firestore  # o sqlite (requiere Render Disk persistente)
       - key: FIREBASE_PROJECT_ID
-        sync: false  # Configurar en Render Dashboard
-      - key: GOOGLE_APPLICATION_CREDENTIALS
-        sync: false  # Configurar en Render Dashboard (ruta al JSON)
+        sync: false  # Configurar en Render Dashboard (ej: job-agent-davfo)
+      - key: FIREBASE_SERVICE_ACCOUNT_B64
+        sync: false  # JSON de la service account en base64 (ver guía en README/proyecto)
       - key: GEMINI_API_KEY
         sync: false
       - key: OPENAI_COMPAT_API_KEY

@@ -39,14 +39,36 @@ from app.services.job_service import backfill_fingerprints
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.config import DB_BACKEND
+    import logging as _logging
+    import os as _os
 
+    from app.config import DB_BACKEND, FIREBASE_PROJECT_ID
+
+    _log = _logging.getLogger("job-agent.lifespan")
     if DB_BACKEND == "firestore":
         from app.database.firestore_client import FirestoreDatabase
 
-        db = FirestoreDatabase()
+        try:
+            db = FirestoreDatabase()
+        except Exception as error:
+            # Fallar rapido y en voz alta: arrancar sin BD real
+            # significaria perder datos sin que nadie lo note.
+            raise RuntimeError(
+                "DB_BACKEND=firestore pero sin credenciales validas. "
+                "Define FIREBASE_SERVICE_ACCOUNT_B64 (recomendado en "
+                "Render) o FIREBASE_SERVICE_ACCOUNT_JSON o "
+                "GOOGLE_APPLICATION_CREDENTIALS. Error original: "
+                f"{error}"
+            ) from error
+        _log.warning("DB backend: firestore (proyecto %s, persistente).",
+                     FIREBASE_PROJECT_ID or "?")
         backfill_fingerprints(db)
     else:
+        if not _os.getenv("ALLOW_EPHEMERAL_SQLITE"):
+            _log.warning(
+                "DB backend: sqlite LOCAL (efimero en Render sin disco: "
+                "los datos SE PIERDEN en cada deploy/reinicio). Para "
+                "produccion usa DB_BACKEND=firestore.")
         Base.metadata.create_all(bind=engine)
         ensure_columns()
         db = SessionLocal()
@@ -54,7 +76,6 @@ async def lifespan(app: FastAPI):
             backfill_fingerprints(db)
         finally:
             db.close()
-    import os as _os
     import sys as _sys
 
     under_test = (

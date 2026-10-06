@@ -55,11 +55,11 @@ def health():
 
 @router.get("/health/detailed")
 def health_detailed():
-    """Fase 0: diagnóstico sin efectos secundarios.
+    """Diagnostico sin efectos secundarios.
 
-    No toca BD ni arranca workers. Solo reporta disponibilidad
-    de dependencias críticas (buscador y PDF). Nunca lanza 500:
-    todo fallo se reporta como {"available": False}.
+    Solo lectura (ping de Firestore o chequeo de URL sqlite), sin
+    arrancar workers. Nunca lanza 500: todo fallo se reporta como
+    {"reachable": False, "error": ...}.
     """
     import shutil as _shutil
 
@@ -85,9 +85,37 @@ def health_detailed():
         except Exception as exc:  # noqa: BLE001
             return {"enabled": False, "error": str(exc)}
 
+    def _database() -> dict:
+        from app.config import DB_BACKEND as _backend
+        from app.config import FIREBASE_PROJECT_ID as _project
+
+        info: dict = {"backend": _backend, "reachable": False}
+        if _backend == "firestore":
+            info["project"] = _project or None
+            try:
+                from app.database.firestore_client import FirestoreDatabase
+
+                client = FirestoreDatabase().client
+                # Ping barato de lectura (no escribe nada).
+                list(client.collections())
+                info["reachable"] = True
+            except Exception as exc:  # noqa: BLE001
+                info["error"] = str(exc)[:300]
+        else:
+            import os as _os
+
+            from app.config import DATABASE_URL
+
+            info["url"] = DATABASE_URL
+            info["reachable"] = True
+            info["ephemeral_warning"] = (
+                not bool(_os.getenv("ALLOW_EPHEMERAL_SQLITE")))
+        return info
+
     return {
         "status": "ok",
         "db_backend": DB_BACKEND,
+        "database": _database(),
         "chromium": _chromium(),
         "pdflatex": {"available": _shutil.which("pdflatex") is not None},
         "scheduler": _scheduler(),
