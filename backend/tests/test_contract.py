@@ -38,6 +38,10 @@ REQUIRED_ROUTES = [
     ("GET", "/search-config"),
     ("PUT", "/search-config"),
     ("GET", "/search-config/options"),
+    ("GET", "/ai-keys/providers"),
+    ("GET", "/ai-keys/status"),
+    ("PUT", "/ai-keys/{provider}"),
+    ("DELETE", "/ai-keys/{provider}"),
 ]
 
 

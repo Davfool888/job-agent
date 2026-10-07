@@ -26,6 +26,10 @@ import {
 } from "../components/jobs/States";
 import { useJob, useJobExtra } from "../hooks/useApi";
 import { useAdaptToken } from "../hooks/useAdaptToken";
+import {
+  fetchAiStatus,
+  type AiKeyStatus,
+} from "../services/aiKeys";
 import { analyzeJob, updateJobStatus } from "../services/jobs";
 import {
   ADAPT_STAGES,
@@ -104,6 +108,14 @@ export function JobDetail() {
   const [adapt, setAdapt] = useState<AdaptCvResult | null>(null);
   const [adapting, setAdapting] = useState(false);
   const [adaptStage, setAdaptStage] = useState<string | null>(null);
+  // Proveedor IA propio para el CV ("" = automatico con fallback).
+  const [aiProvider, setAiProvider] = useState("");
+  const [aiStatus, setAiStatus] = useState<AiKeyStatus[]>([]);
+  useEffect(() => {
+    fetchAiStatus()
+      .then(setAiStatus)
+      .catch(() => setAiStatus([]));
+  }, []);
 
   const [cvView, setCvView] = useState<{
     phase: "loading" | "ready" | "error";
@@ -159,18 +171,22 @@ export function JobDetail() {
     }, 8000);
     try {
       setAdapt(
-        await adaptCvAsync(jobId, {
-          onPoll: (attempt, status) => {
-            if (status.status === "done") {
-              setAdaptStage("Listo ✓");
-            } else if (attempt > 4) {
-              // Tras ~12s sin done, casi seguro esta en Chromium/PDF.
-              setAdaptStage(ADAPT_STAGES[2]);
-            } else if (attempt > 1) {
-              setAdaptStage(ADAPT_STAGES[1]);
-            }
+        await adaptCvAsync(
+          jobId,
+          {
+            onPoll: (attempt, status) => {
+              if (status.status === "done") {
+                setAdaptStage("Listo ✓");
+              } else if (attempt > 4) {
+                // Tras ~12s sin done, casi seguro esta en Chromium/PDF.
+                setAdaptStage(ADAPT_STAGES[2]);
+              } else if (attempt > 1) {
+                setAdaptStage(ADAPT_STAGES[1]);
+              }
+            },
           },
-        }),
+          aiProvider || undefined,
+        ),
       );
     } catch (e) {
       const code =
@@ -242,6 +258,9 @@ export function JobDetail() {
             onAdapt={runAdapt}
             adapting={adapting}
             adaptStage={adaptStage}
+            aiProvider={aiProvider}
+            aiStatus={aiStatus}
+            onAiProviderChange={setAiProvider}
             adaptResult={adapt}
             onShowCv={() => void showCv()}
             generatingCv={generating}
@@ -429,6 +448,9 @@ function DetailBody({
   onAdapt,
   adapting,
   adaptStage,
+  aiProvider,
+  aiStatus,
+  onAiProviderChange,
   adaptResult,
   onShowCv,
   generatingCv,
@@ -448,6 +470,9 @@ function DetailBody({
   onAdapt: () => void;
   adapting: boolean;
   adaptStage: string | null;
+  aiProvider: string;
+  aiStatus: AiKeyStatus[];
+  onAiProviderChange: (v: string) => void;
   adaptResult: AdaptCvResult | null;
   onShowCv: () => void;
   generatingCv: boolean;
@@ -519,6 +544,39 @@ function DetailBody({
           >
             <Sparkles size={15} /> {adapting ? adaptStage ?? "Adaptando…" : "Adaptar perfil"}
           </button>
+          {aiStatus.some((p) => p.configured) && (
+            <select
+              className="select"
+              style={{ maxWidth: 220, fontSize: 12.5 }}
+              value={aiProvider}
+              disabled={adapting}
+              onChange={(e) => onAiProviderChange(e.target.value)}
+              title="Escoger API: usa tu key (cuota propia) con fallback automático. Sin elegir, usa la primera disponible."
+            >
+              <option value="">Escoger API: automático</option>
+              {aiStatus
+                .filter((p) => p.configured)
+                .map((p) => (
+                  <option
+                    key={p.id}
+                    value={p.id}
+                    disabled={p.status !== "disponible"}
+                    style={
+                      p.status !== "disponible"
+                        ? { color: "var(--text-muted)" }
+                        : undefined
+                    }
+                  >
+                    {p.label} —{" "}
+                    {p.status === "disponible"
+                      ? "disponible"
+                      : p.status === "cuota_agotada"
+                        ? "cuota agotada"
+                        : "no disponible"}
+                  </option>
+                ))}
+            </select>
+          )}
           <button
             className="btn btn-ghost btn-sm"
             disabled={generatingCv}

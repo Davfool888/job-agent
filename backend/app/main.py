@@ -26,6 +26,7 @@ from app.database.models import User  # noqa: F401
 from app.database.models import UserProfile  # noqa: F401
 from app.database.models import UserRichProfile  # noqa: F401
 from app.routers import auth as auth_router
+from app.routers import ai_keys as ai_keys_router
 from app.routers import discovery as discovery_router
 from app.routers import jobs as jobs_router
 from app.routers import profiles as profiles_router
@@ -125,6 +126,7 @@ async def collapse_slashes(request: Request, call_next):
 
 app.include_router(system_router.router)
 app.include_router(auth_router.router)
+app.include_router(ai_keys_router.router)
 app.include_router(profiles_router.router)
 app.include_router(search_profiles_router.router)
 app.include_router(discovery_router.router)

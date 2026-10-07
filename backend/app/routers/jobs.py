@@ -42,6 +42,19 @@ from .common import _profile_identity
 from .common import PDFConfigIn
 from .common import PDFConfigOut
 
+
+def _validate_provider(provider: str | None) -> None:
+    """400 si el id no es un proveedor soportado (None = auto)."""
+    if not provider:
+        return
+    from app.ai.user_providers import SUPPORTED
+
+    if provider not in SUPPORTED:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Proveedor desconocido: {provider}. Soportados: "
+                   f"{', '.join(sorted(SUPPORTED))}.")
+
 router = APIRouter()
 @router.get("/jobs", response_model=list[JobResponse])
 def list_jobs(
@@ -168,7 +181,9 @@ def tailor_job_profile(job_id: str, db: Session = Depends(get_db)):
 
 @router.post("/jobs/{job_id}/adapt-cv")
 def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db),
-                 token: str | None = Query(None)):
+                 token: str | None = Query(None),
+                 provider: str | None = Query(
+                     None, description="Proveedor IA propio (ver /ai-keys/status); vacio = auto")):
     """Adaptar-perfil: matching deterministico + seleccion + HTML/CSS
     + PDF (Chromium) con el perfil ficticio de invitado. Sin LaTeX,
     sin LLM obligatorio. Errores controlados {success, error}."""
@@ -178,9 +193,10 @@ def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db),
 
     # UID+email de la sesion (invitado = demo, Google = su perfil).
     uid, email = _adapt_identity(request, token)
+    _validate_provider(provider)
 
     try:
-        return adapt_profile_for_job(db, job_id, uid, email)
+        return adapt_profile_for_job(db, job_id, uid, email, provider)
     except AdaptError as error:
         return JSONResponse(
             status_code=error.http, content=error_body(error))
@@ -194,7 +210,9 @@ def adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db),
 
 @router.post("/jobs/{job_id}/adapt-cv/start", status_code=202)
 def start_adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_db),
-                       token: str | None = Query(None)):
+                       token: str | None = Query(None),
+                       provider: str | None = Query(
+                           None, description="Proveedor IA propio (ver /ai-keys/status); vacio = auto")):
     """Inicia la adaptacion en segundo plano. Responde 202 de inmediato
     (valida job + perfil sin Chromium); el cliente hace polling a
     GET /jobs/{job_id}/adapt-cv/status hasta done/error y luego descarga
@@ -205,13 +223,14 @@ def start_adapt_job_cv(job_id: str, request: Request, db: Session = Depends(get_
     from app.adapt.service import AdaptError, error_body
 
     uid, email = _adapt_identity(request, token)
+    _validate_provider(provider)
 
     try:
         prevalidate_adapt_job(db, job_id, uid, email)
     except AdaptError as error:
         return JSONResponse(
             status_code=error.http, content=error_body(error))
-    body = start_adapt_job(job_id, uid, email)
+    body = start_adapt_job(job_id, uid, email, provider)
     return JSONResponse(status_code=202, content=body)
 
 
@@ -356,12 +375,14 @@ def generate_job_cv(
     job_id: str,
     payload: dict[str, Any] | None = None,
     db: Session = Depends(get_db),
+    request: Request = None,
+    provider: str | None = Query(
+        None, description="Proveedor IA propio (ver /ai-keys/status); vacio = auto"),
 ):
     """Genera CV para la oferta (§10-§13): respeta umbrales salvo
     force=true. Estructura: data/cvs/job_<ID>/{analysis.json,
     cv_content.json, cv.tex, cv.pdf?}."""
     from app.agents.cv_agent import CVAgent
-    from app.ai.router import get_router
     from app.ai.schemas.cv_content import CVContent
     from app.config import CV_AUTO_THRESHOLD
     from app.config import CV_REVIEW_THRESHOLD
@@ -436,10 +457,24 @@ def generate_job_cv(
     from app.services import profile_cvs as pcvs
 
     references = pcvs.reference_texts_for_job(db, job)
+    # Cuota del usuario, nunca global: con keys se usa su proveedor
+    # (elegido o primero disponible con fallback); sin keys, flujo
+    # deterministico local.
+    from app.ai import user_llm
+
+    _validate_provider(provider)
+    uid, email = _profile_identity(request) if request is not None else (None, None)
+    user_client = user_llm.for_user(db, uid, provider)
     try:
-        generated = get_router().generate_cv_content(
-            job_dict, analysis, profile, reference_cvs=references or None
-        )
+        if user_client is not None:
+            generated = user_llm.generate_cv_content_for_user(
+                user_client, job_dict, analysis, profile,
+                references or None)
+        else:
+            from app.ai.providers.rule_based import RuleBasedProvider
+
+            generated = RuleBasedProvider().generate_cv_content(
+                job_dict, analysis, profile, references or None)
         content = CVContent.model_validate(generated)
     except Exception as error:  # noqa: BLE001
         raise HTTPException(

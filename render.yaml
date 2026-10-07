@@ -22,6 +22,8 @@ services:
         sync: false  # JSON de la service account en base64 (ver guía en README/proyecto)
       - key: GEMINI_API_KEY
         sync: false
+      - key: AI_KEYS_SECRET
+        sync: false  # Fernet 44 chars o hex 64 para cifrar keys de usuarios
       - key: OPENAI_COMPAT_API_KEY
         sync: false
       - key: OPENAI_COMPAT_BASE_URL

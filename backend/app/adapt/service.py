@@ -64,8 +64,14 @@ def _as_list(value) -> list:
 
 
 def adapt_profile_for_job(db, job_id, uid: str | None = None,
-                          email: str | None = None) -> dict:
-    """Ejecuta el flujo completo y devuelve la respuesta de la API."""
+                          email: str | None = None,
+                          preferred_provider: str | None = None) -> dict:
+    """Ejecuta el flujo completo y devuelve la respuesta de la API.
+
+    `preferred_provider` (id de proveedor del usuario o None=auto):
+    la IA del CV consume SOLO keys del usuario con fallback
+    automatico; sin keys, flujo deterministico local (sin globales).
+    """
     from app.adapt import guest, html_renderer, llm, matcher, pdf, selector
     from app.services.job_service import get_job_by_id
     from app.services.search_profiles import _is_guest
@@ -140,6 +146,21 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
     polished = llm.polish_summary(
         content.get("summary", ""), content.get("target_role", ""),
         matching.get("matched_skills") or [])
+    # Capa IA del usuario (cuota propia): si tiene keys, pule con su
+    # proveedor (elegido o primero disponible con fallback). Sin keys
+    # se conserva el resultado deterministico (sin globales).
+    user_client = None
+    try:
+        from app.ai import user_llm
+
+        user_client = user_llm.for_user(db, uid, preferred_provider)
+        if user_client is not None:
+            polished = user_llm.polish_summary_for_user(
+                user_client, content.get("summary", ""),
+                content.get("target_role", ""),
+                matching.get("matched_skills") or [])
+    except Exception:  # noqa: BLE001
+        user_client = None
     content["summary"] = polished["summary"]
     content["summary_provider"] = polished["provider"]
 
@@ -157,6 +178,7 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
     adaptations: list[dict] = []
     if pdf_config.get("ai_rewrite_bullets"):
         from app.adapt import rewrite as adapt_rewrite
+        from app.ai import user_llm as _user_llm
 
         allowed = list(content.get("skills") or [])
         role = str(content.get("target_role") or "")
@@ -166,7 +188,16 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
             current = [str(b) for b in (exp.get("bullets") or []) if b]
             if not current:
                 continue
-            result = adapt_rewrite.rewrite_bullets(current, allowed, role)
+            if user_client is not None:
+                try:
+                    result = _user_llm.rewrite_bullets_for_user(
+                        user_client, current, allowed, role)
+                except Exception:  # noqa: BLE001
+                    result = adapt_rewrite.rewrite_bullets(
+                        current, allowed, role)
+            else:
+                result = adapt_rewrite.rewrite_bullets(
+                    current, allowed, role)
             if result["bullets"] != current:
                 adaptations.append({
                     "experience": str(exp.get("title") or ""),

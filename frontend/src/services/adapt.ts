@@ -152,12 +152,16 @@ function backendErrorOf(e: unknown): { code: string; message: string } | null {
 // en fondo aunque el cliente siga en polling.
 export async function startAdaptCv(
   jobId: number | string,
+  provider?: string | null,
 ): Promise<AdaptStartAccepted> {
   try {
     const { data } = await api.post<AdaptStartAccepted>(
       `/jobs/${jobId}/adapt-cv/start`,
       null,
-      { timeout: 30000 },
+      {
+        timeout: 30000,
+        ...(provider ? { params: { provider } } : {}),
+      },
     );
     return data;
   } catch (e) {
@@ -229,8 +233,9 @@ export async function pollAdaptCv(
 export async function adaptCvAsync(
   jobId: number | string,
   options: PollAdaptOptions = {},
+  provider?: string | null,
 ): Promise<AdaptCvResult> {
-  await startAdaptCv(jobId);
+  await startAdaptCv(jobId, provider);
   return pollAdaptCv(jobId, options);
 }
 

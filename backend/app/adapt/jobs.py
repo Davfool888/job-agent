@@ -77,7 +77,8 @@ def _owner_status_key(uid: str | None, email: str | None,
 
 
 def start_adapt_job(job_id, uid: str | None = None,
-                    email: str | None = None) -> dict:
+                    email: str | None = None,
+                    preferred_provider: str | None = None) -> dict:
     """Valida rapido y lanza el worker. Responde de inmediato.
 
     Devuelve {"accepted": True, "job_id", "status": "processing"|"done"}.
@@ -105,7 +106,8 @@ def start_adapt_job(job_id, uid: str | None = None,
     with _locks_lock:
         _running.add(key)
     thread = threading.Thread(
-        target=_run_in_background, args=(job_id, uid, email), daemon=True)
+        target=_run_in_background,
+        args=(job_id, uid, email, preferred_provider), daemon=True)
     thread.start()
     # Validaciones rapidas ya pasaron arriba si se llamo a
     # prevalidate_adapt_job(); el worker reporta el resto por status.
@@ -176,14 +178,16 @@ def get_adapt_status(db, job_id, uid: str | None = None,
 
 
 def _run_in_background(job_id, uid: str | None,
-                       email: str | None = None) -> None:
+                       email: str | None = None,
+                       preferred_provider: str | None = None) -> None:
     from app.adapt.service import AdaptError, adapt_profile_for_job
     from app.scheduler import _close_db, _new_db
 
     key = _owner_status_key(uid, email, job_id)
     handle, needs_close = _new_db()
     try:
-        result = adapt_profile_for_job(handle, job_id, uid, email)
+        result = adapt_profile_for_job(handle, job_id, uid, email,
+                                       preferred_provider)
         _write_status(job_id, {
             "status": "done",
             "job_id": str(job_id),

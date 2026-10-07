@@ -631,3 +631,30 @@ class SearchConfig(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+
+class UserAIKey(Base):
+    """API keys de IA por usuario (cuota propia, nunca global).
+
+    key_enc es Fernet con AI_KEYS_SECRET. Jamas se expone al cliente:
+    solo GET /ai-keys/status (sin material) y uso interno.
+    """
+
+    __tablename__ = "user_ai_keys"
+
+    uid = Column(String(128), primary_key=True, index=True)
+    provider = Column(String(32), primary_key=True, index=True)
+
+    key_enc = Column(Text, nullable=False, default="")
+
+    # Ultimo estado conocido: disponible|cuota_agotada|error|
+    # no_verificada. detail = mensaje corto (sin la key).
+    status = Column(String(32), nullable=False, default="no_verificada")
+    detail = Column(String(300), nullable=False, default="")
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )

@@ -6,6 +6,7 @@ import { useTheme, type Theme } from "../hooks/useTheme";
 import { fetchPDFConfig, updatePDFConfig, resetPDFConfig, type PDFConfig, type PDFConfigUpdate } from "../services/pdfConfig";
 import { fetchSearchConfig, fetchSearchOptions, updateSearchConfig, type FitConfig, type FitOptions } from "../services/searchConfig";
 import { FitFields } from "../components/search/FitFields";
+import { AiKeysCard } from "../components/settings/AiKeysCard";
 
 const FONT_FAMILIES = [
   { value: "georgia", label: "Georgia (clásica, serif)" },
@@ -338,6 +339,8 @@ export function Settings() {
             />
           </div>
         )}
+
+        <AiKeysCard />
 
         {pdfConfig && (
           <div className="card" style={{ marginBottom: 16 }}>
