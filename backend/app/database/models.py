@@ -658,3 +658,53 @@ class UserAIKey(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+
+class TelegramLink(Base):
+    """Vinculacion Telegram por usuario (una fila por uid).
+
+    chat_id solo existe tras confirmar desde el bot. link_code es el
+    codigo temporal del deep link (un solo uso, con expiracion).
+    """
+
+    __tablename__ = "telegram_links"
+
+    uid = Column(String(128), primary_key=True, index=True)
+
+    chat_id = Column(String(64), nullable=True, index=True)
+    username = Column(String(128), nullable=True)
+    linked_at = Column(DateTime, nullable=True)
+
+    link_code = Column(String(64), nullable=True, index=True)
+    code_created_at = Column(DateTime, nullable=True)
+    code_used = Column(Integer, nullable=False, default=0)
+
+    # Si Telegram rechaza los envios (bot bloqueado/chat invalido).
+    invalid = Column(Integer, nullable=False, default=0)
+    last_error = Column(String(300), nullable=False, default="")
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
+class TelegramSent(Base):
+    """Ofertas ya avisadas por Telegram (anti-duplicados por usuario)."""
+
+    __tablename__ = "telegram_sent"
+
+    uid = Column(String(128), primary_key=True, index=True)
+    job_id = Column(String(64), primary_key=True, index=True)
+
+    sent_at = Column(DateTime, default=datetime.utcnow)
+    message_id = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )

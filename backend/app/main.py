@@ -32,6 +32,7 @@ from app.routers import jobs as jobs_router
 from app.routers import profiles as profiles_router
 from app.routers import search_profiles as search_profiles_router
 from app.routers import system as system_router
+from app.routers import telegram as telegram_router
 # Re-export para compatibilidad con tests que parchan app.main.get_scraper
 from app.scraper.registry import available_sources  # noqa: F401
 from app.scraper.registry import get_scraper  # noqa: F401
@@ -93,6 +94,24 @@ async def lifespan(app: FastAPI):
             warmup_chromium()
         except Exception:  # noqa: BLE001
             pass
+        # Webhook de Telegram (best-effort, nunca tumba el arranque).
+        try:
+            from app.config import TELEGRAM_PUBLIC_URL
+            from app.services import telegram as _tg
+
+            base = (TELEGRAM_PUBLIC_URL or "").strip().rstrip("/")
+            if base and _tg.enabled():
+                from app.config import TELEGRAM_WEBHOOK_SECRET
+
+                payload = {"url": f"{base}/telegram/webhook"}
+                if (TELEGRAM_WEBHOOK_SECRET or "").strip():
+                    payload["secret_token"] = \
+                        TELEGRAM_WEBHOOK_SECRET.strip()
+                _tg._api("setWebhook", payload, timeout=15)
+                _log.warning("Telegram webhook registrado: %s",
+                             payload["url"])
+        except Exception as error:  # noqa: BLE001
+            _log.warning("Telegram webhook no registrado: %s", error)
     yield
     from app.scheduler import stop_scheduler
 
@@ -129,5 +148,6 @@ app.include_router(auth_router.router)
 app.include_router(ai_keys_router.router)
 app.include_router(profiles_router.router)
 app.include_router(search_profiles_router.router)
+app.include_router(telegram_router.router)
 app.include_router(discovery_router.router)
 app.include_router(jobs_router.router)

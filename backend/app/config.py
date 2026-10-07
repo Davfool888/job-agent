@@ -118,6 +118,23 @@ OPENAI_COMPAT_MODEL = os.getenv("OPENAI_COMPAT_MODEL", "gpt-4o-mini")
 # decreto; tambien sobreescribible con env SMMLV_COP.
 SMMLV_COP = int(os.getenv("SMMLV_COP", "1423500"))
 
+# --- Telegram (notificaciones de ofertas, fase 1: solo avisos) ---
+# Token del bot de BotFather. Sin esto, Telegram queda deshabilitado
+# (el resto de la app funciona igual).
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+# Secreto para validar el webhook (header X-Telegram-Bot-Api-Secret-Token).
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+# Usuario del bot sin @ (para deep links t.me/<bot>?start=...).
+# Si esta vacio se resuelve con getMe contra la API.
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "")
+# URL publica para auto-registrar el webhook al arrancar
+# (ej: https://tu-api.onrender.com). Vacio = registro manual.
+TELEGRAM_PUBLIC_URL = os.getenv("TELEGRAM_PUBLIC_URL", "")
+# Tope de avisos por ejecucion de perfil (anti-spam en lote).
+TELEGRAM_MAX_PER_RUN = int(os.getenv("TELEGRAM_MAX_PER_RUN", "10"))
+# Vigencia del codigo de vinculacion (minutos).
+TELEGRAM_LINK_TTL_MINUTES = int(os.getenv("TELEGRAM_LINK_TTL_MINUTES", "15"))
+
 # --- Scheduler de busqueda automatica ---
 # En Render (gratuito) la instancia duerme: ademas del scheduler interno,
 # un cron externo puede llamar POST /scheduler/tick (ver SCHEDULER_CRON_SECRET).

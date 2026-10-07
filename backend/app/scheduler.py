@@ -91,7 +91,8 @@ def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | Non
     summary = {
         "profile_id": str(profile_id), "found": 0, "new": 0,
         "analyzed": 0, "relevant": 0, "errors": [],
-        "fit_filtered": {},
+        "fit_filtered": {}, "telegram": {"sent": 0, "skipped": 0,
+                                         "errors": []},
     }
     try:
         profile = profiles.get_profile(db, profile_id)
@@ -182,6 +183,16 @@ def run_profile(profile_id, *, db=None, uid: str | None = None, email: str | Non
             new_ids = _count_new(db, started_at, str(profile_id))
             summary["new"] = len(new_ids)
             summary["fit_filtered"] = dict(fit_discarded)
+            # Telegram (fase 1, solo avisos): ofertas nuevas al dueño.
+            # Jamas rompe la busqueda: todo fallo queda en el resumen.
+            try:
+                from app.services import telegram as _tg
+
+                summary["telegram"] = _tg.notify_new_jobs(
+                    db, uid, list(new_ids))
+            except Exception as error:  # noqa: BLE001
+                summary["telegram"] = {"sent": 0, "skipped": 0,
+                                       "errors": [str(error)[:150]]}
             profiles.touch_run(
                 db, profile_id, status="ok", found=summary["found"],
                 new=summary["new"], now=datetime.utcnow(),

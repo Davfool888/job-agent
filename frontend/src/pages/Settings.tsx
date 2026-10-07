@@ -7,6 +7,7 @@ import { fetchPDFConfig, updatePDFConfig, resetPDFConfig, type PDFConfig, type P
 import { fetchSearchConfig, fetchSearchOptions, updateSearchConfig, type FitConfig, type FitOptions } from "../services/searchConfig";
 import { FitFields } from "../components/search/FitFields";
 import { AiKeysCard } from "../components/settings/AiKeysCard";
+import { TelegramCard } from "../components/settings/TelegramCard";
 
 const FONT_FAMILIES = [
   { value: "georgia", label: "Georgia (clásica, serif)" },
@@ -341,6 +342,8 @@ export function Settings() {
         )}
 
         <AiKeysCard />
+
+        <TelegramCard />
 
         {pdfConfig && (
           <div className="card" style={{ marginBottom: 16 }}>

@@ -24,6 +24,14 @@ services:
         sync: false
       - key: AI_KEYS_SECRET
         sync: false  # Fernet 44 chars o hex 64 para cifrar keys de usuarios
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false  # Token de BotFather (sin esto Telegram queda off)
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true  # Valida el webhook de Telegram
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false  # Opcional (si vacio se resuelve con getMe)
+      - key: TELEGRAM_PUBLIC_URL
+        sync: false  # https://tu-api.onrender.com (auto-registra webhook; vacio = manual)
       - key: OPENAI_COMPAT_API_KEY
         sync: false
       - key: OPENAI_COMPAT_BASE_URL

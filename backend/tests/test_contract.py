@@ -42,6 +42,11 @@ REQUIRED_ROUTES = [
     ("GET", "/ai-keys/status"),
     ("PUT", "/ai-keys/{provider}"),
     ("DELETE", "/ai-keys/{provider}"),
+    ("POST", "/telegram/link/start"),
+    ("POST", "/telegram/webhook"),
+    ("GET", "/telegram/status"),
+    ("POST", "/telegram/test"),
+    ("DELETE", "/telegram"),
 ]
 
 
