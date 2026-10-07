@@ -412,9 +412,9 @@ def get_all_jobs(
 ) -> list[Record]:
     """Ofertas visibles para la sesion, con estado efectivo del usuario.
 
-    Sin uid: comportamiento historico (todo global). Con uid: solo
-    ofertas del usuario (owner_uid) o encontradas por sus perfiles,
-    con su estado propio superpuesto (el global queda como legado).
+    El catalogo es GLOBAL con dedup (lo ve todo el mundo); lo
+    per-usuario es el ESTADO superpuesto (vista/guardada/descartada).
+    Sin uid: comportamiento historico (todo global, estado legado).
     """
     if not uid:
         if is_firestore(db):
@@ -432,7 +432,9 @@ def get_all_jobs(
             )
         return [orm_to_record(row) for row in query.limit(limit).all()]
 
-    # Con uid: filtrar por owner_uid o por perfiles de búsqueda del usuario
+    # Con uid: MISMO catalogo global, con su estado propio superpuesto
+    # (el global queda como legado). Filtrar por dueno rompia abrir
+    # ofertas encontradas por otra identidad (scheduler/invitado).
     from app.services.search_profiles import _is_guest, GUEST_OWNER
     store_uid = GUEST_OWNER if _is_guest(uid, email) else uid
 
@@ -449,22 +451,7 @@ def get_all_jobs(
             )
         candidates = [orm_to_record(row) for row in query.limit(5000).all()]
 
-    # Filtrar por owner_uid o por perfiles de búsqueda
-    visible = []
-    for record in candidates:
-        # Verificar si la oferta pertenece al usuario
-        if getattr(record, 'owner_uid', None) == store_uid:
-            visible.append(record)
-            continue
-        # Verificar si fue encontrada por un perfil del usuario
-        profile_ids = _parse_list(getattr(record, 'search_profile_ids', None))
-        if profile_ids:
-            from app.services import search_profiles as profiles
-            for pid in profile_ids:
-                profile = profiles.get_profile(db, pid)
-                if profile and profile.get('owner_uid') == store_uid:
-                    visible.append(record)
-                    break
+    visible = list(candidates)
 
     # Aplicar estado del usuario
     states = _all_user_states(db, store_uid)
@@ -494,8 +481,8 @@ def get_job_by_id(
         record = orm_to_record(row) if row else None
     if record is None or not uid:
         return record
-    if record.id not in _visible_ids(db, uid, email):
-        return None
+    # Catalogo global: existe = visible. Solo se superpone el estado
+    # propio del usuario (nunca se oculta por dueno ajeno).
     return _apply_state(
         record,
         get_user_job_state(db, _store_uid(uid, email), record.id))
@@ -1731,44 +1718,6 @@ def _store_uid(uid: str | None, email: str | None) -> str | None:
     return uid
 
 
-def _visible_ids(db: Session, uid: str | None, email: str | None) -> set[str]:
-    """IDs de ofertas visibles para el usuario (por owner_uid o perfiles)."""
-    if not uid:
-        return set()
-    store_uid = _store_uid(uid, email)
-    visible = set()
-    # Ofertas del usuario
-    if is_firestore(db):
-        from app.database import firestore_repo as fs
-        for snap in fs._col(db, "jobs").stream():
-            data = snap.to_dict()
-            if data.get("owner_uid") == store_uid:
-                visible.add(snap.id)
-    else:
-        rows = db.query(Job).filter(Job.owner_uid == store_uid).all()
-        for row in rows:
-            visible.add(str(row.id))
-    # Ofertas encontradas por perfiles del usuario
-    from app.services import search_profiles as profiles
-    for profile in profiles.list_profiles(db):
-        if profile.get("owner_uid") == store_uid:
-            pid = str(profile["id"])
-            if is_firestore(db):
-                from app.database import firestore_repo as fs
-                for snap in fs._col(db, "jobs").stream():
-                    data = snap.to_dict()
-                    pids = data.get("search_profile_ids") or []
-                    if pid in pids:
-                        visible.add(snap.id)
-            else:
-                rows = db.query(Job).all()
-                for row in rows:
-                    pids = _parse_list(getattr(row, "search_profile_ids", None))
-                    if pid in pids:
-                        visible.add(str(row.id))
-    return visible
-
-
 def _all_user_states(db: Session, store_uid: str | None) -> dict[str, dict]:
     """Estados de oferta por usuario (subcoleccion users/{uid}/job_states)."""
     if not store_uid:
@@ -1799,25 +1748,15 @@ def _apply_state(record: Record, state: dict | None) -> Record:
 
 
 def can_view_job(db: Session, job_id: str, uid: str | None, email: str | None) -> bool:
-    """Verifica si un usuario puede ver una oferta específica."""
+    """Verifica si un usuario puede ver una oferta específica.
+
+    Catalogo global: si existe, se puede ver (el estado mostrado es
+    el propio de cada usuario).
+    """
     if not uid:
         return True  # Sin sesión: acceso legado
-    store_uid = _store_uid(uid, email)
     job = get_job_by_id(db, job_id)
-    if not job:
-        return False
-    # Verificar si la oferta pertenece al usuario
-    if getattr(job, 'owner_uid', None) == store_uid:
-        return True
-    # Verificar si fue encontrada por un perfil del usuario
-    profile_ids = _parse_list(getattr(job, 'search_profile_ids', None))
-    if profile_ids:
-        from app.services import search_profiles as profiles
-        for pid in profile_ids:
-            profile = profiles.get_profile(db, pid)
-            if profile and profile.get('owner_uid') == store_uid:
-                return True
-    return False
+    return job is not None
 
 
 def _doc_to_rich_input(doc: dict) -> dict:
