@@ -60,6 +60,24 @@ export function ProfilePage() {
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
   const [listsHydrated, setListsHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<"simple" | "structured">("simple");
+  // Se incrementa al guardar el tab simple: el estructurado se
+  // refresca solo si no tiene ediciones pendientes.
+  const [simpleRevision, setSimpleRevision] = useState(0);
+
+  // Tras guardar el estructurado: lo simple refleja lo guardado
+  // (listas + plano recargado del backend, ya sincronizado).
+  const handleStructuredSaved = (sections: {
+    experience: ProfileEntry[];
+    education: ProfileEntry[];
+    languages: LanguageEntry[];
+  }) => {
+    setSimpleExperiences(sections.experience);
+    setSimpleEducation(sections.education);
+    setSimpleLanguages(sections.languages);
+    setForm(null);
+    setSaved(false);
+    void reload();
+  };
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<PdfImportResult | null>(null);
   const [importLoading, setImportLoading] = useState(false);
@@ -230,6 +248,7 @@ export function ProfilePage() {
         languages: mergeSection(simpleLanguages, rich?.languages as LanguageEntry[] | undefined),
       });
       setSaved(true);
+      setSimpleRevision((r) => r + 1);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Error inesperado");
     } finally {
@@ -356,8 +375,8 @@ export function ProfilePage() {
           </div>
           <p className="card-sub" style={{ marginBottom: 0 }}>
             {activeTab === "simple"
-              ? "Información básica de contacto, experiencia laboral, educación e idiomas (descripción general)."
-              : "Perspectivas detalladas por experiencia/educación: tareas específicas, habilidades y herramientas por óptica (Data Analytics, Software, Finanzas, etc.)."}
+              ? "Información básica de contacto, experiencia laboral, educación e idiomas (descripción general). Lo que guardes aquí aparece también en el estructurado."
+              : "Todo editable con guardado: lo que guardes aquí aparece también en el simple. Se carga solo al abrir esta pestaña."}
           </p>
         </div>
 
@@ -388,6 +407,8 @@ export function ProfilePage() {
             simpleExperiences={simpleExperiences}
             simpleEducation={simpleEducation}
             simpleLanguages={simpleLanguages}
+            externalRevision={simpleRevision}
+            onSaved={handleStructuredSaved}
           />
         )}
       </div>

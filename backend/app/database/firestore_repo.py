@@ -515,6 +515,15 @@ def get_unscored_jobs(db, limit: int = 50) -> list[Record]:
 # Perfil (profiles/base)
 # ---------------------------------------------------------------------------
 
+def get_base_doc(db) -> dict:
+    """Documento crudo profiles/base ({} si no existe)."""
+    snap = _col(db, "profiles").document("base").get()
+    if not snap.exists:
+        return {}
+    data = snap.to_dict() or {}
+    return dict(data) if isinstance(data, dict) else {}
+
+
 def get_profile_doc(db) -> dict:
     from app.services.job_service import DEFAULT_PROFILE
 

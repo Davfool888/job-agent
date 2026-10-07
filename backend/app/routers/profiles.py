@@ -215,7 +215,7 @@ async def import_pdf_profile(
         if uid and not is_admin_email(email):
             saved = save_rich_profile_for(db, uid, email, result["profile"])
         else:
-            saved = save_rich_profile(result["profile"])
+            saved = save_rich_profile(result["profile"], db=db)
         response["applied"] = True
         if isinstance(saved, dict):
             response["warnings"] = saved.get("warnings",
@@ -287,7 +287,7 @@ async def import_latex_profile(
             # No-admin: guarda en SU registro, nunca en base_cv.json.
             saved = save_rich_profile_for(db, uid, email, result["profile"])
         else:
-            saved = save_rich_profile(result["profile"])
+            saved = save_rich_profile(result["profile"], db=db)
             BASE_CV_PATH.parent.mkdir(parents=True, exist_ok=True)
             (BASE_CV_PATH.parent / "base_cv.tex").write_text(
                 tex_text, encoding="utf-8"

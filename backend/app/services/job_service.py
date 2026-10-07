@@ -806,7 +806,7 @@ def get_profile(db: Session, uid: str | None = None, email: str | None = None) -
             from app.database import firestore_repo as fs
 
             merged = fs.get_profile_doc(db)
-            _merge_rich_profile(merged)
+            _merge_rich_profile(merged, db)
             return merged
         row = db.query(Profile).filter(Profile.id == 1).first()
         if not row:
@@ -819,7 +819,7 @@ def get_profile(db: Session, uid: str | None = None, email: str | None = None) -
         except ValueError:
             data = {}
         merged = {**DEFAULT_PROFILE, **data}
-        _merge_rich_profile(merged)
+        _merge_rich_profile(merged, db)
         return merged
 
     # Invitado: datos demo de Andrés Felipe
@@ -840,15 +840,23 @@ def get_profile(db: Session, uid: str | None = None, email: str | None = None) -
     return out
 
 
-def _merge_rich_profile(merged: dict) -> None:
-    """Une base_cv.json (fuente rica modular) al perfil plano, de forma
-    aditiva: union de skills/target_roles + passthrough de secciones
-    (experience, education, projects, certifications) con perspectivas.
-    Consumidores viejos siguen funcionando."""
-    try:
-        from app.agents.cv_agent import CVAgent
+def _merge_rich_profile(merged: dict, db=None) -> None:
+    """Une la base rica modular al perfil plano, de forma aditiva.
 
-        rich = CVAgent().base_profile() or {}
+    En Firestore lee profiles/base (persistente); en SQLite lee
+    base_cv.json. Jamas mezcla usuarios: solo la base global."""
+    try:
+        if db is not None and is_firestore(db):
+            from app.database import firestore_repo as fs
+
+            doc = fs.get_base_doc(db)
+            rich = _doc_to_rich_input(doc)
+            source = "profiles/base"
+        else:
+            from app.agents.cv_agent import CVAgent
+
+            rich = CVAgent().base_profile() or {}
+            source = "base_cv.json"
     except Exception:
         return
     if not isinstance(rich, dict):
@@ -871,22 +879,29 @@ def _merge_rich_profile(merged: dict) -> None:
                     "personal", "professional_summary", "languages"):
         if section not in merged and section in rich:
             merged[section] = rich[section]
-    merged["_rich_source"] = "base_cv.json"
+    merged["_rich_source"] = source
 
 
 def get_rich_profile(db: Session) -> dict:
     """Perfil modular completo para administracion (base bloqueada +
-    secciones con perspectivas)."""
-    from app.agents.cv_agent import CVAgent
+    secciones con perspectivas). En Firestore vive en profiles/base
+    (persistente); en SQLite en base_cv.json."""
     from app.profile.perspectives import SECTIONS
     from app.profile.perspectives import validate_profile
-
-    agent = CVAgent()
-    rich = agent.base_profile() or {}
-    flat = get_profile(db)
     from app.profile import schema as profile_schema
 
-    normalized, schema_warnings = profile_schema.normalize_rich_profile(rich)
+    if is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        rich_input = _doc_to_rich_input(fs.get_base_doc(db))
+        flat = fs.get_profile_doc(db)
+    else:
+        from app.agents.cv_agent import CVAgent
+
+        rich_input = CVAgent().base_profile() or {}
+        flat = get_profile(db)
+    normalized, schema_warnings = profile_schema.normalize_rich_profile(
+        rich_input)
     rich = normalized
     for section in SECTIONS:
         if not isinstance(rich.get(section), list):
@@ -901,19 +916,43 @@ def get_rich_profile(db: Session) -> dict:
     return rich
 
 
-def save_rich_profile(data: dict) -> dict:
-    """Persiste base_cv.json (fuente de verdad modular). Valida y
-    devuelve advertencias sin borrar nada."""
+def save_rich_profile(data: dict, db: Session = None) -> dict:
+    """Persiste el perfil base global. Valida y devuelve advertencias
+    sin borrar nada. En Firestore vive en profiles/base (persistente);
+    en SQLite en base_cv.json. `db` es opcional por compatibilidad:
+    sin db (o SQLite) usa el archivo."""
     import json as _json
 
-    from app.agents.cv_agent import CVAgent
-    from app.config import BASE_CV_PATH
     from app.profile import schema as profile_schema
     from app.profile.perspectives import SECTIONS
     from app.profile.perspectives import validate_profile
 
     if not isinstance(data, dict):
         raise ValueError("Perfil invalido: se esperaba un objeto")
+
+    if db is not None and is_firestore(db):
+        from app.database import firestore_repo as fs
+
+        current = _doc_to_rich_input(fs.get_base_doc(db))
+        merged = dict(current)
+        for key in ("personal", "professional_summary", "skills",
+                    "languages", "certifications", "target_roles",
+                    "technical_skills", "soft_skills", "years_experience"):
+            if key in data:
+                merged[key] = data[key]
+        for section in SECTIONS:
+            if section in data and isinstance(data[section], list):
+                merged[section] = data[section]
+        flat = fs.get_profile_doc(db)
+        payload = {**flat, **merged}
+        fs.save_profile_doc(db, payload, DEFAULT_PROFILE)
+        normalized, schema_warnings = profile_schema.normalize_rich_profile(
+            merged)
+        warnings = validate_profile(normalized) + schema_warnings
+        return {"profile": normalized, "warnings": warnings}
+
+    from app.agents.cv_agent import CVAgent
+    from app.config import BASE_CV_PATH
 
     current = CVAgent().base_profile() or {}
     merged = dict(current)
@@ -945,7 +984,7 @@ def save_profile(db: Session, data: dict) -> dict:
         from app.database import firestore_repo as fs
 
         merged = fs.save_profile_doc(db, normalized, DEFAULT_PROFILE)
-        _merge_rich_profile(merged)
+        _merge_rich_profile(merged, db)
         return merged
     row = db.query(Profile).filter(Profile.id == 1).first()
     if not row:
@@ -1781,6 +1820,25 @@ def can_view_job(db: Session, job_id: str, uid: str | None, email: str | None) -
     return False
 
 
+def _doc_to_rich_input(doc: dict) -> dict:
+    """Documento crudo profiles/base -> claves de perfil estructurado."""
+    doc = doc or {}
+    return {
+        "personal": doc.get("personal") or {},
+        "professional_summary": doc.get("summary") or "",
+        "years_experience": doc.get("years_experience"),
+        "technical_skills": doc.get("technical_skills") or [],
+        "soft_skills": doc.get("soft_skills") or [],
+        "languages": doc.get("languages") or [],
+        "target_roles": doc.get("target_roles") or [],
+        "experience": doc.get("experience") or [],
+        "education": doc.get("education") or [],
+        "projects": doc.get("projects") or [],
+        "certifications": doc.get("certifications") or [],
+        "skills": doc.get("skills") or {},
+    }
+
+
 def _assemble_rich(base_rich: dict, flat: dict) -> dict:
     """Normaliza + valida un perfil estructurado y le pega su plano."""
     from app.profile.perspectives import SECTIONS
@@ -1835,7 +1893,7 @@ def save_rich_profile_for(
     if not isinstance(data, dict):
         raise ValueError("Perfil invalido: se esperaba un objeto")
     if not uid or _is_admin(email):
-        out = save_rich_profile(data)
+        out = save_rich_profile(data, db=db)
         out["scope"] = "admin" if uid else "shared"
         return out
     from app.profile.perspectives import SECTIONS

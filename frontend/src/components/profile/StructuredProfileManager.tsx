@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ErrorState, LoadingState } from "../../components/jobs/States";
 import {
   Autocomplete,
@@ -39,6 +39,62 @@ interface StructuredProfileManagerProps {
   simpleExperiences: ProfileEntry[];
   simpleEducation: ProfileEntry[];
   simpleLanguages: LanguageEntry[];
+  /** Se incrementa cuando el tab simple guarda: recarga si no hay ediciones pendientes. */
+  externalRevision: number;
+  /** Tras guardar aquí: el padre refresca listas simples y el plano. */
+  onSaved?: (sections: {
+    experience: ProfileEntry[];
+    education: ProfileEntry[];
+    languages: LanguageEntry[];
+  }) => void;
+}
+
+const EXP_BASE_FIELDS = [
+  "company",
+  "title",
+  "start_date",
+  "end_date",
+  "description",
+] as const;
+const EDU_BASE_FIELDS = [
+  "institution",
+  "degree",
+  "start_date",
+  "end_date",
+  "description",
+] as const;
+
+function mergeBaseFields(
+  richList: ProfileEntry[],
+  simpleList: ProfileEntry[],
+  fields: readonly string[],
+): ProfileEntry[] {
+  const out: ProfileEntry[] = richList.map((richExp: any, idx: number) => {
+    const simpleExp = (simpleList as any[])[idx];
+    if (!simpleExp) return richExp;
+    const merged = { ...richExp };
+    for (const f of fields) {
+      const rv = (richExp as any)[f];
+      const sv = (simpleExp as any)[f];
+      if (f === "is_current") {
+        merged[f] = rv ?? sv;
+      } else if (
+        rv !== undefined &&
+        rv !== null &&
+        String(rv).trim() !== ""
+      ) {
+        merged[f] = rv;
+      } else if (sv !== undefined) {
+        merged[f] = sv;
+      }
+    }
+    return merged;
+  });
+  // Entradas que solo existen en el simple (sin guardar aun).
+  for (let k = richList.length; k < simpleList.length; k++) {
+    out.push({ ...(simpleList[k] as object), perspectives: [] } as ProfileEntry);
+  }
+  return out;
 }
 
 export function StructuredProfileManager({
@@ -46,6 +102,8 @@ export function StructuredProfileManager({
   simpleExperiences,
   simpleEducation,
   simpleLanguages,
+  externalRevision,
+  onSaved,
 }: StructuredProfileManagerProps) {
   const [catalogs, setCatalogs] = useState<Catalogs | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,14 +130,18 @@ export function StructuredProfileManager({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Ediciones pendientes: si el tab simple guarda mientras hay cambios
+  // sin guardar aquí, se conservan (no se pisan con recarga).
+  const dirtyRef = useRef(false);
+  const loadedRevision = useRef<number | null>(null);
+  const autoLoaded = useRef(false);
 
   const load = async () => {
     setLoading(true);
     setLoadError(null);
     setLockedRich(false);
     try {
-      const data = await fetchFullProfile();
-      if (
+      const data = await fetchFullProfile();      if (
         firebaseUser &&
         !isAdmin &&
         data.scope !== "own" &&
@@ -122,30 +184,13 @@ export function StructuredProfileManager({
       }
 
       if (simpleExperiences.length > 0) {
-        const richExperiences = mergedData.experience || [];
-        // Lo guardado aqui gana (no vacio); el simple solo rellena
-        // huecos. Asi lo editado en este tab sobrevive recargas.
-        const nonEmpty = (v: unknown) =>
-          v !== undefined && v !== null && String(v).trim() !== "";
-        const mergedExperiences = simpleExperiences.map((simpleExp: any, idx: number) => {
-          const richExp = richExperiences[idx];
-          if (richExp) {
-            return {
-              ...richExp,
-              company: nonEmpty(richExp.company) ? richExp.company : simpleExp.company,
-              title: nonEmpty(richExp.title) ? richExp.title : simpleExp.title,
-              start_date: richExp.start_date || simpleExp.start_date,
-              end_date: richExp.end_date || simpleExp.end_date,
-              is_current: richExp.is_current ?? simpleExp.is_current,
-              description: nonEmpty(richExp.description) ? richExp.description : simpleExp.description,
-            };
-          }
-          return {
-            ...simpleExp,
-            perspectives: [],
-          };
-        });
+        const mergedExperiences = mergeBaseFields(
+          mergedData.experience || [],
+          simpleExperiences as ProfileEntry[],
+          EXP_BASE_FIELDS,
+        );
         // Conserva las agregadas aqui (mas alla del largo del simple).
+        const richExperiences = mergedData.experience || [];
         for (let k = simpleExperiences.length; k < richExperiences.length; k++) {
           mergedExperiences.push(richExperiences[k]);
         }
@@ -153,26 +198,12 @@ export function StructuredProfileManager({
       }
 
       if (simpleEducation.length > 0) {
+        const mergedEducation = mergeBaseFields(
+          mergedData.education || [],
+          simpleEducation as ProfileEntry[],
+          EDU_BASE_FIELDS,
+        );
         const richEducation = mergedData.education || [];
-        const nonEmpty = (v: unknown) =>
-          v !== undefined && v !== null && String(v).trim() !== "";
-        const mergedEducation = simpleEducation.map((simpleEdu: any, idx: number) => {
-          const richEdu = richEducation[idx];
-          if (richEdu) {
-            return {
-              ...richEdu,
-              institution: nonEmpty(richEdu.institution) ? richEdu.institution : simpleEdu.institution,
-              degree: nonEmpty(richEdu.degree) ? richEdu.degree : simpleEdu.degree,
-              start_date: richEdu.start_date || simpleEdu.start_date,
-              end_date: richEdu.end_date || simpleEdu.end_date,
-              description: nonEmpty(richEdu.description) ? richEdu.description : simpleEdu.description,
-            };
-          }
-          return {
-            ...simpleEdu,
-            perspectives: [],
-          };
-        });
         for (let k = simpleEducation.length; k < richEducation.length; k++) {
           mergedEducation.push(richEducation[k]);
         }
@@ -185,6 +216,8 @@ export function StructuredProfileManager({
 
       setRich(mergedData);
       setWarnings(data._warnings ?? []);
+      dirtyRef.current = false;
+      loadedRevision.current = externalRevision;
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Error inesperado");
     } finally {
@@ -192,9 +225,34 @@ export function StructuredProfileManager({
     }
   };
 
+  // Carga automatica al abrir el tab (sin boton adicional). El boton
+  // queda como reintento si la carga falla.
+  useEffect(() => {
+    if (autoLoaded.current || locked) return;
+    autoLoaded.current = true;
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Si el tab simple guarda y aqui no hay ediciones pendientes,
+  // se refresca para mostrar lo nuevo (nombre, telefono, etc.).
+  useEffect(() => {
+    if (
+      loadedRevision.current === null ||
+      loadedRevision.current === externalRevision ||
+      dirtyRef.current ||
+      loading
+    ) {
+      return;
+    }
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalRevision]);
+
   const update = (next: RichProfile) => {
     setRich(next);
     setSaved(false);
+    dirtyRef.current = true;
   };
 
   const patchPersonal = (patch: Record<string, string>) => {
@@ -224,10 +282,31 @@ export function StructuredProfileManager({
     setSaving(true);
     setSaveError(null);
     try {
-      const out = await saveFullProfile(rich);
+      // Base del simple como respaldo (gana lo editado aqui cuando no
+      // esta vacio): lo que se ve es lo que se guarda.
+      const payload: RichProfile = {
+        ...rich,
+        experience: mergeBaseFields(
+          rich.experience ?? [],
+          simpleExperiences,
+          EXP_BASE_FIELDS,
+        ),
+        education: mergeBaseFields(
+          rich.education ?? [],
+          simpleEducation,
+          EDU_BASE_FIELDS,
+        ),
+      };
+      const out = await saveFullProfile(payload);
       setRich({ ...out.profile, _warnings: out.warnings } as RichProfile);
       setWarnings(out.warnings);
       setSaved(true);
+      dirtyRef.current = false;
+      onSaved?.({
+        experience: (out.profile.experience ?? []) as ProfileEntry[],
+        education: (out.profile.education ?? []) as ProfileEntry[],
+        languages: (out.profile.languages ?? []) as LanguageEntry[],
+      });
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Error inesperado");
     } finally {
@@ -242,9 +321,9 @@ export function StructuredProfileManager({
       <h3 className="card-title">Perfil Estructurado</h3>
       <p className="card-sub">
         Extiende el <strong>Perfil Simple</strong> añadiendo <strong>perspectivas</strong> a tus experiencias y educación.
-        Cada perspectiva describe tareas específicas, skills y herramientas para una óptica distinta
-        (ej: Data Analytics, Ingeniería de Software, Finanzas). La información base (empresa/institución, cargo/título, fechas, descripción general)
-        viene del Perfil Simple y no se duplica aquí.
+        Los datos repetidos (nombre, contacto, empresa, fechas, descripción) están <strong>sincronizados</strong>:
+        lo que guardes en un tab aparece en el otro. Si editas en ambos sin guardar,
+        gana el último guardado.
       </p>
       {(locked || lockedRich) && (
         <div className="alert-error">
