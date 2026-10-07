@@ -16,7 +16,9 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-ALLOWED_FONT_SIZES = (10, 11, 12, 14, 16)
+from app.adapt.defaults import ALLOWED_SIZES
+
+ALLOWED_FONT_SIZES = ALLOWED_SIZES
 
 DEFAULTS = {
     "font_family": "georgia",

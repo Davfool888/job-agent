@@ -5,11 +5,14 @@ lo relevante primero, con topes para que quepa en una hoja.
 """
 from __future__ import annotations
 
-MAX_EXPERIENCE = 3
-MAX_PROJECTS = 3
-MAX_CERTIFICATIONS = 3
-MAX_EDUCATION = 2
-MAX_SKILLS = 12
+from app.adapt.defaults import LIMIT_DEFAULTS
+
+# Alias historicos (misma fuente unica ahora).
+MAX_EXPERIENCE = LIMIT_DEFAULTS["max_experiences"]
+MAX_PROJECTS = LIMIT_DEFAULTS["max_projects"]
+MAX_CERTIFICATIONS = LIMIT_DEFAULTS["max_certifications"]
+MAX_EDUCATION = LIMIT_DEFAULTS["max_education"]
+MAX_SKILLS = LIMIT_DEFAULTS["max_skills"]
 
 
 def _limit(config: dict | None, key: str, default: int) -> int:

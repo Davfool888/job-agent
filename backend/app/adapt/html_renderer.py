@@ -567,11 +567,17 @@ def _languages_block(content: dict) -> str:
 
 
 def _apply_pdf_config_to_css(css: str, pdf_config: dict) -> str:
-    """Aplica la configuración de PDF al CSS."""
+    """Aplica la configuración de PDF al CSS.
+
+    Los fallbacks salen de la unica fuente (adapt/defaults.py); el
+    servicio normalmente entrega config ya coercionada.
+    """
     import re
-    
+
+    from app.adapt.defaults import DEFAULT_PDF_CONFIG as _DEFAULTS
+
     # Fuente
-    font_family = pdf_config.get("font_family", "georgia")
+    font_family = pdf_config.get("font_family", _DEFAULTS["font_family"])
     font_map = {
         "georgia": '"Georgia", "Times New Roman", serif',
         "times": '"Times New Roman", Georgia, serif',
@@ -584,7 +590,7 @@ def _apply_pdf_config_to_css(css: str, pdf_config: dict) -> str:
     )
     
     # Tamaño de fuente base
-    font_size = pdf_config.get("font_size_pt", 11)
+    font_size = pdf_config.get("font_size_pt", _DEFAULTS["font_size_pt"])
     css = re.sub(
         r'font-size:\s*[\d.]+pt;',
         f'font-size: {font_size}pt;',
@@ -598,11 +604,13 @@ def _apply_pdf_config_to_css(css: str, pdf_config: dict) -> str:
     css = re.sub(r'(?<![a-zA-Z-])color:\s*#[0-9a-fA-F]{3,6}',
                  'color: #000000', css)
     
-    # Márgenes
-    margin_top = pdf_config.get("margin_top_mm", 18)
-    margin_bottom = pdf_config.get("margin_bottom_mm", 18)
-    margin_left = pdf_config.get("margin_left_mm", 15)
-    margin_right = pdf_config.get("margin_right_mm", 15)
+    # Márgenes (APA 25mm por defecto centralizado)
+    margin_top = pdf_config.get("margin_top_mm", _DEFAULTS["margin_top_mm"])
+    margin_bottom = pdf_config.get(
+        "margin_bottom_mm", _DEFAULTS["margin_bottom_mm"])
+    margin_left = pdf_config.get("margin_left_mm", _DEFAULTS["margin_left_mm"])
+    margin_right = pdf_config.get(
+        "margin_right_mm", _DEFAULTS["margin_right_mm"])
     css = re.sub(
         r'margin:\s*[\d.]+mm\s+[\d.]+mm\s+[\d.]+mm\s+[\d.]+mm;',
         f'margin: {margin_top}mm {margin_right}mm {margin_bottom}mm {margin_left}mm;',
@@ -610,7 +618,8 @@ def _apply_pdf_config_to_css(css: str, pdf_config: dict) -> str:
     )
     
     # Espaciado entre secciones
-    spacing = pdf_config.get("section_spacing_pt", 14)
+    spacing = pdf_config.get(
+        "section_spacing_pt", _DEFAULTS["section_spacing_pt"])
     css = re.sub(
         r'section\s*\{\s*margin-bottom:\s*[\d.]+pt;',
         f'section {{ margin-bottom: {spacing}pt;',
@@ -630,7 +639,7 @@ def _apply_pdf_config_to_css(css: str, pdf_config: dict) -> str:
         )
     
     # Divisor de secciones
-    divider = pdf_config.get("section_divider", "line")
+    divider = pdf_config.get("section_divider", _DEFAULTS["section_divider"])
     if divider == "none":
         css = re.sub(
             r'section h2\s*\{[^}]*border-bottom:[^}]*\}',
@@ -651,7 +660,8 @@ def _apply_pdf_config_to_css(css: str, pdf_config: dict) -> str:
         )
     
     # Estilo de cabecera
-    header_style = pdf_config.get("header_style", "classic")
+    header_style = pdf_config.get(
+        "header_style", _DEFAULTS["header_style"])
     if header_style == "minimal":
         css = re.sub(
             r'\.header\s*\{[^}]*\}',
@@ -707,17 +717,18 @@ def render_cv_html(content: dict, job: dict | None = None, pdf_config: dict | No
         summary = _section(
             "Perfil Profesional", _missing_block(content, "summary"))
 
-    # Orden de secciones desde pdf_config o default completo.
+    # Orden de secciones desde pdf_config o default unico centralizado.
     # Slugs desconocidos se ignoran; quitar un slug oculta la seccion.
     # "certifications" vive dentro de "other_studies" (sin bloque propio).
-    default_order = ["summary", "experience", "education", "projects",
-                     "skills", "soft_skills", "languages", "other_studies",
-                     "other_knowledge"]
+    from app.adapt.defaults import DEFAULT_PDF_CONFIG as _DEFAULTS
+
+    default_order = list(_DEFAULTS["section_order"])
     section_order = (pdf_config or {}).get("section_order") or default_order
     if not isinstance(section_order, list):
         section_order = default_order
 
-    fmt = str((pdf_config or {}).get("date_format") or "MMM YYYY")
+    fmt = str((pdf_config or {}).get(
+        "date_format", _DEFAULTS["date_format"]) or _DEFAULTS["date_format"])
     try:
         max_bullets = int(cfg.get("max_bullets", 0) or 0)
     except (TypeError, ValueError):

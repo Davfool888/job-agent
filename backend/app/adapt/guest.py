@@ -147,16 +147,17 @@ def get_profile_for_cv(db=None, user_id=None, email=None) -> dict:
     if user_id and not _is_guest(user_id, email):
         # Usuario autenticado: usar su perfil real (sin fallback a demo)
         flat = jobs.get_profile_for(db, user_id, email)
-        rich = jobs.get_rich_profile_for(db, user_id, email)
+        rich = dict(jobs.get_rich_profile_for(db, user_id, email))
         # Para usuarios autenticados, asegurar que los campos opcionales sean arrays vacíos si no existen
-        # para evitar fallback a datos demo en to_display_profile
+        # para evitar fallback a datos demo en to_display_profile.
+        # Se copia primero: el dict viene de job_service y no debe mutarse.
         rich.setdefault("other_knowledge", [])
         rich.setdefault("other_studies", [])
         rich.setdefault("certifications", [])
     else:
-        # Invitado: usar datos demo
+        # Invitado: usar datos demo (copia: no mutar lo de job_service)
         flat = jobs.get_profile_for(db, "__guest__", "")
-        rich = jobs.get_rich_profile_for(db, "__guest__", "")
+        rich = dict(jobs.get_rich_profile_for(db, "__guest__", ""))
     
     flat = {k: v for k, v in flat.items() if not k.startswith("_")}
     return to_display_profile(flat, rich)

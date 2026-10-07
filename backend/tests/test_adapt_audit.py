@@ -419,3 +419,237 @@ def test_audit_checklist_titulo_e_intro():
     assert any("menciona el rol" in a
                for a in report["improvements_allowed"])
 
+
+def test_ia_una_sola_via_con_cliente_usuario(tmp_path, monkeypatch):
+    """Con keys del usuario, el pulido global NO se ejecuta."""
+    import json as _json
+    from types import SimpleNamespace
+
+    from app.adapt import llm as adapt_llm
+    from app.adapt import service as adapt_service
+    from app.ai import user_llm
+
+    calls = {"global": 0}
+
+    def _fake_global(*args, **kwargs):
+        calls["global"] += 1
+        return {"summary": "global", "provider": "gemini"}
+
+    class _FakeClient:
+        provider_used = "deepseek"
+
+    def _fake_for_user(db, uid, preferred=None):
+        return _FakeClient()
+
+    def _fake_polish(client, original, role, matched):
+        assert client.provider_used == "deepseek"
+        return {"summary": "pulido-usuario", "provider": "deepseek"}
+
+    monkeypatch.setattr(adapt_llm, "polish_summary", _fake_global)
+    monkeypatch.setattr(user_llm, "for_user", _fake_for_user)
+    monkeypatch.setattr(user_llm, "polish_summary_for_user", _fake_polish)
+    monkeypatch.setattr("app.config.ADAPT_CVS_DIR", tmp_path)
+    monkeypatch.setattr(
+        "app.services.job_service.get_job_by_id",
+        lambda db, job_id: SimpleNamespace(
+            id="11", title="Dev", company="Acme",
+            description="Python", location="", modality="",
+            requirements=[], responsibilities=[]),
+    )
+    monkeypatch.setattr(
+        "app.adapt.guest.get_profile_for_cv",
+        lambda *a, **k: {"full_name": "Ana", "summary": "Dev Python.",
+                         "skills_technical": ["Python"],
+                         "experiences": []})
+    monkeypatch.setattr(
+        "app.adapt.service._is_profile_complete", lambda raw: True)
+
+    def _fake_render(html_text, out, timeout):
+        __import__("pathlib").Path(out).write_bytes(b"%PDF-1.4 fake")
+        return out
+
+    monkeypatch.setattr("app.adapt.pdf._render_locked", _fake_render)
+    from app.database.connection import SessionLocal
+
+    db = SessionLocal()
+    try:
+        out = adapt_service.adapt_profile_for_job(
+            db, "11", uid="u11", email="u@x.co")
+    finally:
+        from app.database.models import PDFConfig
+
+        db.query(PDFConfig).filter(PDFConfig.uid == "u11").delete(
+            synchronize_session=False)
+        db.commit()
+        db.close()
+    assert out["success"] is True
+    assert calls["global"] == 0
+    stored = _json.loads((tmp_path / "job_11" / "u11" / "adapt.json")
+                         .read_text(encoding="utf-8"))
+    assert stored["content"]["summary"] == "pulido-usuario"
+    assert stored["content"]["summary_provider"] == "deepseek"
+
+
+def test_blocking_issues_solo_veracidad_y_config():
+    from app.adapt.audit import blocking_issues
+
+    audit = {"issues": [
+        {"area": "veracidad", "message": "x", "blocking": True},
+        {"area": "configuracion", "message": "y", "blocking": True},
+        {"area": "estructura", "message": "z", "blocking": False},
+        {"area": "ats", "message": "w", "blocking": True},
+    ]}
+    blocked = blocking_issues(audit)
+    assert len(blocked) == 2
+    assert blocking_issues({"issues": []}) == []
+    assert blocking_issues({}) == []
+
+
+def test_servicio_no_entrega_con_bloqueantes(tmp_path, monkeypatch):
+    """Audit con bloqueantes -> AUDIT_FAILED, no success."""
+    import json as _json
+    from types import SimpleNamespace
+
+    from app.adapt import service as adapt_service
+
+    monkeypatch.setattr("app.config.ADAPT_CVS_DIR", tmp_path)
+    monkeypatch.setattr(
+        "app.services.job_service.get_job_by_id",
+        lambda db, job_id: SimpleNamespace(
+            id="12", title="Dev", company="Acme",
+            description="Python", location="", modality="",
+            requirements=[], responsibilities=[]),
+    )
+    monkeypatch.setattr(
+        "app.adapt.guest.get_profile_for_cv",
+        lambda *a, **k: {"full_name": "Ana", "summary": "Dev.",
+                         "skills_technical": ["Python"],
+                         "experiences": []})
+    monkeypatch.setattr(
+        "app.adapt.service._is_profile_complete", lambda raw: True)
+
+    def _fake_render(html_text, out, timeout):
+        __import__("pathlib").Path(out).write_bytes(b"%PDF-1.4 fake")
+        return out
+
+    monkeypatch.setattr("app.adapt.pdf._render_locked", _fake_render)
+
+    def _fake_audit(content, profile, offer, config, pdf_path):
+        return {"passed": False,
+                "scores": {"veracidad": 40},
+                "issues": [{"area": "veracidad", "message": "invento",
+                            "blocking": True}],
+                "improvements_allowed": [],
+                "improvements_blocked": [],
+                "facts": {"pages": 1, "chars": 500, "readable": True},
+                "keyword_coverage": {}}
+
+    monkeypatch.setattr("app.adapt.audit.audit_cv", _fake_audit)
+    from app.database.connection import SessionLocal
+
+    db = SessionLocal()
+    try:
+        with __import__("pytest").raises(adapt_service.AdaptError) as exc:
+            adapt_service.adapt_profile_for_job(
+                db, "12", uid="u12", email="u@x.co")
+    finally:
+        from app.database.models import PDFConfig
+
+        db.query(PDFConfig).filter(PDFConfig.uid == "u12").delete(
+            synchronize_session=False)
+        db.commit()
+        db.close()
+    assert exc.value.code == "AUDIT_FAILED"
+
+
+def test_timings_en_respuesta_y_json(tmp_path, monkeypatch):
+    import json as _json
+    from types import SimpleNamespace
+
+    from app.adapt import service as adapt_service
+
+    monkeypatch.setattr("app.config.ADAPT_CVS_DIR", tmp_path)
+    monkeypatch.setattr(
+        "app.services.job_service.get_job_by_id",
+        lambda db, job_id: SimpleNamespace(
+            id="13", title="Dev", company="Acme",
+            description="Python", location="", modality="",
+            requirements=[], responsibilities=[]),
+    )
+    monkeypatch.setattr(
+        "app.adapt.guest.get_profile_for_cv",
+        lambda *a, **k: {"full_name": "Ana", "summary": "Dev.",
+                         "skills_technical": ["Python"],
+                         "experiences": []})
+    monkeypatch.setattr(
+        "app.adapt.service._is_profile_complete", lambda raw: True)
+
+    def _fake_render(html_text, out, timeout):
+        __import__("pathlib").Path(out).write_bytes(b"%PDF-1.4 fake")
+        return out
+
+    monkeypatch.setattr("app.adapt.pdf._render_locked", _fake_render)
+    from app.database.connection import SessionLocal
+
+    db = SessionLocal()
+    try:
+        out = adapt_service.adapt_profile_for_job(
+            db, "13", uid="u13", email="u@x.co")
+    finally:
+        from app.database.models import PDFConfig
+
+        db.query(PDFConfig).filter(PDFConfig.uid == "u13").delete(
+            synchronize_session=False)
+        db.commit()
+        db.close()
+    assert out["success"] is True
+    for stage in ("config", "job", "profile", "coerce", "match",
+                  "select", "llm", "validate", "render", "pdf",
+                  "audit", "finish"):
+        assert stage in out["timings"], stage
+        assert isinstance(out["timings"][stage], (int, float))
+    stored = _json.loads((tmp_path / "job_13" / "u13" / "adapt.json")
+                         .read_text(encoding="utf-8"))
+    assert stored["timings"] == out["timings"]
+
+
+def test_download_409_con_auditoria_bloqueante(tmp_path, monkeypatch):
+    import json as _json
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    monkeypatch.setattr("app.config.ADAPT_CVS_DIR", tmp_path)
+    from app.database.connection import SessionLocal
+    from app.services.job_service import save_jobs
+
+    db = SessionLocal()
+    try:
+        saved = save_jobs(db, [{
+            "title": "Dev Bloqueado", "company": "Empresa Auditoria 409",
+            "url": "https://example.com/auditoria-409",
+            "description": "Python " * 20, "source": "computrabajo"}],
+            search_query="auditoria")
+        job_id = saved[0].id
+        target = tmp_path / f"job_{job_id}" / "guest"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "cv.pdf").write_bytes(b"%PDF-1.4 fake")
+        (target / "adapt.json").write_text(_json.dumps({
+            "audit": {"passed": False, "issues": [
+                {"area": "veracidad", "message": "invento",
+                 "blocking": True}]}}), encoding="utf-8")
+        with TestClient(app) as client:
+            response = client.get(
+                f"/jobs/{job_id}/adapt-cv/download",
+                params={"format": "pdf"})
+            assert response.status_code == 409, response.status_code
+    finally:
+        from app.database.models import Job
+
+        db.query(Job).filter(
+            Job.company == "Empresa Auditoria 409").delete(
+                synchronize_session=False)
+        db.commit()
+        db.close()
+

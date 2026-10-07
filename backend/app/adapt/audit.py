@@ -334,3 +334,13 @@ def audit_cv(content: dict, profile: dict, offer: dict,
             "missing_real": missing_real[:10],
         },
     }
+
+
+def blocking_issues(audit: dict) -> list[dict]:
+    """Issues que impiden entregar el CV como valido: veracidad o
+    configuracion marcadas bloqueantes. Puerta de entrega del pipeline.
+    """
+    issues = (audit or {}).get("issues") or []
+    return [i for i in issues
+            if isinstance(i, dict) and i.get("blocking")
+            and i.get("area") in ("veracidad", "configuracion")]

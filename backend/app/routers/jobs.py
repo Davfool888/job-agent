@@ -324,6 +324,31 @@ def download_adapt_cv(
                 status_code=404,
                 detail="Aún no hay CV adaptado. Usa «Adaptar perfil».",
             )
+    # Puerta de entrega: si la ultima auditoria tiene bloqueantes, el
+    # PDF no se entrega como valido (se regenera via Adaptar perfil).
+    if format == "pdf":
+        from app.adapt.audit import blocking_issues as _blocking
+
+        try:
+            import json as _json
+
+            sibling = Path(target).parent / "adapt.json"
+            if sibling.exists():
+                _audit = _json.loads(
+                    sibling.read_text(encoding="utf-8")).get("audit") or {}
+                _blocking_issues = _blocking(_audit)
+                if _blocking_issues:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="El ultimo CV generado no paso la auditoria "
+                        "(" + "; ".join(
+                            i["message"] for i in _blocking_issues[:2]) +
+                        "). Regeneralo con «Adaptar perfil».",
+                    )
+        except HTTPException:
+            raise
+        except Exception:  # noqa: BLE001
+            pass
     # Para PDF: inline para visualizar en iframe; para HTML: inline también
     # El parámetro content_disposition_type controla si descarga (attachment) o muestra (inline)
     return FileResponse(

@@ -227,7 +227,8 @@ def _ranked(items: list[dict], keywords: set[str],
     """Ordena por coincidencia ponderada: titulo x3, resto x1.
 
     Estable: a igual puntaje conserva el orden del perfil. Solo
-    reordena, jamas filtra ni reescribe.
+    reordena, jamas filtra ni reescribe. Devuelve COPIAS superficiales:
+    mutar el resultado nunca toca el perfil display de entrada.
     """
     from app.analysis.signals import norm
 
@@ -239,6 +240,6 @@ def _ranked(items: list[dict], keywords: set[str],
         tokens = {t for t in norm(_item_text(item)).split(" ") if len(t) > 1}
         base = len(tokens & keywords)
         title_hits = len(tokens & title_keywords)
-        scored.append((base + 2 * title_hits, i, item))
+        scored.append((base + 2 * title_hits, i, dict(item)))
     scored.sort(key=lambda row: (-row[0], row[1]))
     return [{"score": score, "item": item} for score, _, item in scored]

@@ -3,12 +3,13 @@
 Oferta -> perfil invitado -> matching -> seleccion -> (LLM opcional)
 -> HTML -> PDF -> disco. Errores controlados con codigo, nunca
 trazas crudas.
+
+Orquestador DELGADO: cada etapa vive en `adapt/pipeline.py` con
+responsabilidad unica; aqui solo se encadenan y se miden tiempos.
 """
 from __future__ import annotations
 
 import json
-from datetime import datetime
-from pathlib import Path
 
 
 class AdaptError(RuntimeError):
@@ -35,7 +36,7 @@ def _owner_key(uid: str | None, email: str | None = None) -> str:
 
 
 def adapt_dir(job_id, uid: str | None = None,
-              email: str | None = None) -> Path:
+              email: str | None = None):
     from app.config import ADAPT_CVS_DIR
 
     directory = ADAPT_CVS_DIR / f"job_{job_id}" / _owner_key(uid, email)
@@ -43,7 +44,7 @@ def adapt_dir(job_id, uid: str | None = None,
     return directory
 
 
-def legacy_adapt_dir(job_id) -> Path:
+def legacy_adapt_dir(job_id):
     """Ubicacion anterior (sin subdirectorio): solo lectura para
     migrar descargas generadas antes del aislamiento por usuario."""
     from app.config import ADAPT_CVS_DIR
@@ -72,289 +73,82 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
     la IA del CV consume SOLO keys del usuario con fallback
     automatico; sin keys, flujo deterministico local (sin globales).
     """
-    from app.adapt import guest, html_renderer, llm, matcher, pdf, selector
-    from app.services.job_service import get_job_by_id
-    from app.services.search_profiles import _is_guest
+    import copy as _copy
 
-    # Config de PDF del usuario (Fase 2: servicio dual SQLite/Firestore).
-    # Sin UID o sin fila -> {} y el renderer usa sus defaults.
-    # Coercion de tipos exactos del renderer (no toca lo guardado).
-    from app.adapt import content as adapt_content
-    from app.services.pdf_config import get_pdf_config_for_renderer
+    from app.adapt import pipeline as stages
 
-    raw_config = get_pdf_config_for_renderer(db, uid) if uid else {}
-    pdf_config, config_warnings = adapt_content.coerce_pdf_config(
-        raw_config)
+    timings: stages.Timings = stages.Timings()
 
-    try:
-        job = get_job_by_id(db=db, job_id=job_id)
-    except (TypeError, ValueError) as error:
-        raise AdaptError("JOB_NOT_FOUND", "Oferta no encontrada.",
-                         http=404) from error
-    if not job:
-        raise AdaptError("JOB_NOT_FOUND", "Oferta no encontrada.", http=404)
-
-    # Perfil SIEMPRE en forma display (plano+estructurado del MISMO
-    # usuario): invitado (sin uid o anonimo sin email) -> demo;
-    # Google (uid + email) -> solo lo suyo. Asi el PDF nunca mezcla
-    # ni inventa: todo sale de la seccion Perfil.
-    if uid and not _is_guest(uid, email):
-        from app.services.job_service import get_rich_profile_for
-        raw = get_rich_profile_for(db, uid, email)
-        # Verificar que el perfil tenga datos mínimos requeridos
-        if not _is_profile_complete(raw):
-            raise AdaptError(
-                "PROFILE_INCOMPLETE",
-                "Debe completar su perfil antes de generar un CV adaptado. "
-                "Vaya a la sección de Perfil y complete los campos obligatorios.",
-                http=400
-            )
-        profile = guest.get_profile_for_cv(db, user_id=uid, email=email)
-    else:
-        # Usuario invitado: usar perfil demo
-        profile = guest.get_profile_for_cv(db)
-        if guest.profile_is_empty(profile):
-            raise AdaptError(
-            "PROFILE_NOT_FOUND",
-            "Perfil de invitado no disponible.", http=404)
-
-    # Frontera tipada: copias coercionadas para matcher/selector/
-    # renderer. Lo guardado en Perfil no se modifica aqui.
-    profile, profile_warnings = adapt_content.coerce_profile(profile)
+    with stages._timed(timings, "config"):
+        pdf_config, config_warnings = stages.stage_config(db, uid)
+    with stages._timed(timings, "job"):
+        job = stages.stage_job(db, job_id)
+    with stages._timed(timings, "profile"):
+        profile = stages.stage_profile(db, uid, email)
+    with stages._timed(timings, "coerce"):
+        profile, profile_warnings = stages.stage_coerce(profile)
     adapt_warnings = list(config_warnings) + list(profile_warnings)
 
-    offer = {
-        "title": job.title or "",
-        "company": job.company or "",
-        "description": job.description or "",
-        "location": job.location or "",
-        "modality": getattr(job, "modality", "") or "",
-        "requirements": _as_list(getattr(job, "requirements", [])),
-        "responsibilities": _as_list(
-            getattr(job, "responsibilities", [])),
-    }
+    offer = stages.build_offer(job)
     if not offer["title"] and not offer["description"]:
         raise AdaptError(
             "JOB_INCOMPLETE", "La oferta no tiene datos suficientes.",
             http=400)
+    with stages._timed(timings, "match"):
+        matching = stages.stage_match(offer, profile)
+    with stages._timed(timings, "select"):
+        content = stages.stage_select(profile, offer, matching, pdf_config)
+    # Snapshot pre-IA: si la validacion posterior falla, se conserva
+    # este contenido original en vez de generar no verificado.
+    pre_ia_content = _copy.deepcopy(content)
 
-    matching = matcher.match_offer_profile(offer, profile)
-    # La config manda: topes del usuario sobre la relevancia.
-    content = selector.select_cv_content(
-        profile, offer, matching, pdf_config)
+    with stages._timed(timings, "llm"):
+        content, adaptations, llm_warnings, llm_info = stages.stage_llm(
+            content, matching, pdf_config, db, uid, preferred_provider)
+    adapt_warnings = list(adapt_warnings) + list(llm_warnings)
 
-    polished = llm.polish_summary(
-        content.get("summary", ""), content.get("target_role", ""),
-        matching.get("matched_skills") or [])
-    # Capa IA del usuario (cuota propia): si tiene keys, pule con su
-    # proveedor (elegido o primero disponible con fallback). Sin keys
-    # se conserva el resultado deterministico (sin globales).
-    user_client = None
-    try:
-        from app.ai import user_llm
+    with stages._timed(timings, "validate"):
+        content, validation_warnings = stages.stage_validate(
+            content, pre_ia_content, profile, pdf_config)
+    adapt_warnings = list(adapt_warnings) + list(validation_warnings)
 
-        user_client = user_llm.for_user(db, uid, preferred_provider)
-        if user_client is not None:
-            polished = user_llm.polish_summary_for_user(
-                user_client, content.get("summary", ""),
-                content.get("target_role", ""),
-                matching.get("matched_skills") or [])
-    except Exception:  # noqa: BLE001
-        user_client = None
-    content["summary"] = polished["summary"]
-    content["summary_provider"] = polished["provider"]
+    with stages._timed(timings, "render"):
+        html_text = stages.stage_render(content, offer, pdf_config)
+    with stages._timed(timings, "pdf"):
+        directory, _pdf_path = stages.stage_pdf_paths(
+            job, uid, email)
+        stages.stage_pdf(html_text, directory)
 
-    # Datos de contacto para la cabecera (vienen del perfil, no del job).
-    for key in ("full_name", "title", "email", "phone", "linkedin",
-                "github", "portfolio", "location"):
-        content[key] = profile.get(key, "")
-    # Titulo compuesto oferta<->perfil (solo con evidencia real).
-    if content.get("title_line"):
-        content["title"] = content["title_line"]
+    with stages._timed(timings, "audit"):
+        audit, audit_warnings, html_text = stages.stage_audit(
+            content, profile, offer, pdf_config, directory, html_text)
+    adapt_warnings = list(adapt_warnings) + list(audit_warnings)
 
-    # Reformulacion opt-in con LLM supervisado: reordena/enfatiza
-    # bullets por experiencia. Verificada termino a termino o se
-    # conservan los originales. El diff queda en adapt.json.
-    adaptations: list[dict] = []
-    if pdf_config.get("ai_rewrite_bullets"):
-        from app.adapt import rewrite as adapt_rewrite
-        from app.ai import user_llm as _user_llm
+    # Puerta de entrega: con errores bloqueantes NO se marca done ni
+    # se entrega como CV valido.
+    from app.adapt.audit import blocking_issues as _blocking
 
-        allowed = list(content.get("skills") or [])
-        role = str(content.get("target_role") or "")
-        for exp in content.get("experiences") or []:
-            if not isinstance(exp, dict):
-                continue
-            current = [str(b) for b in (exp.get("bullets") or []) if b]
-            if not current:
-                continue
-            if user_client is not None:
-                try:
-                    result = _user_llm.rewrite_bullets_for_user(
-                        user_client, current, allowed, role)
-                except Exception:  # noqa: BLE001
-                    result = adapt_rewrite.rewrite_bullets(
-                        current, allowed, role)
-            else:
-                result = adapt_rewrite.rewrite_bullets(
-                    current, allowed, role)
-            if result["bullets"] != current:
-                adaptations.append({
-                    "experience": str(exp.get("title") or ""),
-                    "original": current,
-                    "adapted": result["bullets"],
-                    "provider": result["provider"],
-                    "verified": result["verified"],
-                    "note": result["note"],
-                })
-            exp["bullets"] = result["bullets"]
-        if adaptations:
-            adapt_warnings = list(adapt_warnings) + [
-                f"IA reformulo bullets en {len(adaptations)} experiencia(s) "
-                f"(verificado; diff en adapt.json)."]
-    content["adaptations"] = adaptations
+    _blocking_issues = _blocking(audit)
+    if _blocking_issues:
+        raise AdaptError(
+            "AUDIT_FAILED",
+            "Auditoria bloqueo la entrega: " +
+            "; ".join(i["message"] for i in _blocking_issues[:3]),
+            http=502)
 
-    # Lo que falte IMPORTANTE no se inventa: se marca en el PDF con
-    # "(falta información de ...)" en el mismo pedazo (ver renderer).
-    content["missing"] = _missing_profile_fields(content)
-
-    try:
-        html_text = html_renderer.render_cv_html(content, offer, pdf_config)
-    except ValueError as error:
-        raise AdaptError("HTML_FAILED", str(error), http=502) from error
-
-    directory = adapt_dir(job.id, uid, email)
-    (directory / "cv.html").write_text(html_text, encoding="utf-8")
-    try:
-        # timeout_ms es milisegundos (int); pdf_config NO va aqui
-        # (bug historico: pasarlo como 3er arg rompia con int(dict)).
-        pdf.html_to_pdf(html_text, directory / "cv.pdf")
-    except pdf.PdfError as error:
-        raise AdaptError(error.code, str(error), http=502) from error
-
-    # Auditoria config-driven (no modifica datos, solo reporta).
-    from app.adapt import audit as adapt_audit
-
-    audit = adapt_audit.audit_cv(
-        content, profile, offer, pdf_config, directory / "cv.pdf")
-    # Unico reintento permitido: si excede max_pages y el compacto esta
-    # apagado, regenerar compacto (mismo contenido, CSS denso). Jamas
-    # recorta informacion obligatoria por configuracion.
-    try:
-        max_pages = int(pdf_config.get("max_pages", 0) or 0)
-    except (TypeError, ValueError):
-        max_pages = 0
-    if max_pages > 0 and audit["facts"]["pages"] > max_pages \
-            and not pdf_config.get("compact_mode"):
-        compact_config = dict(pdf_config, compact_mode=True)
-        try:
-            retry_html = html_renderer.render_cv_html(
-                content, offer, compact_config)
-            (directory / "cv.html").write_text(
-                retry_html, encoding="utf-8")
-            pdf.html_to_pdf(retry_html, directory / "cv.pdf")
-            html_text = retry_html
-            audit = adapt_audit.audit_cv(
-                content, profile, offer, compact_config,
-                directory / "cv.pdf")
-            adapt_warnings = list(adapt_warnings) + [
-                "Se excedia el maximo de paginas: se regenero en modo "
-                "compacto (mismo contenido)."]
-        except (ValueError, pdf.PdfError):
-            pass
-
-    (directory / "adapt.json").write_text(json.dumps(
-        {"job_id": job.id,
-         "created_at": datetime.utcnow().isoformat(),
-         "profile_source": "user" if (uid and not _is_guest(uid, email))
-         else "guest",
-         "owner_uid": _owner_key(uid, email),
-         "matching": {k: v for k, v in matching.items()
-                      if k in ("percentage", "matched_skills",
-                               "missing_skills", "modality_ok",
-                               "location_ok", "target_roles_matched",
-                               "years_experience")},
-         "content": content,
-         "warnings": adapt_warnings,
-         "audit": audit},
-        ensure_ascii=False, indent=2), encoding="utf-8")
-
-    return {
-        "success": True,
-        "warnings": adapt_warnings,
-        "audit": audit,
-        "job": {"id": job.id, "title": job.title or "",
-                "company": job.company or ""},
-        "matching": {
-            "percentage": matching["percentage"],
-            "matched_skills": matching["matched_skills"],
-            "missing_skills": matching["missing_skills"],
-        },
-        "cv": {
-            "id": f"job-{job.id}",
-            "summary_provider": polished["provider"],
-            "experiences": [
-                {"title": e.get("title") or e.get("name") or "",
-                 "company": e.get("company") or e.get("institution") or ""}
-                for e in content["experiences"]],
-            "projects": [p.get("name") or p.get("title") or ""
-                         for p in content["projects"]],
-            "education": [
-                {"degree": e.get("degree") or e.get("title") or "",
-                 "institution": e.get("institution") or ""}
-                for e in content["education"]],
-            "languages": [
-                {"label": l.get("label") or l.get("language_label") or l.get("language") or "",
-                 "level": l.get("level") or ""}
-                for l in content["languages"]],
-            "skills_groups": content["skills_groups"],
-            "skills_soft": content["skills_soft"],
-            "other_studies": content["other_studies"],
-            "other_knowledge": content["other_knowledge"],
-            "projects": [p.get("name") or p.get("title") or ""
-                         for p in content["projects"]],
-            "download_url": f"/jobs/{job.id}/adapt-cv/download?format=pdf",
-            "preview_url": f"/jobs/{job.id}/adapt-cv/download?format=pdf",
-        },
-    }
+    with stages._timed(timings, "finish"):
+        result = stages.stage_finish(
+            job, uid, email, matching, content, adapt_warnings, audit,
+            timings, llm_info)
+    result["timings"] = dict(timings)
+    stages.patch_timings(
+        stages.stage_pdf_paths(job, uid, email)[0], timings)
+    return result
 
 
 def error_body(error: AdaptError) -> dict:
     return {"success": False,
             "error": {"code": error.code, "message": str(error)}}
-
-
-def _missing_profile_fields(content: dict) -> list[str]:
-    """Campos importantes ausentes en el perfil (sin inventar: el
-    renderer los muestra como '(falta información de ...)')."""
-    missing: list[str] = []
-
-    def blank(value) -> bool:
-        if value is None:
-            return True
-        if isinstance(value, str):
-            return not value.strip()
-        if isinstance(value, (list, dict)):
-            return len(value) == 0
-        return False
-
-    if blank(content.get("title")):
-        missing.append("title")
-    if blank(content.get("email")):
-        missing.append("email")
-    if blank(content.get("phone")):
-        missing.append("phone")
-    if blank(content.get("summary")):
-        missing.append("summary")
-    skills = list(content.get("skills") or [])
-    groups = content.get("skills_groups") or {}
-    if not skills and not any(groups.get(k) for k in groups):
-        missing.append("skills")
-    if blank(content.get("experiences")):
-        missing.append("experiences")
-    if blank(content.get("education")):
-        missing.append("education")
-    return missing
 
 
 def _is_profile_complete(profile: dict) -> bool:

@@ -163,16 +163,16 @@ def coerce_profile(profile: dict) -> tuple[dict, list[str]]:
     return out, warnings
 
 
-_ALLOWED_DATE_FORMATS = ("MMM YYYY", "MM/YYYY", "MM/YY", "MMMM YYYY",
-                         "YYYY-MM")
-_ALLOWED_FONTS = ("georgia", "times", "arial")
-_ALLOWED_SIZES = (10, 11, 12, 14, 16)
-_KNOWN_SECTIONS = ("summary", "experience", "education", "projects",
-                   "skills", "soft_skills", "languages",
-                   "other_studies", "other_knowledge")
-_DEFAULT_ORDER = ["summary", "experience", "education", "projects",
-                  "skills", "soft_skills", "languages",
-                  "other_studies", "other_knowledge"]
+# Constantes centralizadas en la unica fuente (adapt/defaults.py).
+# Se re-exportan aqui por compatibilidad con imports existentes.
+from app.adapt.defaults import (
+    ALLOWED_DATE_FORMATS as _ALLOWED_DATE_FORMATS,
+    ALLOWED_FONTS as _ALLOWED_FONTS,
+    ALLOWED_SIZES as _ALLOWED_SIZES,
+    DEFAULT_PDF_CONFIG as _DEFAULT_PDF_CONFIG,
+    KNOWN_SECTIONS as _KNOWN_SECTIONS,
+    SECTION_ORDER_DEFAULT as _DEFAULT_ORDER,
+)
 
 
 def coerce_pdf_config(pdf_config: dict | None) -> tuple[dict, list[str]]:
