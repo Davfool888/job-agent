@@ -125,15 +125,28 @@ def test_skills_sin_prosa_y_sin_inventos():
         for item in group_items:
             assert len(item) <= 60, f"prosa colada: {item[:60]}"
     assert "Pensamiento analítico" in profile["soft_skills"]
-    assert len(profile["soft_skills"]) == 4
-    # Todo skill declarado existe literalmente en el CV (a espacios
+    # `Comunicación y trabajo en equipo` del CV se divide en sus dos
+    # canonicas (una etiqueta por skill, sin duplicados).
+    assert "Comunicación" in profile["soft_skills"]
+    assert "Trabajo en equipo" in profile["soft_skills"]
+    assert len(profile["soft_skills"]) == 5
+    # Todo skill declarado existe en el CV: literal o por variante
+    # canonica (`Data Cleaning` evidencia `Limpieza de datos`; a espacios
     # normalizados: el PDF parte lineas en puntos arbitrarios).
     import re as _re
 
+    from app.analysis.skills_canonical import canonical_key
+    from app.analysis.skills_canonical import known_variants
+    from app.profile import catalogs as _catalogs
+
     raw = _re.sub(r"\s+", " ", FIXTURE.read_text(
         encoding="utf-8").lower())
+    raw_norm = _catalogs.norm_text(raw)
     for item in profile["technical_skills"]:
-        assert item.lower() in raw, f"posible invento: {item}"
+        options = known_variants(item) or [item]
+        assert any(
+            _catalogs.norm_text(o) in raw_norm for o in options
+        ), f"posible invento: {item}"
 
 
 def test_sin_warnings_graves():

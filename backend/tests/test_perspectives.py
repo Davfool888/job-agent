@@ -95,16 +95,29 @@ def test_seleccion_combina_perspectivas_sin_inventar():
     assert tailored["adapted"] is True
     assert tailored["personal"]["full_name"] == "Test User"
     # Todo el texto viene del perfil: ninguna palabra externa.
+    # Comparacion canonica: `Data Cleaning` del perfil y `Limpieza de
+    # datos` del bloque normalizado son la misma skill.
+    from app.analysis.skills_canonical import canonical_key
+    from app.analysis.skills_canonical import canonicalize_one
+
     corpus = " ".join([
         PROFILE["personal"]["full_name"],
         BANCO["title"], BANCO["company"],
         *[p["description"] for p in BANCO["perspectives"]],
         *[s for p in BANCO["perspectives"] for s in p["skills"]],
     ]).lower()
+    corpus_keys = set()
+    for raw_skill in [s for p in BANCO["perspectives"]
+                      for s in p["skills"]]:
+        canon = canonicalize_one(raw_skill) or raw_skill
+        corpus_keys.add(canonical_key(canon))
     for block in tailored["blocks"]:
         assert block["description"].lower() in corpus
         for skill in block["skills"]:
-            assert skill.lower() in corpus
+            canon = canonicalize_one(skill) or skill
+            assert canonical_key(canon) in corpus_keys \
+                or skill.lower() in corpus, \
+                f"posible invento: {skill}"
 
 
 def test_validate_avisa_skills_no_declarados():

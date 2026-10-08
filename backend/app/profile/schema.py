@@ -97,6 +97,21 @@ def _clean_list(value, limit: int = 100) -> list[str]:
     return cleaned
 
 
+def _canon_list(value, limit: int = 100) -> list[str]:
+    """Limpieza + canon de skills (genericos fuera, variantes unidas).
+
+    Defensive: si el canon falla, devuelve la limpieza clasica para no
+    romper el guardado del perfil de otro flujo/agente.
+    """
+    cleaned = _clean_list(value, limit)
+    try:
+        from app.analysis.skills_canonical import normalize_skill_list
+
+        return normalize_skill_list(cleaned, limit=limit)
+    except Exception:  # noqa: BLE001
+        return cleaned
+
+
 def normalize_personal(raw: dict | None) -> tuple[dict, list[str]]:
     """Devuelve (personal_normalizado, advertencias)."""
     raw = raw or {}
@@ -164,8 +179,8 @@ def normalize_entry(section: str, raw: dict | None, index: int = 0) -> tuple[dic
     raw = raw or {}
     warnings: list[str] = []
     entry = _norm_persp(raw)
-    entry["technical_skills"] = _clean_list(raw.get("technical_skills"))
-    entry["soft_skills"] = _clean_list(raw.get("soft_skills"))
+    entry["technical_skills"] = _canon_list(raw.get("technical_skills"))
+    entry["soft_skills"] = _canon_list(raw.get("soft_skills"))
     # Compat: conserva texto libre legacy que consumen CV/matching viejos.
     for legacy_key in ("bullets", "achievements", "technologies",
                        "description", "summary", "period", "facts"):
@@ -219,7 +234,7 @@ def normalize_entry(section: str, raw: dict | None, index: int = 0) -> tuple[dic
         entry["url"] = _clean_str(raw.get("url"), 300)
         entry["repo"] = _clean_str(
             raw.get("repo") or raw.get("repository"), 300)
-        entry["technologies"] = _clean_list(raw.get("technologies"))
+        entry["technologies"] = _canon_list(raw.get("technologies"))
     elif section == "certifications":
         entry["name"] = _clean_str(
             raw.get("name") or raw.get("title"), 200)
@@ -423,17 +438,9 @@ def normalize_flat_profile(data: dict | None) -> tuple[dict, list[str]]:
                 "elige una opcion.")
     data["sectors"] = normalized_sectors
 
-    # Skills: dedupe insensible a mayusculas/tildes ("Power BI" y
-    # "power bi" son la misma skill y solo inflan el matching).
-    skills = _clean_list(data.get("skills"), 100)
-    seen_skills: set[str] = set()
-    unique_skills: list[str] = []
-    for skill in skills:
-        key = catalogs.norm_text(skill)
-        if key and key not in seen_skills:
-            seen_skills.add(key)
-            unique_skills.append(skill)
-    data["skills"] = unique_skills
+    # Skills: canonicas unicas ("PowerBi" -> "Power BI"; "Tools" -> fuera).
+    skills = _canon_list(data.get("skills"), 100)
+    data["skills"] = skills
 
     for key in ("location", "preferred_location"):
         loc_raw = str(data.get(key) or "").strip()
@@ -516,8 +523,8 @@ def normalize_rich_profile(data: dict | None) -> tuple[dict, list[str]]:
         "professional_summary": _clean_str(
             data.get("professional_summary"), 2000),
         "years_experience": _to_years(data.get("years_experience")),
-        "technical_skills": _clean_list(data.get("technical_skills")),
-        "soft_skills": _clean_list(data.get("soft_skills")),
+        "technical_skills": _canon_list(data.get("technical_skills")),
+        "soft_skills": _canon_list(data.get("soft_skills")),
         "languages": [],
         "target_roles": _clean_list(data.get("target_roles"), 20),
     }

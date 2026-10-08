@@ -599,6 +599,13 @@ def _parse_skills_block(raw_lines: list[str]) -> dict[str, list[str]]:
             groups["tools"].extend(items)
     for key in groups:
         seen: list[str] = []
+        try:
+            from app.analysis.skills_canonical import normalize_skill_list
+
+            groups[key] = normalize_skill_list(groups[key], limit=100)
+            continue
+        except Exception:  # noqa: BLE001
+            pass
         for item in groups[key]:
             if item and item not in seen:
                 seen.append(item)
@@ -743,7 +750,15 @@ def parse_pdf_profile(text: str) -> dict:
     flat: list[str] = []
     for key in ("programming", "data", "bi", "databases", "tools"):
         flat.extend(i for i in profile["skills"][key] if i not in flat)
-    profile["technical_skills"] = flat
+    try:
+        from app.analysis.skills_canonical import normalize_skill_list
+
+        profile["technical_skills"] = normalize_skill_list(flat, limit=100)
+        profile["soft_skills"] = normalize_skill_list(
+            profile.get("soft_skills") or [], limit=50
+        )
+    except Exception:  # noqa: BLE001
+        profile["technical_skills"] = flat
 
     starts = [e["start_date"] for e in profile["experience"]
               if e.get("start_date")]

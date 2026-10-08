@@ -248,6 +248,10 @@ def start_link(db, uid: str) -> dict:
         "code_used": 0,
     })
     ttl = _env_int("TELEGRAM_LINK_TTL_MINUTES", 15)
+    logger.warning("tg-start uid=%s code=%s... expira=%s deep_link host=t.me",
+                   str(uid)[:6], code[:4],
+                   (datetime.utcnow() + timedelta(minutes=ttl)).isoformat(
+                       timespec="seconds"))
     return {
         "code": code,
         "deep_link": f"https://t.me/{username}?start={code}",
@@ -258,20 +262,32 @@ def start_link(db, uid: str) -> dict:
 
 def confirm_link(db, code: str, chat_id, username: str | None) -> dict:
     """Vincula el chat al uid dueño del codigo (lo llama el webhook)."""
-    owner_uid, link = _find_by_code(db, str(code or "").strip())
+    from app.database.firestore_client import as_naive_utc
+
+    clean = str(code or "").strip()
+    owner_uid, link = _find_by_code(db, clean)
+    logger.warning("tg-confirm code=%s... len=%d found=%s",
+                   clean[:4], len(clean), bool(owner_uid))
     if not owner_uid or not link:
+        logger.warning("tg-confirm resultado=desconocido")
         raise TelegramError("expired", "Codigo desconocido o vencido.")
     if link.get("code_used"):
+        logger.warning("tg-confirm resultado=usado uid=%s",
+                       str(owner_uid)[:6])
         raise TelegramError("used", "Codigo ya utilizado.")
-    created = link.get("code_created_at")
-    try:
-        moment = datetime.fromisoformat(str(created))
-    except (TypeError, ValueError):
+    moment = as_naive_utc(link.get("code_created_at"))
+    if moment is None:
+        logger.warning("tg-confirm resultado=fecha-ilegible")
         raise TelegramError("expired", "Codigo vencido.")
-    if datetime.utcnow() - moment > timedelta(
-            minutes=_env_int("TELEGRAM_LINK_TTL_MINUTES", 15)):
+    age = (datetime.utcnow() - moment).total_seconds()
+    ttl = _env_int("TELEGRAM_LINK_TTL_MINUTES", 15)
+    if age > ttl * 60:
+        logger.warning("tg-confirm resultado=expirado age_s=%d ttl_min=%d",
+                       int(age), ttl)
         raise TelegramError("expired", "Codigo vencido.")
     if _chat_linked_to_other(db, chat_id, owner_uid):
+        logger.warning("tg-confirm resultado=otro-dueno uid=%s",
+                       str(owner_uid)[:6])
         raise TelegramError(
             "already_linked",
             "Este Telegram ya esta vinculado a otra cuenta.")
@@ -283,6 +299,8 @@ def confirm_link(db, code: str, chat_id, username: str | None) -> dict:
         "invalid": 0,
         "last_error": "",
     })
+    logger.warning("tg-confirm resultado=vinculado uid=%s chat=%s",
+                   str(owner_uid)[:6], chat_id)
     return {"uid": owner_uid}
 
 

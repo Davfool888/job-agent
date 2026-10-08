@@ -13,6 +13,7 @@ from app.ai.providers.base import AIProvider
 from app.ai.providers.gemini import _extract_json
 from app.ai.providers.gemini import _load_prompt
 from app.ai.providers.gemini import _reference_section
+from app.ai.providers.gemini import sanitize_analysis_skills
 from app.config import OPENAI_COMPAT_API_KEY
 from app.config import OPENAI_COMPAT_BASE_URL
 from app.config import OPENAI_COMPAT_MODEL
@@ -65,10 +66,11 @@ class OpenAICompatProvider(AIProvider):
                 str(s) for s in (profile.get("target_roles", []) or [])[:10]
             ),
         )
-        return _extract_json(
+        raw = _extract_json(
             self._chat("Responde exclusivamente con JSON valido.",
                        prompt, AI_TIMEOUT_SECONDS)
         )
+        return sanitize_analysis_skills(raw)
 
     def generate_cv_content(
         self, job: dict, analysis: dict, profile: dict,

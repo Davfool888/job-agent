@@ -55,14 +55,12 @@ def _profile_is_locked(profile: dict, now: datetime) -> bool:
     if str(profile.get("id")) in _running_profiles:
         return True
     if profile.get("last_run_status") == "running":
-        last = profile.get("last_run_at")
-        if last:
-            try:
-                started = datetime.fromisoformat(str(last))
-                if now - started < timedelta(minutes=STALE_RUNNING_MINUTES):
-                    return True
-            except ValueError:
-                pass
+        from app.database.firestore_client import as_naive_utc
+
+        started = as_naive_utc(profile.get("last_run_at"))
+        if started is not None and now - started < timedelta(
+                minutes=STALE_RUNNING_MINUTES):
+            return True
     return False
 
 
@@ -222,11 +220,11 @@ def run_due_profiles(*, db=None) -> dict:
                 continue
             next_run = profile.get("next_run_at")
             if next_run:
-                try:
-                    if datetime.fromisoformat(str(next_run)) > now:
-                        continue
-                except ValueError:
-                    pass
+                from app.database.firestore_client import as_naive_utc
+
+                due_at = as_naive_utc(next_run)
+                if due_at is not None and due_at > now:
+                    continue
             # Obtener uid/email del dueño del perfil
             owner_uid = profile.get("owner_uid")
             is_demo = profile.get("is_demo")
@@ -339,11 +337,12 @@ def _count_new(db, started_at: datetime, profile_id: str) -> set[str]:
     """Ids con first_seen_at dentro de esta ejecucion (solo nuevas)."""
     import json
 
+    from app.database.firestore_client import as_naive_utc
     from app.services import job_service as jobs
 
     fresh: set[str] = set()
     for row in jobs.iter_all_jobs(db, limit=5000):
-        first = row.first_seen_at
+        first = as_naive_utc(row.first_seen_at)
         profiles = row.search_profile_ids or []
         if isinstance(profiles, str):
             try:
@@ -352,9 +351,6 @@ def _count_new(db, started_at: datetime, profile_id: str) -> set[str]:
                 profiles = []
         if str(profile_id) not in [str(p) for p in (profiles or [])]:
             continue
-        try:
-            if first is not None and first >= started_at:
-                fresh.add(row.id)
-        except TypeError:
-            continue
+        if first is not None and first >= started_at:
+            fresh.add(row.id)
     return fresh

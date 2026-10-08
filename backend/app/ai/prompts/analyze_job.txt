@@ -18,3 +18,5 @@ Roles objetivo: {target_roles}
 
 Responde con este esquema exacto:
 {{"detected_role": "Data Analyst o null", "category": "DATA_ANALYST", "match_score": 0-100, "evidence": ["max 8 etiquetas"], "matching_skills": [], "missing_skills": [], "experience_required": "texto o null", "summary": "1 frase"}}
+
+Reglas de skills (obligatorias): en evidence/matching_skills/missing_skills usa SOLO skills reales (lenguajes, frameworks, librerias, herramientas, tecnologias, metodologias, plataformas, bases de datos, blandas o certificaciones). PROHIBIDO usar genericos como: tools, tool, experience, skills, requirements, knowledge, professional, responsibilities, manejo, informacion, datos, gestion. Usa la forma canonica ("Power BI", no "PowerBi"/"power bi"/"PBI"; "PostgreSQL", no "postgres" suelto como "SQL"). "BI" solo o "Business Intelligence" generico NO es "Power BI". Si no hay skill real, deja la lista vacia.

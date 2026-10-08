@@ -74,6 +74,12 @@ async def telegram_webhook(
     if not text.startswith("/start") or chat_id is None:
         return {"ok": True}
     parts = text.split()
+    import logging as _logging
+
+    _weblog = _logging.getLogger("job-agent.telegram.webhook")
+    payload = parts[1].strip() if len(parts) > 1 else ""
+    _weblog.warning("tg-webhook /start chat=%s con_payload=%s payload=%s...",
+                    chat_id, bool(payload), payload[:4])
     if len(parts) < 2 or not parts[1].strip():
         try:
             tg._api("sendMessage", {

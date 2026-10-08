@@ -29,6 +29,29 @@ def _extract_json(text: str) -> dict:
     return json.loads(cleaned[start : end + 1])
 
 
+def sanitize_analysis_skills(data: dict) -> dict:
+    """Filtra matching/missing/evidence del LLM por el canon.
+
+    El prompt pide etiquetas, pero el modelo puede devolver genericos
+    ("Tools", "Experience"). Aqui se eliminan sin ocultar nada en el
+    frontend: la correccion es en la capa de datos.
+    """
+    try:
+        from app.analysis.skills_canonical import normalize_skill_list
+    except Exception:  # noqa: BLE001
+        return data
+    data = dict(data or {})
+    if isinstance(data.get("matching_skills"), list):
+        data["matching_skills"] = normalize_skill_list(
+            data["matching_skills"], limit=30
+        )
+    if isinstance(data.get("missing_skills"), list):
+        data["missing_skills"] = normalize_skill_list(
+            data["missing_skills"], limit=30
+        )
+    return data
+
+
 def _reference_section(reference_cvs: list | None) -> str:
     """Bloque de CVs ejemplo para el prompt. Vacio si no hay.
 
@@ -91,7 +114,8 @@ class GeminiProvider(AIProvider):
                 str(s) for s in (profile.get("target_roles", []) or [])[:10]
             ),
         )
-        return _extract_json(self._generate(prompt, AI_TIMEOUT_SECONDS))
+        raw = _extract_json(self._generate(prompt, AI_TIMEOUT_SECONDS))
+        return sanitize_analysis_skills(raw)
 
     def generate_cv_content(
         self, job: dict, analysis: dict, profile: dict,

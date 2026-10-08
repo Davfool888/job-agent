@@ -23,16 +23,43 @@ GOAL_BONUS = 5.0
 
 
 def profile_fit(content_norm: str, profile: dict) -> dict:
-    skills = [
+    from app.analysis.skills_canonical import _IMPLIES
+    from app.analysis.skills_canonical import canonical_key
+    from app.analysis.skills_canonical import normalize_skill_list
+
+    raw_skills = [
         str(s) for s in (profile.get("skills") or []) if str(s).strip()
     ]
+    # Perfil a canonicas (PowerBi/power bi -> Power BI; Tools -> None).
+    canon_profile = normalize_skill_list(raw_skills, limit=30)
     matched, missing = [], []
-    for skill in skills[:30]:
-        variants = [skill, norm(skill).replace(" ", "")]
-        if any(phrases_found(content_norm, [v]) for v in variants):
+    for skill in canon_profile:
+        key = canonical_key(skill)
+        variants = {key, key.replace(" ", "")}
+        # Alias de la canonica: si el perfil dice PostgreSQL y la oferta
+        # pide SQL, tambien cuenta (dialecto implica base, no al reves).
+        for implied in _IMPLIES.get(skill, ()):
+            implied_key = canonical_key(implied)
+            variants.add(implied_key)
+            variants.add(implied_key.replace(" ", ""))
+        if any(phrases_found(content_norm, [v]) for v in variants if v):
             matched.append(skill)
         else:
             missing.append(skill)
+    # Oferta dialecto vs perfil base: si el perfil dice SQL y la oferta
+    # trae postgresql/mysql, cuenta como match.
+    if missing:
+        still_missing = []
+        for skill in missing:
+            key = canonical_key(skill)
+            dialect_hit = any(
+                phrases_found(content_norm, [canonical_key(d)])
+                for canon, bases in _IMPLIES.items()
+                if key in {canonical_key(b) for b in bases}
+                for d in (canon, canon.replace(" ", ""))
+            )
+            (matched if dialect_hit else still_missing).append(skill)
+        missing = still_missing
 
     targets = [norm(str(t)) for t in (profile.get("target_roles") or [])]
     role_matches_goal = False

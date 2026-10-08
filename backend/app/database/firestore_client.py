@@ -18,6 +18,39 @@ logger = logging.getLogger(__name__)
 _client = None
 
 
+def as_naive_utc(value):
+    """Normaliza fecha a naive UTC para comparar sin TypeError.
+
+    Firestore devuelve aware (tz UTC); SQLite devuelve naive; los
+    JSON/ISO llegan como str. Mezclar aware+naive revienta con
+    'can't subtract/compare offset-naive and offset-aware' — este
+    helper es LA forma de comparar en todo el backend.
+    Devuelve None si es irreconocible.
+    """
+    from datetime import datetime, timezone
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            value = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+    if hasattr(value, "isoformat"):
+        try:
+            return as_naive_utc(value.isoformat())
+        except Exception:  # noqa: BLE001
+            return None
+    return None
+
+
 def _resolve_key_path(raw: str) -> str | None:
     if not raw:
         return None

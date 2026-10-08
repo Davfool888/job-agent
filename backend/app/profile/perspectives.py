@@ -47,13 +47,23 @@ def _as_list(value) -> list[str]:
 
 
 def normalize_perspective(raw: dict, index: int = 0) -> dict:
+    from app.analysis.skills_canonical import normalize_skill_list
+
     raw = raw or {}
+    try:
+        skills = normalize_skill_list(raw.get("skills"), limit=100)
+    except Exception:  # noqa: BLE001
+        skills = _as_list(raw.get("skills"))
+    try:
+        tools = normalize_skill_list(raw.get("tools"), limit=100)
+    except Exception:  # noqa: BLE001
+        tools = _as_list(raw.get("tools"))
     return {
         "id": str(raw.get("id") or f"p{index + 1}"),
         "label": str(raw.get("label") or f"Perspectiva {index + 1}").strip(),
         "description": str(raw.get("description") or "").strip(),
-        "skills": _as_list(raw.get("skills")),
-        "tools": _as_list(raw.get("tools")),
+        "skills": skills,
+        "tools": tools,
         "domains": [
             d for d in
             (canonical_domain(x) or norm(x) for x in _as_list(raw.get("domains")))
@@ -75,16 +85,22 @@ def normalize_entry(entry: dict) -> dict:
 
 def flatten_profile_skills(profile: dict) -> list[str]:
     """Une skills planas + grupos + globales tecnicas/blandas + TODAS
-    las perspectivas (orden, sin duplicados). Compatible con perfiles
-    viejos sin perspectivas."""
+    las perspectivas (orden, sin duplicados canonicos). Compatible con
+    perfiles viejos sin perspectivas."""
+    from app.analysis.skills_canonical import canonical_key
+    from app.analysis.skills_canonical import canonicalize_one
+
     profile = profile or {}
     ordered: list[str] = []
 
     def add(values) -> None:
         for value in _as_list(values):
-            key = norm(value)
-            if key and key not in {norm(s) for s in ordered}:
-                ordered.append(value)
+            canon = canonicalize_one(str(value))
+            if not canon:
+                continue
+            key = canonical_key(canon)
+            if key and key not in {canonical_key(s) for s in ordered}:
+                ordered.append(canon)
 
     add(profile.get("skills") if isinstance(profile.get("skills"), list) else [])
     skills = profile.get("skills") or {}
@@ -109,21 +125,36 @@ def flatten_profile_skills(profile: dict) -> list[str]:
 
 
 def declared_base_skills(profile: dict) -> set[str]:
-    """Skills declarados fuera de perspectivas (la base verificable)."""
+    """Skills declarados fuera de perspectivas (la base verificable).
+
+    En claves canonicas: `Data Cleaning` y `Limpieza de datos` son la
+    misma base y no deben generar avisos entre si.
+    """
+    from app.analysis.skills_canonical import canonical_key
+    from app.analysis.skills_canonical import canonicalize_one
+
     profile = profile or {}
     base: set[str] = set()
     flat = profile.get("skills")
+    items: list[str] = []
     if isinstance(flat, list):
-        base.update(norm(s) for s in _as_list(flat))
+        items = _as_list(flat)
     if isinstance(flat, dict):
         for group in flat.values():
-            base.update(norm(s) for s in _as_list(group))
+            items.extend(_as_list(group))
+    for skill in items:
+        canon = canonicalize_one(str(skill)) or str(skill).strip()
+        if canon:
+            base.add(canonical_key(canon))
     return {s for s in base if s}
 
 
 def validate_profile(profile: dict) -> list[str]:
     """Avisos (no errores fatales): skills/tools de perspectivas que no
-    estan declarados en la base del perfil."""
+    estan declarados en la base del perfil (comparacion canonica)."""
+    from app.analysis.skills_canonical import canonical_key
+    from app.analysis.skills_canonical import canonicalize_one
+
     warnings: list[str] = []
     base = declared_base_skills(profile or {})
     if not base:
@@ -135,7 +166,8 @@ def validate_profile(profile: dict) -> list[str]:
             title = item.get("title") or item.get("name") or item.get("degree") or "?"
             for perspective in normalize_entry(item)["perspectives"]:
                 for skill in perspective["skills"] + perspective["tools"]:
-                    if norm(skill) not in base:
+                    canon = canonicalize_one(str(skill)) or str(skill).strip()
+                    if canonical_key(canon) not in base:
                         warnings.append(
                             f"{section}/{title}/{perspective['label']}: "
                             f"'{skill}' no esta en skills base"
@@ -143,7 +175,8 @@ def validate_profile(profile: dict) -> list[str]:
             for skill in _as_list(item.get("technical_skills")) + _as_list(
                 item.get("soft_skills")
             ):
-                if norm(skill) not in base:
+                canon = canonicalize_one(str(skill)) or str(skill).strip()
+                if canonical_key(canon) not in base:
                     warnings.append(
                         f"{section}/{title}: '{skill}' no esta en skills base"
                     )
@@ -162,6 +195,8 @@ def _years_in(text: str | None) -> float | None:
 
 def extract_job_signals(job: dict, analysis: dict | None = None) -> dict:
     """Señales de la vacante: skills, tools, dominios, rol, sector, años."""
+    from app.analysis.skills_canonical import normalize_skill_list
+
     analysis = analysis or {}
     text = " ".join(
         str(job.get(key) or "")
@@ -169,9 +204,12 @@ def extract_job_signals(job: dict, analysis: dict | None = None) -> dict:
     )
     evidence = " ".join(str(e) for e in (analysis.get("evidence") or []))
     full = f"{text} {evidence}"
+    canon_skills = normalize_skill_list(
+        list(analysis.get("matched_skills") or [])
+        + list(analysis.get("evidence") or [])
+    )
     return {
-        "skills": [s.lower() for s in (analysis.get("matched_skills") or [])]
-        + [s.lower() for s in (analysis.get("evidence") or [])],
+        "skills": [s.lower() for s in canon_skills],
         "tools": [],
         "domains": detect_domains(full),
         "sector": norm(job.get("sector")),
