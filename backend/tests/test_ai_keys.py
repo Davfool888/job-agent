@@ -112,6 +112,54 @@ def test_clasifica_key_invalida_google():
     assert err.code == "auth"
 
 
+def test_clasifica_sin_saldo_como_quota():
+    """DeepSeek 402 'Insufficient Balance' es quota (key valida)."""
+    from app.ai.user_providers import classify_http_error
+
+    err = classify_http_error(
+        402, '{"error": {"message": "Insufficient Balance", '
+        '"type": "unknown_error", "code": "invalid_request_error"}}',
+        "HTTPStatusError")
+    assert err.code == "quota"
+
+
+def test_sin_saldo_se_guarda_marcada(_secret, monkeypatch):
+    """Key valida sin saldo: se guarda (cuota_agotada), no se rechaza."""
+    from app.ai.user_providers import ProviderError
+    from app.services import ai_keys
+
+    def fake_verify(provider, key):
+        raise ProviderError("quota", "Sin saldo: Insufficient Balance")
+
+    monkeypatch.setattr("app.services.ai_keys._live_verify", fake_verify)
+    db = _db()
+    try:
+        saved = ai_keys.set_key(db, UID, "deepseek", "sk-test-12345678")
+        assert saved["configured"] is True
+        assert saved["status"] == "cuota_agotada"
+    finally:
+        db.close()
+
+
+def test_saturado_se_guarda_sin_verificar(_secret, monkeypatch):
+    """503 transitorio (key aceptada): se guarda para usarla al
+    recuperarse el proveedor, en vez de bloquear al usuario."""
+    from app.ai.user_providers import ProviderError
+    from app.services import ai_keys
+
+    def fake_verify(provider, key):
+        raise ProviderError("unavailable", "Timeout/conexion fallida")
+
+    monkeypatch.setattr("app.services.ai_keys._live_verify", fake_verify)
+    db = _db()
+    try:
+        saved = ai_keys.set_key(db, UID, "openai", "sk-test-12345678")
+        assert saved["configured"] is True
+        assert saved["status"] == "no_verificada"
+    finally:
+        db.close()
+
+
 def test_status_no_filtra_keys(_secret, monkeypatch):
     from app.services import ai_keys
 

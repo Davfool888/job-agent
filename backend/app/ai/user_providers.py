@@ -32,6 +32,10 @@ def classify_http_error(status: int | None, body: str,
             or "authentication" in lowered and status in (401, 403):
         return ProviderError(
             "auth", f"API key rechazada (auth {status or '?'})")
+    # Sin saldo (DeepSeek 402 "Insufficient Balance", OpenAI
+    # insufficient_quota): la key es VALIDA, solo falta recarga.
+    if status == 402 or "insufficient" in lowered:
+        return ProviderError("quota", f"Sin saldo: {text[:200]}")
     if status == 429 or "rate" in exc_name.lower():
         if "quota" in lowered or "insufficient" in lowered \
                 or "exceeded" in lowered:

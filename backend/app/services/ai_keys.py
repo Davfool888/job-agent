@@ -205,6 +205,14 @@ def set_key(db, uid: str, provider: str, raw_key: str) -> dict:
             _save_row(db, uid, provider, encrypt_key(raw_key),
                       STATUS_QUOTA, str(error)[:200])
             return _public_row(provider, _get_row(db, uid, provider))
+        if error.code == "unavailable":
+            # La key paso auth pero el proveedor esta saturado/caido
+            # (ej. Gemini 503): se guarda sin verificar y el estado se
+            # actualiza sola al primer uso real.
+            _save_row(db, uid, provider, encrypt_key(raw_key),
+                      STATUS_UNVERIFIED,
+                      f"Sin verificar (proveedor saturado): {error}"[:200])
+            return _public_row(provider, _get_row(db, uid, provider))
         raise ValueError(f"Proveedor no verificable ahora: {error}")
     _save_row(db, uid, provider, encrypt_key(raw_key), STATUS_OK, "")
     return _public_row(provider, _get_row(db, uid, provider))
