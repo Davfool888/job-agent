@@ -97,7 +97,7 @@ class UserProviderSpec:
 class GeminiUserProvider(UserProviderSpec):
     id = "gemini"
     label = "Gemini"
-    model = "gemini-2.0-flash"
+    model = "gemini-3.8-flash"
     key_help = "Google AI Studio (aistudio.google.com → Get API Key)"
     key_prefix_hint = "AIza"
 
@@ -105,8 +105,14 @@ class GeminiUserProvider(UserProviderSpec):
                  timeout: int) -> str:
         import httpx
 
+        import os as _os
+
+        # GEMINI_MODEL permite cambiarlo sin tocar codigo (los modelos
+        # viejos los da de baja Google: 2.0-flash murio el 2026-06-01).
+        model = (_os.getenv("GEMINI_MODEL") or type(self).model).strip() \
+            or type(self).model
         url = ("https://generativelanguage.googleapis.com/v1beta/"
-               f"models/{self.model}:generateContent")
+               f"models/{model}:generateContent")
         try:
             response = httpx.post(
                 url,

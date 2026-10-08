@@ -107,7 +107,7 @@ AI_PROVIDER_ORDER = [
     if p.strip()
 ]
 AI_TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT_SECONDS", "30"))
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 OPENAI_COMPAT_BASE_URL = os.getenv(
     "OPENAI_COMPAT_BASE_URL", "https://api.openai.com/v1"
 )
