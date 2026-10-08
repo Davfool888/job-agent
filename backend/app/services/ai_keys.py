@@ -176,18 +176,23 @@ def _live_verify(provider: str, raw_key: str) -> None:
 
 
 def set_key(db, uid: str, provider: str, raw_key: str) -> dict:
-    """Valida en vivo y guarda cifrada. Devuelve vista publica."""
+    """Valida en vivo y guarda cifrada. Devuelve vista publica.
+
+    El prefijo (AIza, sk-, ...) es SOLO ayuda visual: nunca rechaza.
+    La autoridad es la verificacion en vivo contra el proveedor, porque
+    los formatos cambian y un prefijo estricto bloquea keys validas.
+    """
+    import re as _re
+
     from app.ai.user_providers import SUPPORTED, ProviderError, get_spec
 
     get_spec(provider)  # ValueError si no soportado
-    raw_key = str(raw_key or "").strip()
-    if len(raw_key) < 8:
-        raise ValueError("API key demasiado corta.")
-    hint = SUPPORTED[provider].key_prefix_hint
-    if hint and not raw_key.startswith(hint):
+    # Limpia espacios/saltos que se cuelan al copiar desde la web.
+    raw_key = _re.sub(r"\s+", "", str(raw_key or ""))
+    if len(raw_key) < 12:
         raise ValueError(
-            f"Formato inesperado para {provider} "
-            f"(normalmente empieza con '{hint}').")
+            "API key demasiado corta o incompleta "
+            "(¿la copiaste entera desde la web del proveedor?).")
     try:
         _live_verify(provider, raw_key)
     except ProviderError as error:

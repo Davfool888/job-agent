@@ -26,6 +26,8 @@ def classify_http_error(status: int | None, body: str,
     text = f"{body or ''}"[:500]
     lowered = text.lower()
     if status in (401, 403) or "invalid_api_key" in lowered \
+            or "invalid api key" in lowered \
+            or "api key not valid" in lowered \
             or "incorrect api key" in lowered \
             or "authentication" in lowered and status in (401, 403):
         return ProviderError(

@@ -63,10 +63,53 @@ def test_validaciones(_secret):
             ai_keys.set_key(db, UID, "noexiste", "sk-test-12345678")
         with pytest.raises(ValueError):
             ai_keys.set_key(db, UID, "openai", "corta")
-        with pytest.raises(ValueError):
-            ai_keys.set_key(db, UID, "gemini", "sk-test-12345678")
     finally:
         db.close()
+
+
+def test_prefijo_no_bloquea_key_valida(_secret, monkeypatch):
+    """El prefijo (AIza, sk-, ...) es ayuda, no validacion: una key
+    con formato no estandar se acepta si el proveedor la verifica."""
+    from app.services import ai_keys
+
+    monkeypatch.setattr("app.services.ai_keys._live_verify",
+                        lambda provider, key: None)
+    db = _db()
+    try:
+        saved = ai_keys.set_key(db, UID, "gemini", "sk-test-12345678")
+        assert saved["configured"] is True
+        assert saved["status"] == "disponible"
+    finally:
+        db.close()
+
+
+def test_limpia_espacios_y_rechazo_auth(_secret, monkeypatch):
+    from app.ai.user_providers import ProviderError
+    from app.services import ai_keys
+
+    def fake_verify(provider, key):
+        assert " " not in key and "\n" not in key
+        raise ProviderError("auth", "API key rechazada (auth 400)")
+
+    monkeypatch.setattr("app.services.ai_keys._live_verify", fake_verify)
+    db = _db()
+    try:
+        with pytest.raises(ValueError, match="rechazada"):
+            ai_keys.set_key(
+                db, UID, "gemini", "  AIzaSy-test-con-espacios-123456\n")
+    finally:
+        db.close()
+
+
+def test_clasifica_key_invalida_google():
+    """El 400 de Google ('API key not valid') es auth, no 'unknown'."""
+    from app.ai.user_providers import classify_http_error
+
+    err = classify_http_error(
+        400, '{"error": {"code": 400, "message": "API key not valid. '
+        'Please pass a valid API key.", "status": "INVALID_ARGUMENT"}}',
+        "HTTPStatusError")
+    assert err.code == "auth"
 
 
 def test_status_no_filtra_keys(_secret, monkeypatch):
