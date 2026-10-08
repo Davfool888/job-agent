@@ -1,10 +1,13 @@
-"""Telegram fase 1: vinculacion + notificaciones de ofertas.
+"""Telegram: bot propio por usuario + vinculacion + avisos.
 
+- POST /telegram/bot (auth): guarda la key del bot propio (validada
+  con getMe, cifrada) y registra su webhook. Sin secretos en respuesta.
+- DELETE /telegram/bot (auth): borra el bot propio y desvincula el chat.
 - POST /telegram/link/start (auth): codigo temporal + deep link.
 - POST /telegram/webhook: lo llama Telegram (valida secreto + /start).
-- GET /telegram/status (auth): conectado/valido sin exponer nada.
+- GET /telegram/status (auth): conectado/valido/bot. Sin secretos.
 - POST /telegram/test (auth): mensaje de prueba (valida el canal).
-- DELETE /telegram (auth): desconectar.
+- DELETE /telegram (auth): desconectar chat (conserva el bot).
 """
 from fastapi import APIRouter
 from fastapi import Depends
@@ -34,6 +37,42 @@ def _uid_or_401(request: Request) -> str:
     return uid
 
 
+@router.post("/telegram/bot")
+async def telegram_set_bot(request: Request, db: Session = Depends(get_db)):
+    """Guarda el bot propio del usuario (key de BotFather).
+
+    Body: {"token": "123:AAH..."}. Valida en vivo con getMe, cifra con
+    Fernet, registra el webhook del bot. Nunca devuelve el token.
+    """
+    from app.services import telegram as tg
+
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    token = str((body or {}).get("token") or "").strip()
+    if not token:
+        raise HTTPException(status_code=400,
+                            detail="Falta el token del bot.")
+    try:
+        return tg.set_user_bot(db, _uid_or_401(request), token)
+    except tg.TelegramError as error:
+        if error.code == "invalid_token":
+            raise HTTPException(status_code=400, detail=str(error))
+        if error.code == "disabled":
+            raise HTTPException(status_code=500, detail=str(error))
+        raise HTTPException(status_code=502, detail=str(error))
+
+
+@router.delete("/telegram/bot", status_code=204)
+def telegram_remove_bot(request: Request, db: Session = Depends(get_db)):
+    """Borra el bot propio y desvincula el chat."""
+    from app.services import telegram as tg
+
+    tg.remove_user_bot(db, _uid_or_401(request))
+    return None
+
+
 @router.post("/telegram/link/start")
 def telegram_link_start(request: Request, db: Session = Depends(get_db)):
     """Codigo temporal + deep link t.me para el usuario autenticado."""
@@ -49,20 +88,35 @@ def telegram_link_start(request: Request, db: Session = Depends(get_db)):
 async def telegram_webhook(
     request: Request,
     secret: str | None = Query(None),
+    uid: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     """Lo llama Telegram con cada mensaje. Solo procesa /start <codigo>.
 
-    Fase 2 agregara aqui los callbacks Postularme/Descartar.
+    Multi-bot: cada bot propio apunta aqui con ?uid=<dueno>; el secreto
+    se valida contra el secreto propio de ese usuario (o el global
+    legacy cuando no hay uid). Fase 2 agregara callbacks aqui.
     """
     import os as _os
 
     from app.services import telegram as tg
 
     header_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
-    expected = (_os.getenv("TELEGRAM_WEBHOOK_SECRET") or "").strip()
-    if expected and secret != expected and header_secret != expected:
-        raise HTTPException(status_code=401, detail="No autorizado.")
+    reply_token = ""
+    if uid:
+        link = tg._get_link(db, str(uid)) or {}
+        expected = str(link.get("webhook_secret") or "").strip()
+        if expected and secret != expected and header_secret != expected:
+            raise HTTPException(status_code=401, detail="No autorizado.")
+        try:
+            reply_token = tg._user_token(db, str(uid))
+        except tg.TelegramError:
+            reply_token = ""
+    else:
+        expected = (_os.getenv("TELEGRAM_WEBHOOK_SECRET") or "").strip()
+        if expected and secret != expected and header_secret != expected:
+            raise HTTPException(status_code=401, detail="No autorizado.")
+        reply_token = tg._global_token()
     try:
         update = await request.json()
     except Exception:  # noqa: BLE001
@@ -71,6 +125,19 @@ async def telegram_webhook(
     text = str(message.get("text") or "").strip()
     chat = message.get("chat") or {}
     chat_id = chat.get("id")
+
+    def _reply(payload_text: str) -> None:
+        if chat_id is None or not reply_token:
+            return
+        try:
+            tg._api("sendMessage", {
+                "chat_id": chat_id,
+                "text": payload_text,
+                "parse_mode": "HTML",
+            }, reply_token)
+        except tg.TelegramError:
+            pass
+
     if not text.startswith("/start") or chat_id is None:
         return {"ok": True}
     parts = text.split()
@@ -81,38 +148,19 @@ async def telegram_webhook(
     _weblog.warning("tg-webhook /start chat=%s con_payload=%s payload=%s...",
                     chat_id, bool(payload), payload[:4])
     if len(parts) < 2 or not parts[1].strip():
-        try:
-            tg._api("sendMessage", {
-                "chat_id": chat_id,
-                "text": "Hola 👋 Para vincular tu cuenta, abre Job Agent "
-                        "→ Configuración → Conectar Telegram y usa el "
-                        "botón que te lleva aquí.",
-            })
-        except tg.TelegramError:
-            pass
+        _reply("Hola 👋 Para vincular tu cuenta, abre Job Agent "
+               "→ Configuración → Conectar Telegram y usa el "
+               "botón que te lleva aquí.")
         return {"ok": True}
     try:
         result = tg.confirm_link(db, parts[1].strip(), chat_id,
                                  str((message.get("from") or {}).get(
                                      "username") or ""))
     except tg.TelegramError as error:
-        try:
-            tg._api("sendMessage", {
-                "chat_id": chat_id,
-                "text": f"⚠ No se pudo vincular: {error}",
-            })
-        except tg.TelegramError:
-            pass
+        _reply(f"⚠ No se pudo vincular: {error}")
         return {"ok": True}
-    try:
-        tg._api("sendMessage", {
-            "chat_id": chat_id,
-            "text": "✅ <b>Telegram vinculado con Job Agent</b>\n"
-                    "Recibirás aquí las nuevas ofertas de tus búsquedas.",
-            "parse_mode": "HTML",
-        })
-    except tg.TelegramError:
-        pass
+    _reply("✅ <b>Telegram vinculado con Job Agent</b>\n"
+           "Recibirás aquí las nuevas ofertas de tus búsquedas.")
     return {"ok": True, "uid": result["uid"]}
 
 

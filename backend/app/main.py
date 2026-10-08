@@ -95,19 +95,22 @@ async def lifespan(app: FastAPI):
         except Exception:  # noqa: BLE001
             pass
         # Webhook de Telegram (best-effort, nunca tumba el arranque).
+        # Solo el bot global legacy: los bots propios registran el suyo
+        # al guardar la key (POST /telegram/bot).
         try:
             from app.config import TELEGRAM_PUBLIC_URL
             from app.services import telegram as _tg
 
             base = (TELEGRAM_PUBLIC_URL or "").strip().rstrip("/")
-            if base and _tg.enabled():
+            if base and _tg._global_token():
                 from app.config import TELEGRAM_WEBHOOK_SECRET
 
                 payload = {"url": f"{base}/telegram/webhook"}
                 if (TELEGRAM_WEBHOOK_SECRET or "").strip():
                     payload["secret_token"] = \
                         TELEGRAM_WEBHOOK_SECRET.strip()
-                _tg._api("setWebhook", payload, timeout=15)
+                _tg._api("setWebhook", payload, _tg._global_token(),
+                         timeout=15)
                 _log.warning("Telegram webhook registrado: %s",
                              payload["url"])
         except Exception as error:  # noqa: BLE001

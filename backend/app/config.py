@@ -118,17 +118,23 @@ OPENAI_COMPAT_MODEL = os.getenv("OPENAI_COMPAT_MODEL", "gpt-4o-mini")
 # decreto; tambien sobreescribible con env SMMLV_COP.
 SMMLV_COP = int(os.getenv("SMMLV_COP", "1423500"))
 
-# --- Telegram (notificaciones de ofertas, fase 1: solo avisos) ---
-# Token del bot de BotFather. Sin esto, Telegram queda deshabilitado
+# --- Telegram (avisos de ofertas; multi-bot) ---
+# Cada usuario pega SU token de BotFather en Configuración → Telegram.
+# TELEGRAM_BOT_TOKEN queda como respaldo global OPCIONAL (legacy): si se
+# define, los avisos funcionan aun sin key propia; si se omite, cada
+# persona usa su propio bot. Sin ninguno, Telegram queda deshabilitado
 # (el resto de la app funciona igual).
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-# Secreto para validar el webhook (header X-Telegram-Bot-Api-Secret-Token).
+# Secreto para validar el webhook del bot global legacy
+# (header X-Telegram-Bot-Api-Secret-Token). Los bots propios generan
+# su secreto automáticamente al guardar la key.
 TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
-# Usuario del bot sin @ (para deep links t.me/<bot>?start=...).
+# Usuario del bot global sin @ (para deep links t.me/<bot>?start=...).
 # Si esta vacio se resuelve con getMe contra la API.
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "")
-# URL publica para auto-registrar el webhook al arrancar
-# (ej: https://tu-api.onrender.com). Vacio = registro manual.
+# URL publica (ej: https://tu-api.onrender.com). Con esto, al guardar su
+# key cada usuario registra AUTOMÁTICAMENTE el webhook de su bot.
+# Vacio = cada usuario lo registra a mano (la app muestra cómo).
 TELEGRAM_PUBLIC_URL = os.getenv("TELEGRAM_PUBLIC_URL", "")
 # Tope de avisos por ejecucion de perfil (anti-spam en lote).
 TELEGRAM_MAX_PER_RUN = int(os.getenv("TELEGRAM_MAX_PER_RUN", "10"))

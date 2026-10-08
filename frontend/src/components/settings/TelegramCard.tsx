@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   fetchTelegramStatus,
+  removeTelegramBot,
+  saveTelegramBot,
   startTelegramLink,
   testTelegram,
   unlinkTelegram,
@@ -8,13 +10,18 @@ import {
   type TelegramStatus,
 } from "../../services/telegram";
 
-/** Telegram por usuario: conectar (deep link), estado, probar, desconectar. */
+/** Telegram por usuario: bot propio (pegar key), conectar, probar. */
 export function TelegramCard() {
   const [status, setStatus] = useState<TelegramStatus | null>(null);
   const [link, setLink] = useState<TelegramLinkStart | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [token, setToken] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const [manual, setManual] = useState<{ url: string; secret: string } | null>(
+    null
+  );
 
   const load = async () => {
     try {
@@ -66,6 +73,52 @@ export function TelegramCard() {
     }
   };
 
+  const saveBot = async () => {
+    if (!token.trim()) {
+      setError("Pega primero el token de tu bot (BotFather).");
+      return;
+    }
+    setBusy("bot");
+    setError(null);
+    setOk(null);
+    setManual(null);
+    try {
+      const saved = await saveTelegramBot(token.trim());
+      setToken("");
+      await load();
+      if (saved.webhook_ok) {
+        setOk(`Bot @${saved.bot_username} configurado y webhook automático listo.`);
+      } else {
+        setOk(`Bot @${saved.bot_username} guardado. Falta registrar el webhook a mano:`);
+        if (saved.manual_url && saved.manual_secret) {
+          setManual({ url: saved.manual_url, secret: saved.manual_secret });
+        }
+      }
+    } catch (e: any) {
+      setError(e.response?.data?.detail || "No se pudo guardar el bot.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const removeBot = async () => {
+    if (!confirm("¿Quitar tu bot? Se borrará su token y se desconectará el chat.")) return;
+    setBusy("unbot");
+    setError(null);
+    setOk(null);
+    setManual(null);
+    try {
+      await removeTelegramBot();
+      setLink(null);
+      await load();
+      setOk("Bot eliminado.");
+    } catch (e: any) {
+      setError(e.response?.data?.detail || "No se pudo quitar el bot.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const disconnect = async () => {
     if (!confirm("¿Desconectar Telegram? Dejarás de recibir ofertas ahí.")) return;
     setBusy("unlink");
@@ -96,6 +149,77 @@ export function TelegramCard() {
       {ok && (
         <p style={{ color: "var(--success)", fontSize: 13 }}>✅ {ok}</p>
       )}
+      {/* Bot propio: cada persona pega su key de BotFather */}
+      <div style={{ marginBottom: 12, fontSize: 13 }}>
+        <p style={{ margin: "0 0 6px" }}>
+          <strong>Tu bot</strong>{" "}
+          <span className="card-sub">
+            (créalo con @BotFather y pega aquí su token; la app lo valida,
+            lo cifra y configura todo sola)
+          </span>
+        </p>
+        {status?.has_bot ? (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span>
+              Bot configurado:{" "}
+              <strong>
+                @{status.bot_username ?? "?"}
+              </strong>
+            </span>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={busy === "unbot"}
+              onClick={() => void removeBot()}
+            >
+              {busy === "unbot" ? "Quitando…" : "Quitar bot"}
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input
+              type={showToken ? "text" : "password"}
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="123456789:AAH… (token de BotFather)"
+              autoComplete="off"
+              spellCheck={false}
+              style={{ flex: "1 1 220px", minWidth: 0 }}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setShowToken((v) => !v)}
+            >
+              {showToken ? "Ocultar" : "Ver"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={busy === "bot"}
+              onClick={() => void saveBot()}
+            >
+              {busy === "bot" ? "Guardando…" : "Guardar bot"}
+            </button>
+          </div>
+        )}
+        {manual && (
+          <div style={{ marginTop: 8 }}>
+            <p className="card-sub" style={{ margin: "0 0 4px" }}>
+              El servidor no tiene URL pública: registra el webhook a mano
+              abriendo esta dirección (reemplaza{" "}
+              <code>&lt;TU_TOKEN&gt;</code> por tu token) con el secret de
+              abajo como <code>secret_token</code>:
+            </p>
+            <code style={{ display: "block", wordBreak: "break-all", marginBottom: 4 }}>
+              {manual.url}
+            </code>
+            <code style={{ display: "block", wordBreak: "break-all" }}>
+              secret: {manual.secret}
+            </code>
+          </div>
+        )}
+      </div>
       {!status ? (
         <p className="card-sub">Cargando estado…</p>
       ) : !status.connected ? (
@@ -104,14 +228,20 @@ export function TelegramCard() {
             Estado: <strong>No conectado</strong>
           </p>
           {!link ? (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              disabled={busy === "link"}
-              onClick={() => void connect()}
-            >
-              {busy === "link" ? "Generando…" : "Conectar Telegram"}
-            </button>
+            status.has_bot ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={busy === "link"}
+                onClick={() => void connect()}
+              >
+                {busy === "link" ? "Generando…" : "Conectar Telegram"}
+              </button>
+            ) : (
+              <p className="card-sub" style={{ margin: 0 }}>
+                Guarda primero tu bot arriba para poder conectar tu chat.
+              </p>
+            )
           ) : (
             <div style={{ fontSize: 13 }}>
               <p style={{ margin: "0 0 8px" }}>

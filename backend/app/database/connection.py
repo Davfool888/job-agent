@@ -165,6 +165,24 @@ def ensure_columns():
                         text(f"ALTER TABLE pdf_configs "
                              f"ADD COLUMN {column} {ddl}")
                     )
+        # Bot propio de Telegram por usuario (fase multi-bot).
+        if "telegram_links" in tables:
+            existing_tg = {
+                row[1]
+                for row in conn.execute(
+                    text("PRAGMA table_info(telegram_links)")
+                ).fetchall()
+            }
+            for column, ddl in (
+                ("bot_token_enc", "TEXT"),
+                ("bot_username", "VARCHAR(128)"),
+                ("webhook_secret", "VARCHAR(64)"),
+            ):
+                if column not in existing_tg:
+                    conn.execute(
+                        text(f"ALTER TABLE telegram_links "
+                             f"ADD COLUMN {column} {ddl}")
+                    )
 
 
 def get_db():

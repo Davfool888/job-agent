@@ -28,31 +28,42 @@ def _env_int(name: str, default: int) -> int:
 
 
 class TelegramError(Exception):
-    """Fallo clasificado: no_token|invalid_token|blocked|invalid_chat|
-    api_error|no_link|already_linked|expired|used|disabled."""
+    """Fallo clasificado: no_bot|invalid_token|blocked|invalid_chat|
+    api_error|no_link|already_linked|expired|used|disabled|no_public_url."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
 
 
-def enabled() -> bool:
-    return bool((_os.getenv("TELEGRAM_BOT_TOKEN") or "").strip())
+def _user_token(db, uid: str) -> str:
+    """Token del BOT PROPIO del usuario (descifrado). Jamas global."""
+    from app.services import ai_keys as _keys
+
+    link = _get_link(db, uid) or {}
+    enc = link.get("bot_token_enc")
+    if not enc:
+        raise TelegramError(
+            "no_bot",
+            "Primero configura tu bot: pega tu token en "
+            "Configuración → Telegram.")
+    try:
+        return _keys.decrypt_key(enc)
+    except Exception as error:  # noqa: BLE001
+        raise TelegramError(
+            "invalid_token",
+            f"No se pudo leer tu token guardado: {error}")
 
 
-def _token() -> str:
-    token = (_os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
-    if not token:
-        raise TelegramError("disabled", "Bot de Telegram no configurado.")
-    return token
-
-
-def _api(method: str, payload: dict, timeout: int = 20) -> dict:
-    """Llama a Bot API. Devuelve result o lanza TelegramError."""
+def _api(method: str, payload: dict, token: str,
+         timeout: int = 20) -> dict:
+    """Llama a Bot API con el token dado. Devuelve result o lanza."""
     import httpx
 
+    if not (token or "").strip():
+        raise TelegramError("no_bot", "Sin token de bot.")
     try:
-        response = httpx.post(f"{_API}/bot{_token()}/{method}",
+        response = httpx.post(f"{_API}/bot{token.strip()}/{method}",
                               json=payload, timeout=timeout)
     except Exception as error:  # noqa: BLE001
         raise TelegramError("api_error", f"Red Telegram fallo: {error}")
@@ -67,7 +78,7 @@ def _api(method: str, payload: dict, timeout: int = 20) -> dict:
     lowered = description.lower()
     if response.status_code in (401, 404) or "unauthorized" in lowered:
         raise TelegramError("invalid_token",
-                            "Token del bot invalido (revisalo en Render).")
+                            "Token del bot inválido (revísalo en BotFather).")
     if "blocked" in lowered or "deactivated" in lowered:
         raise TelegramError("blocked", "El usuario bloqueo al bot.")
     if "chat not found" in lowered or "chat_id" in lowered \
@@ -79,20 +90,54 @@ def _api(method: str, payload: dict, timeout: int = 20) -> dict:
                         f"{description[:150]}")
 
 
-def bot_username() -> str:
-    """Usuario del bot sin @ (env o getMe). Vacio si no resolvible."""
+def bot_username(db, uid: str) -> str:
+    """Usuario del bot PROPIO (guardado al validar la key)."""
+    link = _get_link(db, uid) or {}
+    return str(link.get("bot_username") or "").strip().lstrip("@")
+
+
+def _global_token() -> str:
+    """Token del bot global legacy (env). Vacio si no hay (multi-bot)."""
+    return (_os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+
+
+def _effective_token(db, uid: str) -> str:
+    """Token propio del usuario o, en su defecto, el global legacy.
+
+    Permite que instalaciones que ya usaban un bot global sigan
+    funcionando sin que cada usuario pegue su key.
+    """
+    try:
+        return _user_token(db, uid)
+    except TelegramError as error:
+        if error.code != "no_bot":
+            raise
+    token = _global_token()
+    if not token:
+        raise TelegramError(
+            "no_bot",
+            "Primero configura tu bot: pega tu token en "
+            "Configuración → Telegram.")
+    return token
+
+
+def _effective_username(db, uid: str) -> str:
+    """@ del bot propio o del global (para deep links t.me)."""
+    own = bot_username(db, uid)
+    if own:
+        return own
     configured = (_os.getenv("TELEGRAM_BOT_USERNAME") or "").strip().lstrip(
         "@")
     if configured:
         return configured
-    if not enabled():
+    token = _global_token()
+    if not token:
         return ""
     try:
-        me = _api("getMe", {}, timeout=15)
-        username = str(me.get("username") or "").strip()
-        return username
+        me = _api("getMe", {}, token, timeout=15)
+        return str(me.get("username") or "").strip().lstrip("@")
     except TelegramError as error:
-        logger.warning("getMe fallo: %s", error)
+        logger.warning("getMe global fallo: %s", error)
         return ""
 
 
@@ -125,6 +170,10 @@ def _get_link(db, uid: str) -> dict | None:
         "code_used": bool(row.code_used),
         "invalid": bool(row.invalid),
         "last_error": row.last_error or "",
+        "has_bot": bool(row.bot_token_enc),
+        "bot_token_enc": row.bot_token_enc or "",
+        "bot_username": row.bot_username or "",
+        "webhook_secret": row.webhook_secret or "",
     }
 
 
@@ -149,7 +198,8 @@ def _save_link(db, uid: str, fields: dict) -> None:
         row = TelegramLink(uid=str(uid))
         db.add(row)
     for key in ("chat_id", "username", "linked_at", "link_code",
-                "code_created_at", "code_used", "invalid", "last_error"):
+                "code_created_at", "code_used", "invalid", "last_error",
+                "bot_token_enc", "bot_username", "webhook_secret"):
         if key in fields:
             setattr(row, key, fields[key])
     row.updated_at = now
@@ -229,14 +279,118 @@ def mark_sent(db, uid: str, job_id, message_id: int | None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Bot propio del usuario (cada persona pega su key de BotFather)
+# ---------------------------------------------------------------------------
+
+def _valid_bot_format(raw: str) -> bool:
+    import re as _re
+
+    return bool(_re.fullmatch(r"\d{6,}:[A-Za-z0-9_-]{20,}", raw.strip()))
+
+
+def webhook_url_for(uid: str) -> str | None:
+    """URL que el bot del usuario debe tener como webhook (o None si no
+    hay PUBLIC_URL configurada y toca registro manual)."""
+    base = (_os.getenv("TELEGRAM_PUBLIC_URL") or "").strip().rstrip("/")
+    if not base:
+        return None
+    return f"{base}/telegram/webhook?uid={uid}"
+
+
+def set_user_bot(db, uid: str, raw_token: str) -> dict:
+    """Valida la key con getMe, la cifra y la guarda; registra el webhook
+    del bot propio (best-effort). Devuelve vista publica (sin secretos)."""
+    import secrets as _secrets
+
+    from app.services import ai_keys as _keys
+
+    token = str(raw_token or "").strip()
+    if not _valid_bot_format(token):
+        raise TelegramError(
+            "invalid_token",
+            "Formato inválido: el token de BotFather es como "
+            "123456789:AAH... (id:numérico + ':' + hash).")
+    try:
+        me = _api("getMe", {}, token, timeout=20)
+    except TelegramError:
+        raise
+    username = str((me or {}).get("username") or "").strip().lstrip("@")
+    if not username:
+        raise TelegramError(
+            "invalid_token",
+            "Telegram no devolvió usuario para ese token (¿revocado?).")
+    try:
+        enc = _keys.encrypt_key(token)
+    except RuntimeError as error:
+        raise TelegramError("disabled", str(error))
+    link = _get_link(db, uid) or {}
+    secret = str(link.get("webhook_secret") or "").strip() or \
+        _secrets.token_urlsafe(24)
+    _save_link(db, uid, {
+        "bot_token_enc": enc,
+        "bot_username": username,
+        "webhook_secret": secret,
+        "invalid": 0,
+        "last_error": "",
+    })
+    # Webhook automático del bot propio (no tumba el guardado si falla).
+    url = webhook_url_for(uid)
+    webhook_ok, webhook_error = False, ""
+    if url is None:
+        webhook_error = (
+            "Sin TELEGRAM_PUBLIC_URL: registra el webhook a mano "
+            "(ver manual_url).")
+    else:
+        try:
+            _api("setWebhook", {"url": url, "secret_token": secret},
+                 token, timeout=20)
+            webhook_ok = True
+        except TelegramError as error:
+            webhook_error = str(error)[:200]
+    logger.warning("tg-set-bot uid=%s bot=@%s webhook_ok=%s",
+                   str(uid)[:6], username, webhook_ok)
+    out = {"has_bot": True, "bot_username": username,
+           "webhook_ok": webhook_ok}
+    if webhook_error:
+        out["webhook_error"] = webhook_error
+    if url is None:
+        out["manual_url"] = (
+            "https://api.telegram.org/bot<TU_TOKEN>/setWebhook"
+            f"?url={webhook_url_for(uid) or '<TU_API>/telegram/webhook?uid=<TU_UID>'}"
+            "&secret_token=<TU_SECRETO>")
+        out["manual_secret"] = secret
+    return out
+
+
+def remove_user_bot(db, uid: str) -> bool:
+    """Borra el bot propio (best-effort deleteWebhook) y desvincula el
+    chat, que pertenecía a ese bot. Devuelve si había bot."""
+    try:
+        old = _user_token(db, uid)
+    except TelegramError:
+        return False
+    try:
+        _api("deleteWebhook", {"drop_pending_updates": False}, old,
+             timeout=15)
+    except TelegramError as error:
+        logger.warning("deleteWebhook fallo (se borra igual): %s", error)
+    _save_link(db, uid, {
+        "bot_token_enc": None, "bot_username": None, "webhook_secret": None,
+        "chat_id": None, "username": None, "linked_at": None,
+        "invalid": 0, "last_error": "",
+    })
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Vinculacion
 # ---------------------------------------------------------------------------
 
 def start_link(db, uid: str) -> dict:
-    """Genera codigo temporal + deep link para el usuario autenticado."""
-    if not enabled():
-        raise TelegramError("disabled", "Bot de Telegram no configurado.")
-    username = bot_username()
+    """Genera codigo temporal + deep link del bot EFECTIVO (propio del
+    usuario o global legacy) para el usuario autenticado."""
+    _effective_token(db, uid)  # no_bot si no hay ninguno configurado
+    username = _effective_username(db, uid)
     if not username:
         raise TelegramError("api_error",
                             "No se pudo resolver el usuario del bot "
@@ -305,14 +459,25 @@ def confirm_link(db, code: str, chat_id, username: str | None) -> dict:
 
 
 def get_status(db, uid: str) -> dict:
-    """Estado + validez en vivo (sin mutar nada)."""
+    """Estado + validez en vivo (sin mutar nada, sin secretos)."""
     link = _get_link(db, uid) or {}
+    has_bot = bool(link.get("bot_token_enc") or link.get("has_bot")) \
+        or bool(_global_token())
+    bot_name = _effective_username(db, uid) or None
+    base = {"has_bot": has_bot, "bot_username": bot_name}
     chat_id = link.get("chat_id")
     if not chat_id:
         return {"connected": False, "username": None, "linked_at": None,
-                "valid": False, "bot_username": bot_username() or None}
+                "valid": False, **base}
     try:
-        _api("getChat", {"chat_id": chat_id}, timeout=15)
+        token = _effective_token(db, uid)
+    except TelegramError as error:
+        return {"connected": True,
+                "username": link.get("username"),
+                "linked_at": link.get("linked_at"),
+                "valid": False, "error": str(error)[:200], **base}
+    try:
+        _api("getChat", {"chat_id": chat_id}, token, timeout=15)
         valid, error = True, ""
     except TelegramError as err:
         valid, error = False, str(err)[:200]
@@ -322,7 +487,7 @@ def get_status(db, uid: str) -> dict:
         "linked_at": link.get("linked_at"),
         "valid": valid,
         "error": error,
-        "bot_username": bot_username() or None,
+        **base,
     }
 
 
@@ -393,13 +558,13 @@ def build_job_message(job) -> tuple[str, dict]:
 
 
 def send_message(chat_id, text: str, reply_markup: dict | None = None,
-                 timeout: int = 20) -> int | None:
-    """Envia y devuelve message_id. Clasifica errores de Telegram."""
+                  token: str = "", timeout: int = 20) -> int | None:
+    """Envia con el token dado y devuelve message_id."""
     payload = {"chat_id": str(chat_id), "text": text,
                "parse_mode": "HTML", "disable_web_page_preview": True}
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    result = _api("sendMessage", payload, timeout=timeout)
+    result = _api("sendMessage", payload, token, timeout=timeout)
     message_id = result.get("message_id")
     try:
         return int(message_id) if message_id is not None else None
@@ -413,10 +578,12 @@ def send_test(db, uid: str) -> dict:
     chat_id = link.get("chat_id")
     if not chat_id:
         raise TelegramError("no_link", "Telegram no conectado.")
+    token = _effective_token(db, uid)
     try:
         message_id = send_message(
             chat_id, "🔔 <b>Job Agent conectado</b>\n"
-                     "Recibiras aqui las nuevas ofertas de tus busquedas.")
+                     "Recibiras aqui las nuevas ofertas de tus busquedas.",
+            token=token)
     except TelegramError as error:
         if error.code in ("blocked", "invalid_chat"):
             _mark_invalid(db, uid, str(error))
@@ -434,9 +601,10 @@ def send_job(db, uid: str, job) -> int | None:
     chat_id = link.get("chat_id")
     if not chat_id:
         raise TelegramError("no_link", "Telegram no conectado.")
+    token = _effective_token(db, uid)
     text, keyboard = build_job_message(job)
     try:
-        message_id = send_message(chat_id, text, keyboard)
+        message_id = send_message(chat_id, text, keyboard, token=token)
     except TelegramError as error:
         if error.code in ("blocked", "invalid_chat"):
             _mark_invalid(db, uid, str(error))
@@ -454,7 +622,16 @@ def notify_new_jobs(db, uid: str | None, job_ids: list,
     max_per_run = _env_int("TELEGRAM_MAX_PER_RUN", 10)
 
     summary: dict = {"sent": 0, "skipped": 0, "errors": []}
-    if not uid or not enabled():
+    if not uid:
+        return summary
+    try:
+        _effective_token(db, uid)  # sin bot (ni propio ni global): silencio
+    except TelegramError:
+        return summary
+    except Exception as error:  # noqa: BLE001 (el scheduler nunca revienta)
+        logger.warning("Telegram notify fallo (no rompe busqueda): %s",
+                       error)
+        summary["errors"].append(str(error)[:150])
         return summary
     try:
         link = _get_link(db, uid) or {}

@@ -665,6 +665,8 @@ class TelegramLink(Base):
 
     chat_id solo existe tras confirmar desde el bot. link_code es el
     codigo temporal del deep link (un solo uso, con expiracion).
+    bot_token_enc guarda EL BOT PROPIO del usuario (cifrado Fernet);
+    cada persona usa su bot y su cuota, sin configuracion global.
     """
 
     __tablename__ = "telegram_links"
@@ -678,6 +680,13 @@ class TelegramLink(Base):
     link_code = Column(String(64), nullable=True, index=True)
     code_created_at = Column(DateTime, nullable=True)
     code_used = Column(Integer, nullable=False, default=0)
+
+    # Bot PROPIO del usuario (token cifrado Fernet, jamas en claro).
+    # Sin esto no hay envios ni deep link: cada persona usa su bot.
+    bot_token_enc = Column(Text, nullable=True)
+    bot_username = Column(String(128), nullable=True)
+    # Secreto propio para validar SU webhook (se registra en SU bot).
+    webhook_secret = Column(String(64), nullable=True)
 
     # Si Telegram rechaza los envios (bot bloqueado/chat invalido).
     invalid = Column(Integer, nullable=False, default=0)
