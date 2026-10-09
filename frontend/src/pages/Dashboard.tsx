@@ -1,23 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   Archive,
   BookmarkCheck,
   Briefcase,
   Building2,
+  Clock,
   Inbox,
-  Layers,
   RefreshCw,
   Search,
   Send,
   Target,
+  X,
 } from "lucide-react";
 import { Header } from "../components/layout/Header";
 import { ErrorState, LoadingState } from "../components/jobs/States";
 import { useJobs, useSources, useStats } from "../hooks/useApi";
 import { useJobSearchStream } from "../hooks/useJobSearchStream";
 import { useSearchSession } from "../context/SearchSessionContext";
-import { discoverJobs } from "../services/jobs";
 import { fetchSchedulerStatus } from "../services/searchProfiles";
 import type { SchedulerStatus } from "../types/searchProfile";
 import { timeAgo } from "../utils/format";
@@ -25,6 +25,7 @@ import { rankJobs, splitKeywords } from "../utils/searchRank";
 import { COLOMBIAN_CITIES } from "../utils/cities";
 import { STATUS_LABELS, sourceLabel } from "../utils/constants";
 import { canonicalLocation } from "../utils/profileOptions";
+import { useAuth } from "../context/AuthContext";
 
 interface SourceSummary {
   source: string;
@@ -33,7 +34,23 @@ interface SourceSummary {
   error?: string;
 }
 
+interface SearchHistoryItem {
+  query: string;
+  keywords: string;
+  city: string;
+  source: string;
+  pages: number;
+  maxAge: number;
+  timestamp: number;
+}
+
+const MAX_HISTORY_ITEMS = 4;
+const STORAGE_KEY_PREFIX = "jobagent_search_history_";
+
 export function Dashboard() {
+  const { firebaseUser } = useAuth();
+  const userId = firebaseUser?.uid ?? "guest";
+
   const [refreshKey, setRefreshKey] = useState(0);
   const jobs = useJobs();
   const stats = useStats(refreshKey);
@@ -43,10 +60,10 @@ export function Dashboard() {
   const [maxAge, setMaxAge] = useState<number>(() =>
     Number(window.localStorage.getItem("jobagent_default_max_age") ?? 0) || 0,
   );
-  const changeMaxAge = (v: number) => {
+  const changeMaxAge = useCallback((v: number) => {
     setMaxAge(v);
     window.localStorage.setItem("jobagent_default_max_age", String(v));
-  };
+  }, []);
   // Sesion de busqueda compartida: persiste al navegar entre secciones,
   // no re-ejecuta scraping al volver y no resetea la consulta.
   const {
@@ -64,22 +81,86 @@ export function Dashboard() {
     setResult,
     multi,
     setMulti,
-    discovery,
-    setDiscovery,
   } = useSearchSession();
-  const [discovering, setDiscovering] = useState(false);
-  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [sched, setSched] = useState<SchedulerStatus | null>(null);
   // Generación de búsqueda: si el usuario sigue escribiendo, la
   // anterior se abandona y solo la última pinta resultados.
   const runIdRef = useRef(0);
-  const skipAutoRef = useRef(true);
+  // Historial de búsquedas (últimas 4 por usuario)
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>(() => {
+    try {
+      const raw = window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${userId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.slice(0, MAX_HISTORY_ITEMS);
+      }
+    } catch {
+      /* ignore */
+    }
+    return [];
+  });
+  const [showHistory, setShowHistory] = useState(false);
+  // Búsqueda progresiva: estado para controlar fases
+  const [progressivePhase, setProgressivePhase] = useState<"idle" | "main" | "variations">("idle");
+  const [variationQueries, setVariationQueries] = useState<string[]>([]);
+  const [currentVariationIndex, setCurrentVariationIndex] = useState(0);
+  const variationQueriesRef = useRef<string[]>([]);
+  const currentVariationIndexRef = useRef(0);
 
   useEffect(() => {
     fetchSchedulerStatus()
       .then(setSched)
       .catch(() => setSched(null));
   }, []);
+
+  // Cargar historial cuando cambia el usuario - se usa el estado inicial
+  // del useState y se actualiza solo si userId cambia realmente
+  const prevUserIdRef = useRef(userId);
+  useEffect(() => {
+    if (prevUserIdRef.current === userId) return;
+    prevUserIdRef.current = userId;
+    try {
+      const raw = window.localStorage.getItem(`${STORAGE_KEY_PREFIX}${userId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setSearchHistory(parsed.slice(0, MAX_HISTORY_ITEMS)); // eslint-disable-line react-hooks/set-state-in-effect
+        } else {
+          setSearchHistory([]); // eslint-disable-line react-hooks/set-state-in-effect
+        }
+      } else {
+        setSearchHistory([]); // eslint-disable-line react-hooks/set-state-in-effect
+      }
+    } catch {
+      setSearchHistory([]); // eslint-disable-line react-hooks/set-state-in-effect
+    }
+  }, [userId]);
+
+  const saveToHistory = useCallback((item: Omit<SearchHistoryItem, "timestamp">) => {
+    const itemWithTimestamp: SearchHistoryItem = { ...item, timestamp: Date.now() };
+    setSearchHistory((prev) => {
+      const filtered = prev.filter(
+        (h) => !(h.query === itemWithTimestamp.query && h.city === itemWithTimestamp.city && h.source === itemWithTimestamp.source)
+      );
+      const updated = [itemWithTimestamp, ...filtered].slice(0, MAX_HISTORY_ITEMS);
+      try {
+        window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${userId}`, JSON.stringify(updated));
+      } catch {
+        /* ignore */
+      }
+      return updated;
+    });
+  }, [userId]);
+
+  const selectHistoryItem = useCallback((item: SearchHistoryItem) => {
+    setQuery(item.query);
+    setKeywords(item.keywords);
+    setCity(item.city);
+    setSource(item.source);
+    setPages(item.pages);
+    changeMaxAge(item.maxAge);
+    setShowHistory(false);
+  }, [setQuery, setKeywords, setCity, setSource, setPages, changeMaxAge]);
 
   const all = useMemo(() => jobs.data ?? [], [jobs.data]);
   const byStatus = stats.data?.by_status ?? {};
@@ -122,26 +203,73 @@ export function Dashboard() {
     [all],
   );
 
+  // Construir queries de variación para búsqueda progresiva
+  const buildVariationQueries = useCallback((baseQuery: string, baseKeywords: string): string[] => {
+    const queries: string[] = [];
+    const seen = new Set<string>();
+    const add = (q: string) => {
+      const t = q.trim().toLowerCase();
+      if (t && t.length >= 2 && !seen.has(t)) {
+        seen.add(t);
+        queries.push(q.trim());
+      }
+    };
+
+    // 1. Query principal (ya se buscó en fase main)
+    // 2. Palabras clave individuales
+    for (const kw of splitKeywords(baseKeywords)) add(kw);
+    // 3. Tokens del query principal (palabras > 3 chars)
+    for (const token of baseQuery.split(/[\s,;]+/)) {
+      if (token.trim().length > 3) add(token);
+    }
+    // 4. Combinaciones query + keyword
+    const mainTokens = baseQuery.split(/[\s,;]+/).filter((t) => t.trim().length > 3);
+    for (const kw of splitKeywords(baseKeywords)) {
+      for (const token of mainTokens) {
+        add(`${token} ${kw}`);
+      }
+    }
+    // Limitar a 6 variaciones para no saturar
+    return queries.slice(0, 6);
+  }, []);
+
   const runSearch = async (runId?: number) => {
     const myRun = runId ?? ++runIdRef.current;
     if (!query.trim()) return;
     // Si hay una búsqueda en curso de otra generación, se cancela.
     search.cancel();
     setMulti(null);
-    setDiscovery(null);
     setResult(null);
     // Si "todas" aún no cargó (clic manual rapidísimo), se usa
     // computrabajo para no pedirle "all" al backend (400).
-    const effectiveSource =
-      source === "all" && sources.length === 0 ? "computrabajo" : source;
+    const effectiveSource = source === "all" && sources.length === 0 ? "computrabajo" : source;
+
+    // Guardar en historial (timestamp se añade en saveToHistory)
+    saveToHistory({
+      query: query.trim(),
+      keywords,
+      city,
+      source: effectiveSource,
+      pages,
+      maxAge,
+    });
+    setShowHistory(false);
+
+    // FASE 1: Búsqueda principal (query exacta)
+    setProgressivePhase("main");
+    const vQueries = buildVariationQueries(query.trim(), keywords);
+    variationQueriesRef.current = vQueries;
+    setVariationQueries(vQueries);
+    currentVariationIndexRef.current = 0;
+    setCurrentVariationIndex(0);
+
     try {
       if (effectiveSource === "all" && sources.length > 0) {
-        // Todas las fuentes, una por una en streaming: las ofertas se
-        // acumulan en vivo a medida que cada fuente las entrega.
+        // Todas las fuentes, una por una en streaming
         const summaries: SourceSummary[] = [];
         let first = true;
         for (const src of sources) {
-          if (runIdRef.current !== myRun) return; // generación vieja
+          if (runIdRef.current !== myRun) return;
           try {
             const last = await search.run(
               query.trim(), pages, src, city, maxAge, !first,
@@ -184,81 +312,57 @@ export function Dashboard() {
       }
       jobs.reload();
       setRefreshKey((k) => k + 1);
+
+      // FASE 2: Búsqueda de variaciones (progresiva)
+      if (variationQueriesRef.current.length > 0) {
+        setProgressivePhase("variations");
+        await runVariations(myRun, effectiveSource);
+      } else {
+        setProgressivePhase("idle");
+      }
     } catch {
       /* el error ya queda en search.searchError */
+      setProgressivePhase("idle");
     }
   };
 
-  // Búsqueda automática: apenas escribe el cargo (con pausa), busca
-  // en todas las centrales sin esperar el botón. Las palabras clave
-  // solo reordenan (no re-escrapean), asi que no disparan búsqueda.
-  // Incluye `sources`: si escribió antes de que cargaran, re-dispara
-  // cuando llegan (evita pedirle "all" al backend). No dispara al montar.
-  useEffect(() => {
-    if (skipAutoRef.current) {
-      skipAutoRef.current = false;
-      return;
-    }
-    if (query.trim().length < 2) return;
-    const timer = window.setTimeout(() => {
-      void runSearch();
-    }, 900);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, source, pages, city, maxAge, sources]);
+  const runVariations = async (myRun: number, effectiveSource: string) => {
+    const variations = variationQueriesRef.current;
+    let idx = currentVariationIndexRef.current;
 
-  // Queries del descubrimiento: SIEMPRE parten del cargo escrito en
-  // el input (mas palabras clave y variantes), nunca de packs fijos.
-  // Asi "abogado junior", "ingeniero civil", etc. traen sus vacantes.
-  const buildDiscoveryQueries = (raw: string, kwRaw: string): string[] => {
-    const out: string[] = [];
-    const push = (q: string) => {
-      const t = q.trim();
-      if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) {
-        out.push(t);
+    while (idx < variations.length && runIdRef.current === myRun) {
+      const variationQuery = variations[idx];
+      currentVariationIndexRef.current = idx;
+      setCurrentVariationIndex(idx);
+
+      try {
+        if (effectiveSource === "all" && sources.length > 0) {
+          for (const src of sources) {
+            if (runIdRef.current !== myRun) return;
+            await search.run(variationQuery, pages, src, city, maxAge, true);
+          }
+        } else {
+          await search.run(variationQuery, pages, effectiveSource, city, maxAge, true);
+        }
+        jobs.reload();
+        setRefreshKey((k) => k + 1);
+        // Pequeña pausa entre variaciones para no saturar
+        await new Promise((r) => setTimeout(r, 500));
+      } catch {
+        // Continuar con la siguiente variación aunque falle una
       }
-    };
-    const base = raw.trim();
-    if (!base) return [];
-    push(base);
-    for (const kw of splitKeywords(kwRaw)) push(kw);
-    for (const token of base.split(/[\s,;]+/)) {
-      if (token.trim().length > 3) push(token);
+      idx++;
+      currentVariationIndexRef.current = idx;
+      setCurrentVariationIndex(idx);
     }
-    return out.slice(0, 4);
+    setProgressivePhase("idle");
   };
 
-  const runDiscovery = async () => {
-    if (discovering) return;
-    setDiscoveryError(null);
-    setDiscovery(null);
-    const queries = buildDiscoveryQueries(query, keywords);
-    if (queries.length === 0) {
-      setDiscoveryError(
-        "Escribe un cargo en el buscador (ej: abogado junior) para descubrir sus vacantes.",
-      );
-      return;
-    }
-    setDiscovering(true);
-    try {
-      // Descubrimiento por capas sobre EL CARGO del input (o
-      // computrabajo si está "todas"): el texto + sus variantes.
-      const src = source === "all" ? "computrabajo" : source;
-      const summary = await discoverJobs({
-        source: src,
-        pages: 1,
-        queries,
-      });
-      setDiscovery(summary);
-      jobs.reload();
-      setRefreshKey((k) => k + 1);
-    } catch (e) {
-      setDiscoveryError(
-        e instanceof Error ? e.message : "Error en descubrimiento",
-      );
-    } finally {
-      setDiscovering(false);
-    }
+  // Cancelar búsqueda progresiva completa
+  const cancelAll = () => {
+    search.cancel();
+    runIdRef.current++; // Invalida cualquier fase en curso
+    setProgressivePhase("idle");
   };
 
   return (
@@ -268,22 +372,90 @@ export function Dashboard() {
         subtitle="Resumen del estado de tu búsqueda laboral"
         actions={
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <input
-              className="input"
-              style={{ width: 200 }}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ej: abogado junior, enfermera, contador…"
-              title="Cargo o puesto a buscar en todas las centrales. Empieza a buscar solo tras una pausa."
-              onKeyDown={(e) => e.key === "Enter" && void runSearch()}
-            />
+            <div style={{ position: "relative", flex: 1, minWidth: 280 }}>
+              <input
+                className="input"
+                style={{ width: "100%", paddingRight: 40 }}
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setShowHistory(true);
+                }}
+                onFocus={() => query.trim() && setShowHistory(true)}
+                placeholder="Ej: abogado junior, enfermera, contador…"
+                title="Cargo o puesto a buscar. Presiona Enter o click en 'Buscar nuevas ofertas'."
+                onKeyDown={(e) => e.key === "Enter" && void runSearch()}
+              />
+              {showHistory && searchHistory.length > 0 && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    marginTop: 4,
+                    background: "var(--card-bg)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                    zIndex: 100,
+                    maxHeight: 200,
+                    overflowY: "auto",
+                  }}
+                >
+                  <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--text-muted)", borderBottom: "1px solid var(--border)" }}>
+                    Últimas búsquedas
+                  </div>
+                  {searchHistory.map((item, idx) => (
+                    <button
+                      key={idx}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "10px 12px",
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: 13,
+                        color: "var(--text)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                      }}
+                      onClick={() => selectHistoryItem(item)}
+                      onMouseOver={() => {}}
+                    >
+                      <span style={{ fontWeight: 500 }}>{item.query}</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                        {item.city ? `${item.city} · ` : ""}
+                        {sourceLabel(item.source)}
+                        {item.keywords ? ` · ${item.keywords}` : ""}
+                        {item.pages > 1 ? ` · ${item.pages} págs` : ""}
+                        {item.maxAge > 0 ? ` · últimos ${item.maxAge}d` : ""}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  pointerEvents: "none",
+                }}
+                onClick={() => setShowHistory(false)}
+              />
+            </div>
             <input
               className="input"
               style={{ width: 190 }}
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
               placeholder="Palabras clave: MIP, riego, QGIS…"
-              title="Secundarias: separadas por coma. No re-buscan: acercan puestos relacionados con esas palabras en los resultados."
+              title="Secundarias: separadas por coma. Acercan puestos relacionados con esas palabras en los resultados."
             />
             <select
               className="select"
@@ -340,7 +512,7 @@ export function Dashboard() {
               className="btn btn-primary btn-sm"
               disabled={search.searching}
               onClick={() => void runSearch()}
-              title="Llama a GET /jobs/search del backend"
+              title="Busca ofertas con el cargo escrito; luego explora variaciones automáticamente"
             >
               {search.searching ? (
                 <>
@@ -352,22 +524,15 @@ export function Dashboard() {
                 </>
               )}
             </button>
-            <button
-              className="btn btn-ghost btn-sm"
-              disabled={search.searching || discovering}
-              onClick={runDiscovery}
-              title="Descubrimiento por capas sobre el cargo escrito arriba (texto + variantes), con análisis de contenido (POST /jobs/discover). Encuentra ofertas cuyo título no es exacto."
-            >
-              {discovering ? (
-                <>
-                  <RefreshCw size={14} /> Descubriendo…
-                </>
-              ) : (
-                <>
-                  <Layers size={14} /> Descubrimiento por capas
-                </>
-              )}
-            </button>
+            {(search.searching || progressivePhase !== "idle") && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={cancelAll}
+                title="Cancela la búsqueda actual y las variaciones pendientes"
+              >
+                <X size={14} /> Cancelar
+              </button>
+            )}
           </div>
         }
       />
@@ -375,7 +540,7 @@ export function Dashboard() {
         {search.searchError && (
           <div className="alert-error">{search.searchError}</div>
         )}
-        {(search.searching || search.jobs.length > 0) && (
+        {(search.searching || search.jobs.length > 0 || progressivePhase !== "idle") && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div
               style={{
@@ -383,10 +548,32 @@ export function Dashboard() {
                 gap: 8,
                 alignItems: "center",
                 marginBottom: 8,
+                flexWrap: "wrap",
               }}
             >
-              <p style={{ margin: 0, fontSize: 13, flex: 1 }}>
-                {search.analyzing ? (
+              <p style={{ margin: 0, fontSize: 13, flex: 1, minWidth: 280 }}>
+                {progressivePhase === "main" && search.searching ? (
+                  <>
+                    Buscando principal <strong>“{query}”</strong>
+                    {search.pages > 1 && (
+                      <>
+                        {" "}· página {Math.max(search.page, 1)}/{search.pages}
+                      </>
+                    )}{" "}
+                    · <strong>{search.found}</strong> encontradas
+                  </>
+                ) : progressivePhase === "variations" ? (
+                  <>
+                    <Clock size={14} style={{ verticalAlign: "middle", marginRight: 4 }} />
+                    Explorando variaciones ({currentVariationIndex}/{variationQueries.length})
+                    · <strong>{search.found}</strong> ofertas totales
+                    {variationQueries[currentVariationIndex] && (
+                      <>
+                        {" "}· actual: <em>"{variationQueries[currentVariationIndex]}"</em>
+                      </>
+                    )}
+                  </>
+                ) : search.analyzing ? (
                   <>
                     Analizando <strong>{search.found}</strong> ofertas…
                   </>
@@ -413,12 +600,12 @@ export function Dashboard() {
                   </>
                 )}
               </p>
-              {search.searching && (
+              {(search.searching || progressivePhase !== "idle") && (
                 <button
                   className="btn btn-ghost btn-sm"
-                  onClick={search.cancel}
+                  onClick={cancelAll}
                 >
-                  Detener
+                  <X size={14} /> Cancelar todo
                 </button>
               )}
             </div>
@@ -487,38 +674,6 @@ export function Dashboard() {
                   </p>
                 )}
               </>
-            )}
-          </div>
-        )}
-        {discoveryError && (
-          <div className="alert-error">{discoveryError}</div>
-        )}
-        {discovery && (
-          <div className="card" style={{ marginBottom: 16 }}>
-            <p style={{ margin: "0 0 6px", fontSize: 13 }}>
-              Descubrimiento por capas en{" "}
-              <strong>{sourceLabel(discovery.source)}</strong>:{" "}
-              {discovery.queries_run} queries, {discovery.found}{" "}
-              encontradas, {discovery.saved_unique} únicas guardadas,{" "}
-              {discovery.analyzed} analizadas,{" "}
-              <strong>{discovery.relevant} relevantes</strong>.{" "}
-              <Link to="/jobs">Ver ofertas</Link>
-            </p>
-            {discovery.errors.length > 0 && (
-              <p style={{ margin: 0, fontSize: 12, color: "var(--text-muted)" }}>
-                {discovery.errors.length} queries fallaron
-                (plataforma bloqueó o sin resultados).
-              </p>
-            )}
-            {discovery.per_query.length > 0 && (
-              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
-                {discovery.per_query.map((q) => (
-                  <li key={q.query}>
-                    <strong>“{q.query}”</strong>: {q.found} encontradas,{" "}
-                    {q.saved} guardadas
-                  </li>
-                ))}
-              </ul>
             )}
           </div>
         )}

@@ -98,9 +98,24 @@ def _clean_line(line: str) -> str:
     return re.sub(r"\s+", " ", line).strip()
 
 
+def _repair_line(line: str) -> str:
+    """Repara espaciado de extraccion (guiones de corte, puntuacion,
+    camelCase, vocales partidas). Defensivo: ante cualquier fallo
+    devuelve la linea intacta. Nunca toca encabezados/identidad (esos
+    no pasan por aqui)."""
+    try:
+        from app.adapt.textclean import clean_text as _clean
+
+        return _clean(line)
+    except Exception:  # noqa: BLE001
+        return line
+
+
 def _join_wrapped(raw_lines: list[str]) -> list[str]:
     """Une lineas envueltas del PDF: una linea sin ':' que sigue a otra
-    sin punto final es continuacion, no un item nuevo."""
+    sin punto final es continuacion, no un item nuevo. Al final repara
+    espaciado (cortes de guion, puntuacion, camelCase); encabezados y
+    fechas no pasan por aqui."""
     out: list[str] = []
     for raw in raw_lines:
         line = _clean_line(raw)
@@ -110,7 +125,7 @@ def _join_wrapped(raw_lines: list[str]) -> list[str]:
             out[-1] = f"{out[-1]} {line}"
         else:
             out.append(line)
-    return out
+    return [_repair_line(line) for line in out]
     line = _BULLET.sub("", line or "").strip()
     return re.sub(r"\s+", " ", line).strip()
 
@@ -311,7 +326,10 @@ def _split_dated_entries(raw_lines: list[str]) -> list[dict]:
         desc_end = title_starts[n + 1] if n + 1 < len(date_idx) else len(lines)
         desc_lines = lines[desc_from:desc_end]
         pos = desc_end
-        description = " ".join(l for l in desc_lines if l).strip()
+        # Solo la descripcion se repara (titulo/empresa/ciudad son
+        # nombres propios y fechas: tolerancia cero).
+        description = _repair_line(
+            " ".join(l for l in desc_lines if l).strip())
         entries.append({
             "title": title, "company": company, "city": city,
             "start_date": start, "end_date": end,
@@ -380,7 +398,7 @@ def _parse_certifications(raw_lines: list[str],
             # institucion y año explicitos en la misma linea.
             from app.profile.schema import normalize_date as _ndate
 
-            certs.append({"name": dated.group(1).strip(),
+            certs.append({"name": _repair_line(dated.group(1).strip()),
                           "institution": dated.group(2).strip(),
                           "issued_date": _ndate(dated.group(3)),
                           "expiry_date": None, "credential_id": "",
@@ -388,7 +406,8 @@ def _parse_certifications(raw_lines: list[str],
             continue
         if starts_course or (institution and not group_desc_pending
                              and len(line) <= 140):
-            certs.append({"name": line, "institution": institution,
+            certs.append({"name": _repair_line(line),
+                          "institution": institution,
                           "issued_date": None, "expiry_date": None,
                           "credential_id": "", "credential_url": "",
                           "description": ""})
@@ -506,8 +525,8 @@ def _split_projects(raw_lines: list[str]) -> list[dict]:
                 j += 1
             description = " ".join(desc).strip()
             entries.append({
-                "name": line,
-                "description": description,
+                "name": _repair_line(line),
+                "description": _repair_line(description),
                 "technologies": _extract_technologies(
                     f"{line} {description}"),
                 "url": "", "repo": "",
@@ -675,8 +694,8 @@ def parse_pdf_profile(text: str) -> dict:
             warnings.append(f"Seccion no reconocida (se omite): '{title}'.")
             continue
         if kind == "summary":
-            profile["professional_summary"] = " ".join(
-                _clean_line(l) for l in body if _clean_line(l))[:2000]
+            profile["professional_summary"] = _repair_line(" ".join(
+                _clean_line(l) for l in body if _clean_line(l))[:2000])
         elif kind == "skills":
             groups = _parse_skills_block(body)
             for key, items in groups.items():

@@ -66,7 +66,9 @@ def _tech_vocab() -> tuple[list[str], set[str]]:
     except Exception:  # noqa: BLE001
         pass
     for extra in ("yolov8", "opencv", "roboflow", "scikit-learn",
-                  "fastapi", "pandas", "numpy", "github", "linkedin"):
+                  "fastapi", "pandas", "numpy", "github", "linkedin",
+                  "mariadb", "postgresql", "mysql", "sqlite", "mongodb",
+                  "mssql"):
         terms.add(extra)
     _vocab = sorted(terms, key=len, reverse=True)
     _vocab_set = set(terms)
@@ -100,12 +102,17 @@ def _split_token(token: str) -> str:
         # Pegado ANTES del termino: 'utilizandoExcel', 'enSQL'.
         before = re.match(r"^(.+)" + re.escape(term) + r"$", core,
                           re.IGNORECASE)
-        if before and re.fullmatch(_LETTERS, before.group(1)):
+        # Resto de 1 letra jamas se parte ('Gestioné' no es 'Gestion' +
+        # 'é': ninguna palabra es una vocal sola; el merge inverso vive
+        # en adapt.textclean para datos ya guardados asi).
+        if before and len(before.group(1)) >= 2 and re.fullmatch(
+                _LETTERS, before.group(1)):
             cut = len(before.group(1))
             return core[:cut] + " " + core[cut:] + tail
         # Pegado DESPUES del termino: 'Pythonpara'.
         after = re.match(re.escape(term) + r"(.+)$", core, re.IGNORECASE)
-        if after and re.fullmatch(_LETTERS, after.group(1)):
+        if after and len(after.group(1)) >= 2 and re.fullmatch(
+                _LETTERS, after.group(1)):
             cut = len(core) - len(after.group(1))
             return core[:cut] + " " + core[cut:] + tail
     # Caso mecanico: palabra comun + numero ('de10.000').

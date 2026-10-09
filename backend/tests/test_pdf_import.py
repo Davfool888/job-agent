@@ -335,3 +335,38 @@ def test_extraccion_bytes_reales_y_endpoint():
             db.commit()
         finally:
             db.close()
+
+
+def test_import_repara_pegados_de_extraccion():
+    """CV con artefactos tipicos de pypdf: el perfil sale legible sin
+    tocar identidad, empresas ni fechas."""
+    from app.cv import pdf_import as pdf
+
+    text = """Ana Torres
+Analista de Datos
+Bogotá, Colombia | ana@example.com | +57 300 111 2233
+Resumen Profesional
+Analista con experiencia en datos y Python.
+Experiencia Laboral
+Analista de Datos
+Marzo 2023 – Actualidad
+Acme Corp – Bogotá
+Analicé bases de datos con más de10.000 registros enPython para
+limpieza,duplicados,filtrado y segmentación. Tareas de procesa-
+miento y consolidación. Gestion é y validación de información.
+Demanda(en desarrollo) de reportes.
+"""
+    out = pdf.parse_pdf_profile(text)
+    profile = out["profile"]
+    assert profile["personal"]["full_name"] == "Ana Torres"
+    exp = profile["experience"][0]
+    assert exp["company"] == "Acme Corp"
+    assert exp["start_date"] == "2023-03-01"
+    assert "más de 10.000 registros en Python" in exp["description"]
+    assert "limpieza, duplicados, filtrado" in exp["description"]
+    assert "procesamiento" in exp["description"]
+    assert "Gestioné" in exp["description"]
+    assert "Demanda (en desarrollo)" in exp["description"]
+    assert " é " not in f" {exp['description']} "
+    # Pegados minuscula+minuscula sin frontera ('datosutilizando') no se
+    # pueden partir sin diccionario: se conservan para correccion manual.

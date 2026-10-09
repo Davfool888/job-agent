@@ -300,3 +300,54 @@ def test_endpoints_status_sin_keys(_secret):
             assert bad.status_code == 400
     finally:
         auth_module.verify_bearer_token = orig
+
+
+def test_catalogo_incluye_groq_y_openrouter():
+    from app.ai import user_providers as providers
+
+    assert {"groq", "openrouter"} <= set(providers.SUPPORTED)
+    assert providers.SUPPORTED["groq"].model == "openai/gpt-oss-120b"
+    assert ":free" in providers.SUPPORTED["openrouter"].model
+
+
+def test_groq_y_openrouter_peticion_correcta(monkeypatch):
+    """URL, Bearer, modelo y (OpenRouter) headers propios. Sin
+    response_format: varios gratuitos lo rechazan."""
+    import httpx
+
+    from app.ai import user_providers as providers
+
+    seen = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": '{"ok": true}'}}]}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        seen["url"] = url
+        seen["headers"] = headers
+        seen["json"] = json
+        return FakeResponse()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    out = providers.SUPPORTED["groq"].complete(
+        "sys", "hola", "gsk-test-12345678", 10)
+    assert out == '{"ok": true}'
+    assert seen["url"] == \
+        "https://api.groq.com/openai/v1/chat/completions"
+    assert seen["headers"]["Authorization"] == "Bearer gsk-test-12345678"
+    assert seen["json"]["model"] == "openai/gpt-oss-120b"
+    assert "response_format" not in seen["json"]
+
+    out = providers.SUPPORTED["openrouter"].complete(
+        "sys", "hola", "sk-or-test-12345678", 10)
+    assert out == '{"ok": true}'
+    assert seen["url"] == \
+        "https://openrouter.ai/api/v1/chat/completions"
+    assert seen["headers"]["Authorization"] == "Bearer sk-or-test-12345678"
+    assert seen["headers"]["HTTP-Referer"]
+    assert seen["headers"]["X-Title"] == "Job Agent"
+    assert seen["json"]["model"].endswith(":free")
+    assert "response_format" not in seen["json"]

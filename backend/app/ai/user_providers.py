@@ -66,22 +66,30 @@ class UserProviderSpec:
 
     def _chat_openai_compatible(self, base_url: str, api_key: str,
                                 model: str, system: str, user: str,
-                                timeout: int) -> str:
+                                timeout: int,
+                                extra_headers: dict | None = None,
+                                json_mode: bool = True) -> str:
+        """Chat OpenAI-compatible (json_mode=False si el modelo no
+        soporta response_format: el prompt ya exige JSON exclusivo)."""
         import httpx
 
+        headers = {"Authorization": f"Bearer {api_key}"}
+        headers.update(extra_headers or {})
+        payload: dict = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": 0.2,
+        }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
         try:
             response = httpx.post(
                 f"{base_url.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}"},
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    "temperature": 0.2,
-                    "response_format": {"type": "json_object"},
-                },
+                headers=headers,
+                json=payload,
                 timeout=timeout,
             )
         except Exception as exc:  # noqa: BLE001
@@ -160,6 +168,37 @@ class DeepSeekUserProvider(UserProviderSpec):
             system, user, timeout)
 
 
+class GroqUserProvider(UserProviderSpec):
+    id = "groq"
+    label = "Groq"
+    model = "openai/gpt-oss-120b"
+    key_help = "console.groq.com → API Keys (gratis, empieza con gsk_)"
+    key_prefix_hint = "gsk_"
+
+    def complete(self, system: str, user: str, api_key: str,
+                 timeout: int) -> str:
+        return self._chat_openai_compatible(
+            "https://api.groq.com/openai/v1", api_key, self.model,
+            system, user, timeout, json_mode=False)
+
+
+class OpenRouterUserProvider(UserProviderSpec):
+    id = "openrouter"
+    label = "OpenRouter"
+    model = "deepseek/deepseek-chat-v3-0324:free"
+    key_help = ("openrouter.ai → Keys (gratis, empieza con sk-or-). Usa "
+                "modelos :free como deepseek o qwen sin costo.")
+    key_prefix_hint = "sk-or-"
+
+    def complete(self, system: str, user: str, api_key: str,
+                 timeout: int) -> str:
+        return self._chat_openai_compatible(
+            "https://openrouter.ai/api/v1", api_key, self.model,
+            system, user, timeout, json_mode=False,
+            extra_headers={"HTTP-Referer": "https://job-agent-puce-eight.vercel.app",
+                           "X-Title": "Job Agent"})
+
+
 class OpenAIUserProvider(UserProviderSpec):
     id = "openai"
     label = "OpenAI"
@@ -176,7 +215,8 @@ class OpenAIUserProvider(UserProviderSpec):
 
 SUPPORTED: dict[str, UserProviderSpec] = {
     spec.id: spec for spec in (
-        GeminiUserProvider(), DeepSeekUserProvider(), OpenAIUserProvider())
+        GeminiUserProvider(), DeepSeekUserProvider(), OpenAIUserProvider(),
+        GroqUserProvider(), OpenRouterUserProvider())
 }
 
 

@@ -109,6 +109,19 @@ def _display_url(url: str | None) -> str:
     return text
 
 
+def _strip_general_label(text: str) -> str:
+    """Quita 'Responsabilidad General:' inicial si ya viene en los datos.
+
+    El renderer antepone esa etiqueta; si la descripcion la trae (perfil
+    importado de un CV ya generado o reescritura LLM), saldria duplicada.
+    Solo con dos puntos (sin ':' podria ser inicio legitimo de frase).
+    """
+    import re as _re
+
+    return _re.sub(r"^(responsabilidad general\s*:\s*)+", "",
+                   str(text or "").strip(), flags=_re.IGNORECASE)
+
+
 def _split_sentences(text: str) -> list[str]:
     """Divide en oraciones sin inventar contenido (corta en '. ' + mayuscula)."""
     import re as _re
@@ -323,7 +336,8 @@ def _experience_block(content: dict, fmt: str = "MMM YYYY",
         else:
             dates = start or _fmt_month(end_raw, fmt)
 
-        sentences = _split_sentences(exp.get("description") or "")
+        sentences = _split_sentences(
+            _strip_general_label(exp.get("description") or ""))
         general = (f'<p class="item-p"><strong>Responsabilidad General:</strong> '
                    f"{esc(sentences[0])}</p>") if sentences else ""
         # Bullets del autor si existen; si no, se derivan del resto de

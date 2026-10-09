@@ -245,10 +245,15 @@ def stage_validate(content: dict, pre_ia: dict, profile: dict,
                    pdf_config: dict) -> tuple[dict, list[str]]:
     """Pre-render: si falla, conserva el contenido original (pre-IA).
 
-    Tambien calcula `missing` (marcadores de ausencia) sobre el
-    contenido final, como antes hacia el orquestador.
+    Antes de validar se normaliza el espaciado (textclean, mecanico e
+    idempotente): la validacion es por terminos normalizados, asi que
+    agregar espacios no la altera. Tambien calcula `missing`.
     """
+    from app.adapt import textclean as _textclean
     from app.adapt import validate as adapt_validate
+
+    content = _textclean.clean_content(content)
+    pre_ia = _textclean.clean_content(pre_ia)
 
     ok, issues = adapt_validate.validate_pre_render(
         content, profile, pdf_config)
