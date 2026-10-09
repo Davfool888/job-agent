@@ -20,7 +20,8 @@ interface HistoryEntry {
 
 const SWIPE_X = 100;
 const SWIPE_UP_Y = -80;
-const EXPAND_Y = 90;
+// Flick corto hacia abajo expande: 45px basta en táctil/mouse.
+const EXPAND_Y = 45;
 
 type SortMode = "recent" | "match";
 
@@ -197,6 +198,10 @@ export function Slices() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (busy || exit || !current) return;
+    // No secuestrar scroll cuando el gesto nace dentro de la zona con
+    // scroll propio (descripción expandida) o en botones/enlaces.
+    const t = e.target as HTMLElement | null;
+    if (t?.closest("button, a, .slice-desc.full, .slice-details")) return;
     dragStart.current = { x: e.clientX, y: e.clientY };
     setDrag((d) => ({ ...d, dragging: true }));
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -204,6 +209,8 @@ export function Slices() {
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag.dragging || !dragStart.current) return;
+    // Con touch-action:none el navegador no compite por el gesto vertical.
+    if (e.cancelable) e.preventDefault();
     setDrag({
       x: e.clientX - dragStart.current.x,
       y: e.clientY - dragStart.current.y,
@@ -211,24 +218,50 @@ export function Slices() {
     });
   };
 
-  const onPointerUp = () => {
-    if (!drag.dragging) return;
+  const finishDrag = (dx: number, dy: number) => {
     dragStart.current = null;
-    if (drag.x > SWIPE_X) {
+    if (dx > SWIPE_X) {
       swipe("right");
       return;
     }
-    if (drag.x < -SWIPE_X) {
+    if (dx < -SWIPE_X) {
       swipe("left");
       return;
     }
-    if (drag.y < SWIPE_UP_Y) {
+    if (dy < SWIPE_UP_Y) {
       swipe("up");
       return;
     }
-    if (drag.y > EXPAND_Y) {
+    // Umbral menor para expandir: el colapsado mide ~400px y antes
+    // pedía 90px, demasiado para un flick corto en táctil.
+    if (dy > EXPAND_Y) {
       setExpanded((v) => !v);
     }
+    setDrag({ x: 0, y: 0, dragging: false });
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (!drag.dragging || !dragStart.current) return;
+    // Calcular desde el evento (no del state): el último pointermove
+    // puede no haber re-renderizado aún y el state quedaría una
+    // fracción atrás, ignorando flicks cortos.
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    finishDrag(dx, dy);
+  };
+
+  const onPointerCancel = (e: React.PointerEvent) => {
+    // Si el navegador cancela (llamada, scroll sistema), respetar un
+    // gesto ya claro en vez de tirarlo.
+    if (dragStart.current) {
+      const dx = e.clientX - dragStart.current.x;
+      const dy = e.clientY - dragStart.current.y;
+      if (Math.abs(dx) > SWIPE_X || dy < SWIPE_UP_Y || dy > EXPAND_Y) {
+        finishDrag(dx, dy);
+        return;
+      }
+    }
+    dragStart.current = null;
     setDrag({ x: 0, y: 0, dragging: false });
   };
 
@@ -367,10 +400,13 @@ export function Slices() {
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
-                onPointerCancel={() =>
-                  setDrag({ x: 0, y: 0, dragging: false })
-                }
-                style={{ touchAction: "pan-y" }}
+                onPointerCancel={onPointerCancel}
+                // Colapsada (none): el gesto vertical lo gestiona el deck
+                // (expandir); el navegador no lo roba para scroll.
+                // Expandida (pan-y): la descripción larga necesita scroll
+                // nativo en táctil; en mouse el drag sigue funcionando
+                // (touch-action no afecta al mouse) y ↓/botón colapsan.
+                style={{ touchAction: expanded ? "pan-y" : "none" }}
               >
                 <SliceCard
                   key={current.id}
