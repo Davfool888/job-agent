@@ -132,6 +132,15 @@ def analyze_job_endpoint(job_id: str, db: Session = Depends(get_db)):
         experience=result["experience_required"],
     )
     job = refresh_job(db, job)
+    try:
+        from app.analysis.verdict import build_fit_report
+
+        result["fit_report"] = build_fit_report(
+            {"title": job.title or "",
+             "description": job.description or ""},
+            result, get_profile(db))
+    except Exception:  # noqa: BLE001
+        pass
     return {
         "job": JobResponse.model_validate(job).model_dump(),
         "analysis": result,
@@ -381,7 +390,7 @@ def get_job_analysis(job_id: str, request: Request, db: Session = Depends(get_db
     job = get_job_by_id(db=db, job_id=job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
-    return {
+    analysis = {
         "job_id": job.id,
         "match_score": job.match_score,
         "detected_role": job.detected_role,
@@ -393,6 +402,28 @@ def get_job_analysis(job_id: str, request: Request, db: Session = Depends(get_db
         "experience_required": job.experience_required,
         "analyzed": job.match_score is not None,
     }
+    try:
+        from app.analysis.verdict import build_fit_report
+        from app.services.job_service import get_profile_for
+        from app.services.job_service import get_rich_profile_for
+
+        flat = get_profile_for(db, uid, email)
+        rich = get_rich_profile_for(db, uid, email)
+        analysis["fit_report"] = build_fit_report(
+            {"title": job.title or "", "description": job.description or "",
+             "requirements": job.requirements or "",
+             "responsibilities": job.responsibilities or ""},
+            {"match_score": job.match_score,
+             "matched_skills": analysis["matching_skills"],
+             "missing_skills": analysis["missing_skills"],
+             "experience_required": job.experience_required,
+             "category": job.category,
+             "detected_role": job.detected_role,
+             "score_breakdown": getattr(job, "score_breakdown", None)},
+            flat, rich)
+    except Exception:  # noqa: BLE001
+        pass
+    return analysis
 
 
 @router.post("/jobs/{job_id}/cv")

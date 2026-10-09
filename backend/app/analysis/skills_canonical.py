@@ -293,9 +293,14 @@ def canonicalize_one(raw: str) -> str | None:
     - `Business Intelligence` -> None salvo contexto (no alias a Power BI).
     - Desconocido plausible (ej. `Supabase`) se preserva limpio, no se inventa.
     """
-    text = (raw or "").strip()
+    from app.scraper.base import repair_encoding
+
+    text = repair_encoding((raw or "").strip())
     text = re.sub(r"\s+", " ", text).strip(" .;,")
     if not text:
+        return None
+    # Restos irreversibles (� = byte ya perdido): no almacenar basura.
+    if "�" in text:
         return None
     key = _norm_key(text)
     if not key:

@@ -6,6 +6,7 @@ import {
 } from "../components/jobs/States";
 import { SimpleProfileTab } from "../components/profile/SimpleProfileTab";
 import { StructuredProfileManager } from "../components/profile/StructuredProfileManager";
+import { ProfileCvsTab } from "../components/profile/ProfileCvsTab";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useApi";
 import { ADMIN_EMAIL } from "../lib/firebase";
@@ -59,7 +60,7 @@ export function ProfilePage() {
   const [simpleLanguages, setSimpleLanguages] = useState<LanguageEntry[]>([]);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
   const [listsHydrated, setListsHydrated] = useState(false);
-  const [activeTab, setActiveTab] = useState<"simple" | "structured">("simple");
+  const [activeTab, setActiveTab] = useState<"simple" | "structured" | "cvs">("simple");
   // Se incrementa al guardar el tab simple: el estructurado se
   // refresca solo si no tiene ediciones pendientes.
   const [simpleRevision, setSimpleRevision] = useState(0);
@@ -372,11 +373,22 @@ export function ProfilePage() {
             >
               Perfil Estructurado
             </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${activeTab === "cvs" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setActiveTab("cvs")}
+              disabled={locked}
+              style={{ padding: "8px 16px" }}
+            >
+              Hojas de vida
+            </button>
           </div>
           <p className="card-sub" style={{ marginBottom: 0 }}>
             {activeTab === "simple"
               ? "Información básica de contacto, experiencia laboral, educación e idiomas (descripción general). Lo que guardes aquí aparece también en el estructurado."
-              : "Todo editable con guardado: lo que guardes aquí aparece también en el simple. Se carga solo al abrir esta pestaña."}
+              : activeTab === "structured"
+                ? "Todo editable con guardado: lo que guardes aquí aparece también en el simple. Se carga solo al abrir esta pestaña."
+                : "PDFs subidos como referencia en tus perfiles de búsqueda (solo lectura y descarga)."}
           </p>
         </div>
 
@@ -411,6 +423,8 @@ export function ProfilePage() {
             onSaved={handleStructuredSaved}
           />
         )}
+
+        {activeTab === "cvs" && <ProfileCvsTab disabled={locked} />}
       </div>
     </>
   );

@@ -41,7 +41,42 @@ def slugify_query(query: str) -> str:
 def clean_text(text: str | None) -> str:
     if not text:
         return ""
-    return " ".join(text.split())
+    return " ".join(repair_encoding(text).split())
+
+
+def repair_encoding(text: str | None) -> str:
+    """Repara mojibake típico (UTF-8 decodificado como latin-1/cp1252).
+
+    Los scrapers leían `response.text` sin forzar charset y algunas
+    páginas sin cabecera caían a ISO-8859-1: `Automatización` llegaba
+    como `Automatizaci��n` hasta skills/DB. La reparación es conservadora:
+    solo se aplica si reduce `�` o secuencias `Ã/Â` y el resultado
+    decodifica como UTF-8 válido.
+    """
+    if not text or not isinstance(text, str):
+        return text or ""
+    if "�" not in text and "Ã" not in text and "Â" not in text:
+        return text
+    best = text
+    best_score = _mojibake_score(text)
+    for enc in ("latin1", "cp1252"):
+        try:
+            fixed = text.encode(enc).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        score = _mojibake_score(fixed)
+        if score < best_score:
+            best, best_score = fixed, score
+    return best
+
+
+def _mojibake_score(text: str) -> int:
+    """Menor = más limpio. Penaliza reemplazos y secuencias típicas."""
+    score = text.count("�") * 10
+    score += text.count("Ã") * 2 + text.count("Â") * 2
+    # Caracteres raros de doble-decodificación (ǭ etc. en "Anǭlisis").
+    score += sum(1 for c in text if 0x0100 <= ord(c) <= 0x02AF)
+    return score
 
 
 def norm_key(text: str | None) -> str:
@@ -271,7 +306,12 @@ class BaseScraper:
                     time.sleep(wait)
                     continue
                 response.raise_for_status()
-                return response.text
+                # Sin charset en cabecera, requests cae a ISO-8859-1 y
+                # corrompe tildes (mojibake). Preferir detección real.
+                enc = (response.encoding or "").lower()
+                if enc in ("", "iso-8859-1", "latin-1", "ascii"):
+                    response.encoding = response.apparent_encoding or "utf-8"
+                return repair_encoding(response.text)
             except RuntimeError:
                 raise
             except requests.RequestException as error:

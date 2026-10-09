@@ -16,6 +16,11 @@ import { ProfilePage } from "./pages/Profile";
 import { Search } from "./pages/Search";
 import { Settings } from "./pages/Settings";
 
+// Slices y Analytics son pesados/secundarios: code-split como Analytics.
+const Slices = lazy(() =>
+  import("./pages/Slices").then((m) => ({ default: m.Slices })),
+);
+
 // Recharts es pesado: se carga solo al entrar a /analytics.
 const Analytics = lazy(() =>
   import("./pages/Analytics").then((m) => ({ default: m.Analytics })),
@@ -49,6 +54,14 @@ function RoutesInner() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/jobs" element={<Jobs />} />
+        <Route
+          path="/slices"
+          element={
+            <Suspense fallback={<div className="content">Cargando slices…</div>}>
+              <Slices />
+            </Suspense>
+          }
+        />
         <Route path="/search" element={<Search />} />
         <Route path="/jobs/:id" element={<JobDetail />} />
         <Route path="/discarded" element={<Discarded />} />

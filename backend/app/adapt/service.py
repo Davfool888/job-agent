@@ -104,7 +104,8 @@ def adapt_profile_for_job(db, job_id, uid: str | None = None,
 
     with stages._timed(timings, "llm"):
         content, adaptations, llm_warnings, llm_info = stages.stage_llm(
-            content, matching, pdf_config, db, uid, preferred_provider)
+            content, matching, pdf_config, db, uid, preferred_provider,
+            offer)
     adapt_warnings = list(adapt_warnings) + list(llm_warnings)
 
     with stages._timed(timings, "validate"):

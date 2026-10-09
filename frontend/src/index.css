@@ -1218,3 +1218,261 @@ a {
     z-index: 30;
   }
 }
+
+/* ---------- Slices (deck estilo app de citas) ---------- */
+.slices-wrap {
+  max-width: 560px;
+}
+
+.slices-count {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.slice-deck {
+  position: relative;
+  min-height: 420px;
+}
+
+.slice-next {
+  position: absolute;
+  inset: 10px 10px auto 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  opacity: 0.7;
+}
+
+.slice-next-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slice-next-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.slice-grip {
+  position: relative;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.slice-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 20px;
+  min-height: 400px;
+  overflow: hidden;
+  will-change: transform;
+}
+
+.slice-stamp {
+  position: absolute;
+  top: 16px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 2px solid;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.slice-stamp-keep {
+  right: 16px;
+  color: var(--success);
+  border-color: var(--success);
+  background: var(--success-soft);
+  transform: rotate(10deg);
+}
+
+.slice-stamp-drop {
+  left: 16px;
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  transform: rotate(-10deg);
+}
+
+.slice-stamp-up {
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 64px;
+  top: auto;
+  color: var(--primary-dark);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.slice-fit-ok {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--success);
+}
+
+.slice-fit-bad {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.slices-filters {
+  margin-bottom: 12px;
+}
+
+.slices-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.slices-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.slice-stamp.on {
+  opacity: 1;
+  transform: rotate(0deg) scale(1.05);
+}
+
+.slice-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.slice-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.slice-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.slice-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.slice-meta svg {
+  width: 13px;
+  height: 13px;
+}
+
+.slice-desc {
+  margin: 12px 0 0;
+  font-size: 13.5px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.slice-desc.full {
+  color: var(--text);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.slice-details {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.slice-sub {
+  margin: 12px 0 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.slice-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.slice-more {
+  margin-top: 14px;
+  width: 100%;
+  justify-content: center;
+}
+
+.slice-more .chev {
+  transition: transform 0.15s ease;
+}
+
+.slice-more .chev.open {
+  transform: rotate(180deg);
+}
+
+.slice-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.slice-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 11px 14px;
+}
+
+.slices-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.slices-done {
+  text-align: center;
+}
+
+.slices-done-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+@media (max-width: 600px) {
+  .slice-actions {
+    position: sticky;
+    bottom: 12px;
+  }
+}

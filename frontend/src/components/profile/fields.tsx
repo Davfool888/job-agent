@@ -120,6 +120,74 @@ export function Autocomplete({
 }
 
 // Fecha como date picker nativo (YYYY-MM-DD). month=true -> solo mes.
+// Reconoce lo que deja la extracción del CV (ISO, MM/YYYY, DD/MM/YYYY,
+// YYYY, "Mar 2025"/"marzo 2025") y lo convierte al formato del input;
+// lo irreconocible se muestra vacío en vez de romper el picker.
+const MONTHS: Record<string, string> = {
+  ene: "01", enero: "01", jan: "01", january: "01",
+  feb: "02", febrero: "02", febr: "02", february: "02",
+  mar: "03", marzo: "03", march: "03",
+  abr: "04", abril: "04", apr: "04", april: "04",
+  may: "05", mayo: "05",
+  jun: "06", junio: "06", june: "06",
+  jul: "07", julio: "07", july: "07",
+  ago: "08", agosto: "08", aug: "08", august: "08",
+  sep: "09", sept: "09", set: "09", septiembre: "09", september: "09",
+  oct: "10", octubre: "10", october: "10",
+  nov: "11", noviembre: "11", november: "11",
+  dic: "12", diciembre: "12", dec: "12", december: "12",
+};
+
+function normText(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+export function toDateInputValue(
+  value: string | null | undefined,
+  month = false,
+): string {
+  const raw = (value ?? "").trim();
+  if (!raw) return "";
+  // Ya ISO: YYYY-MM-DD[...] o YYYY-MM.
+  let m = raw.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  if (m) {
+    const day = m[3] ?? "01";
+    if (month) return `${m[1]}-${m[2]}`;
+    return m[3] ? `${m[1]}-${m[2]}-${day}` : `${m[1]}-${m[2]}-01`;
+  }
+  // MM/YYYY o MM-YYYY.
+  m = raw.match(/^(\d{1,2})[/-](\d{4})$/);
+  if (m) {
+    const mm = m[1].padStart(2, "0");
+    if (Number(mm) < 1 || Number(mm) > 12) return "";
+    return month ? `${m[2]}-${mm}` : `${m[2]}-${mm}-01`;
+  }
+  // DD/MM/YYYY o DD-MM-YYYY.
+  m = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (m) {
+    const dd = m[1].padStart(2, "0");
+    const mm = m[2].padStart(2, "0");
+    if (Number(mm) < 1 || Number(mm) > 12 || Number(dd) < 1 || Number(dd) > 31)
+      return "";
+    return month ? `${m[3]}-${mm}` : `${m[3]}-${mm}-${dd}`;
+  }
+  // Solo año.
+  m = raw.match(/^(\d{4})$/);
+  if (m) return month ? `${m[1]}-01` : `${m[1]}-01-01`;
+  // "Mar 2025" / "marzo 2025" (ES+EN, con o sin tildes).
+  m = normText(raw).match(/^([a-z]+)\s+(\d{4})$/);
+  if (m) {
+    const mm = MONTHS[m[1]];
+    if (!mm) return "";
+    return month ? `${m[2]}-${mm}` : `${m[2]}-${mm}-01`;
+  }
+  return "";
+}
+
 export function DateInput({
   value,
   onChange,
@@ -131,7 +199,7 @@ export function DateInput({
   month?: boolean;
   disabled?: boolean;
 }) {
-  const shown = (value ?? "").slice(0, month ? 7 : 10);
+  const shown = toDateInputValue(value, month);
   return (
     <input
       className="input"

@@ -132,9 +132,13 @@ def stage_select(profile: dict, offer: dict, matching: dict,
 
 
 def stage_llm(content: dict, matching: dict, pdf_config: dict,
-              db, uid, preferred_provider) -> tuple[dict, list, list, dict]:
+              db, uid, preferred_provider,
+              offer: dict | None = None) -> tuple[dict, list, list, dict]:
     """UNA sola via IA: usuario (con fallback) o deterministico.
 
+    Con keys del usuario: UNA sola consulta con oferta + perfil en el
+    mismo prompt (texto plano). Sin keys o ante fallo: deterministico.
+    `offer` es el dict plano de build_offer (opcional por compatibilidad).
     Devuelve (content, adaptations, warnings, llm_info). Muta el
     `content` recibido (ya es copia de trabajo del pipeline).
     """
@@ -148,19 +152,43 @@ def stage_llm(content: dict, matching: dict, pdf_config: dict,
     except Exception:  # noqa: BLE001
         user_client = None
     if user_client is not None:
+        # UNA sola consulta: resumen + bullets de todas las experiencias
+        # en el mismo prompt (texto plano; verificado contra originales).
+        # Las cuotas del usuario quedan en exactamente 1 llamada.
         try:
-            polished = user_llm.polish_summary_for_user(
-                user_client, content.get("summary", ""),
-                content.get("target_role", ""),
-                matching.get("matched_skills") or [])
+            offer = offer or {}
+            job_title = str(offer.get("title") or "").strip()
+            job_company = str(offer.get("company") or "").strip()
+            job_desc = str(offer.get("description") or "").strip()
+            if not job_title:
+                job_title = str(content.get("target_role") or "")
+            adapted = user_llm.adapt_profile_for_user(
+                user_client,
+                job_title=job_title,
+                job_company=job_company,
+                job_description=job_desc,
+                job_skills=list(matching.get("matched_skills") or []),
+                profile_summary=str(content.get("summary") or ""),
+                experiences=list(content.get("experiences") or []),
+                allowed_skills=list(content.get("skills") or []),
+                target_role=str(content.get("target_role") or job_title),
+            )
+            polished = {"summary": adapted["summary"],
+                        "provider": adapted["provider"]}
             llm_info = {"path": "user",
                         "provider": user_client.provider_used or "user"}
+            adapted_bullets = {
+                item["index"]: item["bullets"]
+                for item in adapted["experiences"]
+            }
         except Exception:  # noqa: BLE001
             user_client = None
+            adapted_bullets = {}
             polished = llm.polish_summary(
                 content.get("summary", ""), content.get("target_role", ""),
                 matching.get("matched_skills") or [])
     else:
+        adapted_bullets = {}
         polished = llm.polish_summary(
             content.get("summary", ""), content.get("target_role", ""),
             matching.get("matched_skills") or [])
@@ -172,20 +200,20 @@ def stage_llm(content: dict, matching: dict, pdf_config: dict,
     if pdf_config.get("ai_rewrite_bullets"):
         allowed = list(content.get("skills") or [])
         role = str(content.get("target_role") or "")
-        for exp in content.get("experiences") or []:
+        for pos, exp in enumerate(content.get("experiences") or []):
             if not isinstance(exp, dict):
                 continue
             current = [str(b) for b in (exp.get("bullets") or []) if b]
             if not current:
                 continue
-            if user_client is not None:
-                try:
-                    result = user_llm.rewrite_bullets_for_user(
-                        user_client, current, allowed, role)
-                except Exception:  # noqa: BLE001
-                    result = adapt_rewrite.rewrite_bullets(
-                        current, allowed, role)
+            if user_client is not None and pos in adapted_bullets:
+                result = {"bullets": adapted_bullets[pos],
+                          "provider": user_client.provider_used or "user",
+                          "verified": True,
+                          "note": "reformulado y verificado (1 consulta)"}
             else:
+                # Sin cobertura de la consulta unica (o sin keys): via
+                # deterministica, sin gastar mas cuota del usuario.
                 result = adapt_rewrite.rewrite_bullets(
                     current, allowed, role)
             if result["bullets"] != current:

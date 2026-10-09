@@ -45,6 +45,10 @@ import { COLOMBIAN_CITIES } from "../utils/cities";
 import { SKILLS } from "../utils/skills";
 import { TITLES } from "../utils/titles";
 import {
+  mergeOptions,
+  readDashboardHistory,
+} from "../utils/searchHistory";
+import {
   MODALITY_FALLBACK,
   canonicalLocation,
 } from "../utils/profileOptions";
@@ -179,6 +183,50 @@ export function Search() {
   const titleOptions = useMemo(
     () => catalogs?.professional_titles.map((t) => t.label) ?? TITLES,
     [catalogs],
+  );
+  // Sugerencias con memoria: títulos/nombres/palabras de tus perfiles +
+  // búsquedas recientes del Dashboard, antes que los catálogos generales.
+  const historyQueries = useMemo(
+    () =>
+      // Se relee al abrir el formulario por si buscaste en el Dashboard
+      // y volviste sin recargar (SPA comparte el mismo localStorage).
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      readDashboardHistory().map((h) => h.query),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [profiles, creating, editing],
+  );
+  const historyKeywords = useMemo(
+    () =>
+      readDashboardHistory().flatMap((h) =>
+        String(h.keywords ?? "")
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [profiles, creating, editing],
+  );
+  const profileTitles = useMemo(
+    () => profiles.map((p) => p.title),
+    [profiles],
+  );
+  const profileNames = useMemo(() => profiles.map((p) => p.name), [profiles]);
+  const profileKeywords = useMemo(
+    () => profiles.flatMap((p) => p.keywords ?? []),
+    [profiles],
+  );
+  const titleSuggestOptions = useMemo(
+    () => mergeOptions(profileTitles, historyQueries, titleOptions),
+    [profileTitles, historyQueries, titleOptions],
+  );
+  const nameSuggestOptions = useMemo(
+    () => mergeOptions(profileNames, historyQueries),
+    [profileNames, historyQueries],
+  );
+  const kwSuggestOptions = useMemo(
+    () =>
+      mergeOptions(profileKeywords, historyKeywords, SKILLS),
+    [profileKeywords, historyKeywords],
   );
   const cityOptions = useMemo(
     () => catalogs?.cities.map((c) => c.label) ?? COLOMBIAN_CITIES,
@@ -424,11 +472,12 @@ export function Search() {
                 <div className="form-grid">
                   <label>
                     Nombre
-                    <input
-                      className="input"
+                    <SuggestInput
                       value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      onChange={(v) => setForm({ ...form, name: v })}
+                      options={nameSuggestOptions}
                       placeholder="Analista de Datos - Bogotá"
+                      title="Escribe y elige de tus perfiles o búsquedas recientes"
                     />
                   </label>
                   <label>
@@ -436,7 +485,7 @@ export function Search() {
                     <SuggestInput
                       value={form.title}
                       onChange={(v) => setForm({ ...form, title: v })}
-                      options={titleOptions}
+                      options={titleSuggestOptions}
                       placeholder="Analista de Datos"
                       title="Escribe y elige de la lista"
                     />
@@ -486,7 +535,7 @@ export function Search() {
                             rows.map((r, j) => (j === i ? v : r)),
                           )
                         }
-                        options={SKILLS}
+                        options={kwSuggestOptions}
                         placeholder="Ej: DAX"
                         title="Escribe y elige de la lista"
                       />

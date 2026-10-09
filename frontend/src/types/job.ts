@@ -116,6 +116,66 @@ export interface StatusUpdatePayload {
   application_status?: string | null;
 }
 
+// Evaluación legible oferta-vs-perfil (GET /jobs/{id}/analysis).
+// Refleja backend/app/analysis/verdict.py; todo opcional salvo level.
+export interface FitSkillGroup {
+  matched: string[];
+  missing: string[];
+  coverage: number | null;
+}
+
+export interface FitExperience {
+  required_years: number | null;
+  profile_years: number | null;
+  fit: "sobrado" | "justo" | "corto" | "exento" | "sin_dato";
+  note: string;
+}
+
+export interface FitRole {
+  category: string | null;
+  detected_role: string | null;
+  target_roles: string[];
+  match: boolean | null;
+  matched_target: string | null;
+  note: string;
+}
+
+export interface FitReport {
+  level: string;
+  label: string;
+  score: number | null;
+  dimensions: {
+    tecnicas: FitSkillGroup;
+    blandas: FitSkillGroup;
+    experiencia: FitExperience;
+    puesto: FitRole;
+    contenido: Record<string, number | null>;
+  };
+  profile_snapshot: {
+    technical_skills: string[];
+    soft_skills: string[];
+    years_experience: number | null;
+    target_roles: string[];
+  };
+  strengths: string[];
+  gaps: string[];
+  reasons: string[];
+}
+
+export interface JobAnalysis {
+  job_id: string;
+  match_score: number | null;
+  detected_role: string | null;
+  category: string | null;
+  evidence: string[];
+  matching_skills: string[];
+  missing_skills: string[];
+  discovered_by: string[];
+  experience_required: string | null;
+  analyzed: boolean;
+  fit_report?: FitReport | null;
+}
+
 export interface StatsSummary {
   total: number;
   by_status: Record<string, number>;

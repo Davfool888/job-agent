@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Eye,
   FileText,
+  Layers,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -22,6 +23,7 @@ import { useAuth } from "../../context/AuthContext";
 const LINKS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/jobs", label: "Ofertas", icon: Briefcase },
+  { to: "/slices", label: "Slices", icon: Layers },
   { to: "/search", label: "Búsqueda", icon: Radar },
   { to: "/discarded", label: "Descartadas", icon: BookmarkX },
   { to: "/viewed", label: "Vistas", icon: Eye },

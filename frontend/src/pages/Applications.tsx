@@ -17,8 +17,23 @@ export function Applications() {
   const { data, loading, error, reload } = useJobs("applied");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [stageError, setStageError] = useState<string | null>(null);
+  const [sort, setSort] = useState<"recent" | "match_desc" | "match_asc">("recent");
 
-  const applied = useMemo(() => data ?? [], [data]);
+  const applied = useMemo(() => {
+    const list = [...(data ?? [])];
+    if (sort === "match_desc") {
+      list.sort(
+        (a, b) => (b.match_score ?? -1) - (a.match_score ?? -1) || Number(b.id) - Number(a.id),
+      );
+    } else if (sort === "match_asc") {
+      list.sort(
+        (a, b) => (a.match_score ?? 101) - (b.match_score ?? 101) || Number(b.id) - Number(a.id),
+      );
+    } else {
+      list.sort((a, b) => Number(b.id) - Number(a.id));
+    }
+    return list;
+  }, [data, sort]);
 
   const setStage = async (id: string, stage: string) => {
     setBusyId(id);
@@ -41,6 +56,24 @@ export function Applications() {
       />
       <div className="content">
         {stageError && <div className="alert-error">{stageError}</div>}
+        {applied.length > 0 && !loading && !error && (
+          <div className="toolbar" style={{ marginBottom: 12 }}>
+            <div className="toolbar-row">
+              <select
+                className="select"
+                value={sort}
+                onChange={(e) =>
+                  setSort(e.target.value as "recent" | "match_desc" | "match_asc")
+                }
+                title="Ordenar por coincidencia con tu perfil"
+              >
+                <option value="recent">Más recientes</option>
+                <option value="match_desc">Mayor coincidencia</option>
+                <option value="match_asc">Menor coincidencia</option>
+              </select>
+            </div>
+          </div>
+        )}
         {loading ? (
           <LoadingState label="Cargando postulaciones…" />
         ) : error ? (

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Header } from "../components/layout/Header";
 import { DiscardModal } from "../components/jobs/DiscardModal";
+import { FitReportView } from "../components/jobs/FitReport";
 import { MatchBadge } from "../components/jobs/MatchBadge";
 import { StatusBadge } from "../components/jobs/StatusBadge";
 import {
@@ -30,7 +31,7 @@ import {
   fetchAiStatus,
   type AiKeyStatus,
 } from "../services/aiKeys";
-import { analyzeJob, updateJobStatus } from "../services/jobs";
+import { analyzeJob, fetchJobAnalysis, updateJobStatus } from "../services/jobs";
 import {
   ADAPT_STAGES,
   adaptCvAsync,
@@ -45,7 +46,7 @@ import {
   generateCv,
   type CustomizedCv,
 } from "../services/cv";
-import type { Job } from "../types/job";
+import type { FitReport, Job } from "../types/job";
 import { formatDate, formatDateTime, timeAgo } from "../utils/format";
 
 export function JobDetail() {
@@ -108,6 +109,27 @@ export function JobDetail() {
   const [adapt, setAdapt] = useState<AdaptCvResult | null>(null);
   const [adapting, setAdapting] = useState(false);
   const [adaptStage, setAdaptStage] = useState<string | null>(null);
+  // Evaluación legible oferta-vs-perfil (GET /jobs/{id}/analysis).
+  // Solo lectura: si falla, la tarjeta muestra el análisis guardado.
+  const [fitReport, setFitReport] = useState<FitReport | null>(null);
+  useEffect(() => {
+    if (!job.data || job.data.match_score === null) {
+      setFitReport(null);
+      return;
+    }
+    let alive = true;
+    fetchJobAnalysis(jobId)
+      .then((a) => {
+        if (alive) setFitReport(a.fit_report ?? null);
+      })
+      .catch(() => {
+        if (alive) setFitReport(null);
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, job.data?.match_score]);
   // Proveedor IA propio para el CV ("" = automatico con fallback).
   const [aiProvider, setAiProvider] = useState("");
   const [aiStatus, setAiStatus] = useState<AiKeyStatus[]>([]);
@@ -246,6 +268,7 @@ export function JobDetail() {
         ) : (
           <DetailBody
             job={job.data}
+            fitReport={fitReport}
             extraDesc={extra.data?.description ?? null}
             extraTags={extra.data?.tags ?? []}
             extraReqs={extra.data?.requirements ?? []}
@@ -441,6 +464,7 @@ function DetailBody({
   extraReqs,
   extraSkills,
   busy,
+  fitReport,
   onKeep,
   onDiscard,
   onApply,
@@ -458,6 +482,7 @@ function DetailBody({
   cvView,
 }: {
   job: Job;
+  fitReport: FitReport | null;
   extraDesc: string | null;
   extraTags: string[];
   extraReqs: string[];
@@ -711,6 +736,7 @@ function DetailBody({
                   </span>
                 ))}
               </div>
+              {fitReport && <FitReportView report={fitReport} />}
             </div>
           )}
           {(extraTags.length > 0 || extraSkills.length > 0) && (

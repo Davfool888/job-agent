@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Briefcase,
   LogIn,
@@ -28,6 +28,8 @@ export function Login() {
     needsProfile,
   } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const guestAuto = useRef(false);
   // Sin elección no hay botón de Google: primero Registrarse o Login,
   // y dentro de cada uno su opción con Google.
   const [mode, setMode] = useState<Mode | null>(null);
@@ -64,6 +66,26 @@ export function Login() {
       navigate("/dashboard", { replace: true });
     }
   }, [firebaseUser, needsProfile, navigate]);
+
+  // Atajo demo: /login?guest=1 entra como invitado sin clic extra.
+  useEffect(() => {
+    if (guestAuto.current || searchParams.get("guest") !== "1") return;
+    if (firebaseUser) return;
+    guestAuto.current = true;
+    void (async () => {
+      setBusy(true);
+      try {
+        await loginAsGuest();
+        navigate("/dashboard", { replace: true });
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "No se pudo entrar como invitado.",
+        );
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [searchParams, firebaseUser, loginAsGuest, navigate]);
 
   const switchMode = (m: Mode) => {
     setMode(m);

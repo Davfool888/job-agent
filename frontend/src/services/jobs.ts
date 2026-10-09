@@ -2,6 +2,7 @@ import { api } from "./api";
 import { openSearchStream } from "./searchStream";
 import type {
   Job,
+  JobAnalysis,
   JobDetailExtra,
   SearchResult,
   StatsSummary,
@@ -28,6 +29,13 @@ export async function fetchJobDetailExtra(
   id: number | string,
 ): Promise<JobDetailExtra> {
   const { data } = await api.get<JobDetailExtra>(`/jobs/${id}/detail`);
+  return data;
+}
+
+export async function fetchJobAnalysis(
+  id: number | string,
+): Promise<JobAnalysis> {
+  const { data } = await api.get<JobAnalysis>(`/jobs/${id}/analysis`);
   return data;
 }
 

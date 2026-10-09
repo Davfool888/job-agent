@@ -10,7 +10,7 @@ export interface JobFilterState {
   // Antigüedad de la publicación (usa published_at, con fallback a created_at).
   maxAgeDays: number; // 0 = sin filtro, 1 = hoy, 3, 7...
   onlyReposted: boolean;
-  sort: "recent" | "oldest" | "match" | "company" | "title" | "found";
+  sort: "recent" | "oldest" | "match" | "match_asc" | "company" | "title" | "found";
 }
 
 export const DEFAULT_FILTERS: JobFilterState = {

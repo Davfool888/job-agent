@@ -198,3 +198,129 @@ def generate_cv_content_for_user(client: UserLLM, job: dict, analysis: dict,
     validated = CVContent.model_validate(_extract_json(raw))
     return {"provider": client.provider_used or "user",
             **validated.model_dump()}
+
+
+def _t(value, limit: int) -> str:
+    """Todo a texto plano truncado: al LLM jamas llegan archivos,
+    bytes ni rutas, solo str."""
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    return str(value or "").strip()[:limit]
+
+
+def adapt_profile_for_user(client: UserLLM, *, job_title: str,
+                           job_company: str, job_description: str,
+                           job_skills: list[str],
+                           profile_summary: str,
+                           experiences: list[dict],
+                           allowed_skills: list[str],
+                           target_role: str) -> dict:
+    """Adaptacion completa en UNA sola consulta (resumen + bullets).
+
+    El prompt lleva solo texto plano: titulo/skills/descripcion de la
+    oferta + resumen/experiencias del perfil. La respuesta debe ser
+    JSON con strings; todo se verifica contra los originales
+    (longitud del resumen + verify_rewrite por experiencia). Cualquier
+    fallo lanza ValueError y el llamador usa el flujo deterministico.
+    Devuelve {"summary", "experiences": [{"index", "bullets"}],
+    "provider"}. `index` es la posicion en `experiences` (las entradas
+    sin bullets se omiten del request y del resultado).
+    """
+    from app.adapt.rewrite import verify_rewrite
+    from app.ai.providers.gemini import _extract_json
+
+    title = _t(job_title, 200)
+    company = _t(job_company, 200)
+    job_desc = _t(job_description, 4000)
+    skills = ", ".join(_t(s, 60) for s in (job_skills or [])[:20])
+    summary = _t(profile_summary, 1500)
+    role = _t(target_role, 80)
+    allowed = ", ".join(_t(s, 60) for s in (allowed_skills or [])[:15])
+
+    indexed: list[tuple[int, str, str, list[str]]] = []
+    for pos, exp in enumerate(experiences or []):
+        if not isinstance(exp, dict):
+            continue
+        bullets = [_t(b, 400) for b in (exp.get("bullets") or [])[:6]]
+        bullets = [b for b in bullets if b]
+        if not bullets:
+            continue
+        indexed.append((pos, _t(exp.get("title"), 120),
+                        _t(exp.get("company"), 120), bullets))
+    if not summary and not indexed:
+        raise ValueError("sin contenido adaptable")
+
+    exp_block = ""
+    for pos, exp_title, exp_company, bullets in indexed:
+        head = f"EXPERIENCIA {pos}"
+        if exp_title:
+            head += f" ({exp_title}"
+            head += f" en {exp_company}" if exp_company else ""
+            head += ")"
+        exp_block += head + ":\n" + "\n".join(
+            f"- {b}" for b in bullets) + "\n"
+
+    prompt = (
+        "Adapta este perfil a la oferta. REGLAS ESTRICTAS: usa UNICAMENTE "
+        "los hechos del perfil (sin inventar experiencia, tecnologias, "
+        "empresas, fechas, metricas ni responsabilidades nuevas); solo "
+        "reordena y enfatiza lo relevante para el cargo usando estas "
+        "skills permitidas: "
+        f"{allowed or 'ninguna'}. Responde SOLO JSON "
+        '{"summary": "...", "experiences": [{"index": 0, '
+        '"bullets": ["..."]}]}.\n\n'
+        f"OFERTA: {title}"
+        + (f" en {company}" if company else "")
+        + "\n"
+        f"SKILLS OFERTA: {skills or 'no indicadas'}\n"
+        f"DESCRIPCION OFERTA: {job_desc[:4000]}\n\n"
+        f"CARGO OBJETIVO: {role or title}\n"
+        f"RESUMEN ORIGINAL (reescribelo en 2-3 lineas, 30-600 caracteres, "
+        f"mismos hechos):\n{summary}\n\n"
+        f"{exp_block}"
+        "Mismo numero de bullets por experiencia, maximo 220 caracteres "
+        "cada uno."
+    )
+    raw = client.generate(
+        "Responde exclusivamente con JSON valido.", prompt)
+    parsed = _extract_json(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError("respuesta sin objeto JSON")
+
+    new_summary = parsed.get("summary", summary)
+    if not isinstance(new_summary, str):
+        raise ValueError("resumen no textual")
+    new_summary = new_summary.strip()
+    if summary and not (30 <= len(new_summary) <= 600):
+        raise ValueError("resumen pulido fuera de rango")
+    if not summary:
+        new_summary = summary
+
+    by_index: dict[int, list[str]] = {}
+    for item in parsed.get("experiences", []) or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            index = int(item.get("index"))
+        except (TypeError, ValueError):
+            continue
+        bullets = item.get("bullets")
+        if not isinstance(bullets, list):
+            continue
+        by_index[index] = [str(b or "").strip()[:280] for b in bullets
+                           if str(b or "").strip()]
+
+    originals = {pos: bullets for pos, _, _, bullets in indexed}
+    out_exps: list[dict] = []
+    for pos, bullets in by_index.items():
+        if pos not in originals:
+            continue
+        if not bullets:
+            continue
+        ok, reason = verify_rewrite(originals[pos], bullets)
+        if not ok:
+            raise ValueError(f"verificacion fallo en exp {pos} ({reason})")
+        out_exps.append({"index": pos, "bullets": bullets})
+    out_exps.sort(key=lambda e: e["index"])
+    return {"summary": new_summary, "experiences": out_exps,
+            "provider": client.provider_used or "user"}

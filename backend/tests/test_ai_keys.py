@@ -302,6 +302,85 @@ def test_endpoints_status_sin_keys(_secret):
         auth_module.verify_bearer_token = orig
 
 
+def test_adapt_una_sola_consulta_texto_plano():
+    """Resumen + bullets en 1 generate(), prompt solo con texto plano
+    (titulo/skills/descripcion oferta + resumen/experiencias perfil),
+    verificado contra originales."""
+    from app.ai import user_llm
+
+    calls = []
+
+    class _Fake:
+        provider_used = "groq"
+
+        def generate(self, system, user):
+            calls.append((system, user))
+            assert isinstance(system, str) and isinstance(user, str)
+            return ('{"summary": "Analista de datos con Python para '
+                    'reportes y tableros.", "experiences": '
+                    '[{"index": 0, "bullets": ["Analice datos con Python '
+                    'para reportes."]}]}')
+
+    out = user_llm.adapt_profile_for_user(
+        _Fake(), job_title="Analista de Datos", job_company="Acme",
+        job_description="Buscamos analista con Python para reportes.",
+        job_skills=["Python", "SQL"],
+        profile_summary="Analista de datos con Python para reportes.",
+        experiences=[{"title": "Analista", "company": "Acme",
+                      "bullets": ["Analice datos con Python para reportes."]}],
+        allowed_skills=["Python"], target_role="Analista de Datos")
+    assert len(calls) == 1
+    system, prompt = calls[0]
+    assert "Analista de Datos" in prompt
+    assert "Python" in prompt
+    assert "Buscamos analista" in prompt
+    assert "Analice datos" in prompt
+    assert ".pdf" not in prompt and "bytes" not in prompt.lower()
+    assert out["provider"] == "groq"
+    assert out["experiences"] == [
+        {"index": 0,
+         "bullets": ["Analice datos con Python para reportes."]}]
+
+
+def test_adapt_invento_o_mal_json_falla():
+    """Tecnologia nueva o JSON invalido -> ValueError (el llamador usa
+    el flujo deterministico)."""
+    from app.ai import user_llm
+
+    class _FakeInventa:
+        provider_used = "groq"
+
+        def generate(self, system, user):
+            return ('{"summary": "Analista de datos con Python para '
+                    'reportes y tableros.", "experiences": '
+                    '[{"index": 0, "bullets": ["Lidere equipo con Rust '
+                    'para compilar."]}]}')
+
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError):
+        user_llm.adapt_profile_for_user(
+            _FakeInventa(), job_title="Dev", job_company="",
+            job_description="Python", job_skills=[],
+            profile_summary="Analista de datos con Python para reportes.",
+            experiences=[{"title": "A", "company": "",
+                          "bullets": ["Analice datos con Python."]}],
+            allowed_skills=["Python"], target_role="Dev")
+
+    class _FakeRoto:
+        provider_used = "groq"
+
+        def generate(self, system, user):
+            return "esto no es json"
+
+    with _pytest.raises(ValueError):
+        user_llm.adapt_profile_for_user(
+            _FakeRoto(), job_title="Dev", job_company="",
+            job_description="Python", job_skills=[],
+            profile_summary="Analista de datos con Python para reportes.",
+            experiences=[], allowed_skills=[], target_role="Dev")
+
+
 def test_catalogo_incluye_groq_y_openrouter():
     from app.ai import user_providers as providers
 

@@ -421,7 +421,8 @@ def test_audit_checklist_titulo_e_intro():
 
 
 def test_ia_una_sola_via_con_cliente_usuario(tmp_path, monkeypatch):
-    """Con keys del usuario, el pulido global NO se ejecuta."""
+    """Con keys del usuario, UNA sola consulta y el pulido global NO
+    se ejecuta."""
     import json as _json
     from types import SimpleNamespace
 
@@ -429,7 +430,7 @@ def test_ia_una_sola_via_con_cliente_usuario(tmp_path, monkeypatch):
     from app.adapt import service as adapt_service
     from app.ai import user_llm
 
-    calls = {"global": 0}
+    calls = {"global": 0, "user": 0}
 
     def _fake_global(*args, **kwargs):
         calls["global"] += 1
@@ -441,13 +442,16 @@ def test_ia_una_sola_via_con_cliente_usuario(tmp_path, monkeypatch):
     def _fake_for_user(db, uid, preferred=None):
         return _FakeClient()
 
-    def _fake_polish(client, original, role, matched):
+    def _fake_adapt(client, **kwargs):
+        calls["user"] += 1
         assert client.provider_used == "deepseek"
-        return {"summary": "pulido-usuario", "provider": "deepseek"}
+        assert "job_title" in kwargs and "experiences" in kwargs
+        return {"summary": "pulido-usuario", "experiences": [],
+                "provider": "deepseek"}
 
     monkeypatch.setattr(adapt_llm, "polish_summary", _fake_global)
     monkeypatch.setattr(user_llm, "for_user", _fake_for_user)
-    monkeypatch.setattr(user_llm, "polish_summary_for_user", _fake_polish)
+    monkeypatch.setattr(user_llm, "adapt_profile_for_user", _fake_adapt)
     monkeypatch.setattr("app.config.ADAPT_CVS_DIR", tmp_path)
     monkeypatch.setattr(
         "app.services.job_service.get_job_by_id",
@@ -484,6 +488,7 @@ def test_ia_una_sola_via_con_cliente_usuario(tmp_path, monkeypatch):
         db.close()
     assert out["success"] is True
     assert calls["global"] == 0
+    assert calls["user"] == 1
     stored = _json.loads((tmp_path / "job_11" / "u11" / "adapt.json")
                          .read_text(encoding="utf-8"))
     assert stored["content"]["summary"] == "pulido-usuario"

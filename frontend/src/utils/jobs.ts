@@ -115,6 +115,10 @@ export function applyJobFilters(jobs: Job[], f: JobFilterState): Job[] {
       return filtered.sort(
         (a, b) => (b.match_score ?? -1) - (a.match_score ?? -1) || byIdDesc(a, b),
       );
+    case "match_asc":
+      return filtered.sort(
+        (a, b) => (a.match_score ?? 101) - (b.match_score ?? 101) || byIdDesc(a, b),
+      );
     case "company":
       return filtered.sort((a, b) =>
         (a.company ?? "").localeCompare(b.company ?? ""),

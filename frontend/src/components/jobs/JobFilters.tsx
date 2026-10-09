@@ -50,6 +50,7 @@ export function JobFilters({
           <option value="found">Recién encontradas</option>
           <option value="oldest">Más antiguas</option>
           <option value="match">Mayor coincidencia</option>
+          <option value="match_asc">Menor coincidencia</option>
           <option value="company">Empresa (A–Z)</option>
           <option value="title">Cargo (A–Z)</option>
         </select>
