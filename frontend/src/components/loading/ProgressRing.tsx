@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { X, Check, Loader2, RotateCcw, Play, Pause, FastForward } from "lucide-react";
+import { useEffect, useRef, useState, useMemo } from "react";
+import { Check, Loader2 } from "lucide-react";
 
 export interface ProgressStage {
   id: string;
@@ -101,10 +101,6 @@ function easeOutCubic(t: number) {
   return 1 - Math.pow(1 - t, 3);
 }
 
-function easeInOutCubic(t: number) {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
 export function ProgressRing({
   stages = DEFAULT_STAGES,
   currentStage = 0,
@@ -133,16 +129,15 @@ export function ProgressRing({
   const [displayProgress, setDisplayProgress] = useState(globalProgress ?? 0);
   const [displayStage, setDisplayStage] = useState(currentStage);
   const [displayStageProgress, setDisplayStageProgress] = useState(stageProgress);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const animationRef = useRef<number>();
-  const startTimeRef = useRef<number>();
+  const [, setIsAnimating] = useState(false);
+  const animationRef = useRef<number>(0);
+  const startTimeRef = useRef<number>(0);
   const prevStageRef = useRef(currentStage);
 
   // Calcular progreso global si no se proporciona
   const computedGlobalProgress = useMemo(() => {
     if (globalProgress !== undefined) return globalProgress;
     const completedStages = Math.max(0, currentStage);
-    const currentStageWeight = 1 / stages.length;
     return Math.min(1, (completedStages + stageProgress) / stages.length);
   }, [globalProgress, currentStage, stageProgress, stages.length]);
 
@@ -216,7 +211,6 @@ export function ProgressRing({
 
     stages.forEach((_, index) => {
       const startAngle = index * stageAngle;
-      const endAngle = startAngle + stageAngle;
       const isStageComplete = index < displayStage;
       const isCurrentStage = index === Math.floor(displayStage);
 
@@ -454,7 +448,7 @@ export function ProgressRing({
               animation: `progressRingSpin ${2 / animationSpeed}s linear infinite`,
             }}
           />
-          <style jsx>{`
+          <style>{`
             @keyframes progressRingSpin {
               from { transform: rotate(-90deg); }
               to { transform: rotate(270deg); }
@@ -475,7 +469,7 @@ export function ProgressRingCompact({
   strokeWidth = 4,
   showPercent = true,
   ...props
-}: Omit<ProgressRingProps, "size" | "strokeWidth" | "showStageLabels" | "centerText" | "centerSubtext">) {
+}: Omit<ProgressRingProps, "showStageLabels" | "centerText" | "centerSubtext">) {
   return (
     <ProgressRing
       stages={stages}
@@ -499,9 +493,10 @@ export function ProgressRingLinear({
   stageProgress = 0,
   height = 6,
   showLabels = true,
+  showPercent = true,
   colors,
   ...props
-}: Omit<ProgressRingProps, "size" | "strokeWidth" | "showStageLabels" | "showPercent" | "centerText" | "centerSubtext"> & {
+}: Omit<ProgressRingProps, "size" | "strokeWidth" | "showStageLabels" | "centerText" | "centerSubtext"> & {
   height?: number;
   showLabels?: boolean;
 }) {
