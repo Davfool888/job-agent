@@ -1233,6 +1233,31 @@ a {
 .slice-deck {
   position: relative;
   min-height: 420px;
+  flex: 1;
+  min-width: 0;
+}
+
+.slices-browser {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.slice-nav {
+  align-self: center;
+  flex-shrink: 0;
+  padding: 14px 8px;
+}
+
+.slice-nav svg {
+  width: 22px;
+  height: 22px;
+}
+
+@media (max-width: 600px) {
+  .slice-nav {
+    padding: 10px 4px;
+  }
 }
 
 .slice-next {
@@ -1262,8 +1287,39 @@ a {
 
 .slice-grip {
   position: relative;
+  z-index: 3;
   touch-action: pan-y;
   user-select: none;
+}
+
+.slice-stack {
+  position: relative;
+}
+
+.slice-under {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.slice-under .slice-card {
+  box-shadow: none;
+}
+
+.slice-under-1 {
+  transform: translateY(10px) scale(0.98);
+  opacity: 0.6;
+}
+
+.slice-under-2 {
+  transform: translateY(20px) scale(0.96);
+  opacity: 0.35;
+}
+
+.slice-under-3 {
+  transform: translateY(30px) scale(0.94);
+  opacity: 0.2;
 }
 
 .slice-card {

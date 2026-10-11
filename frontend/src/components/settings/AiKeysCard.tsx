@@ -6,6 +6,7 @@ import {
   saveAiKey,
   type AiKeyStatus,
 } from "../../services/aiKeys";
+import { useAuth } from "../../context/AuthContext";
 
 function badgeColor(status: string): string {
   if (status === "disponible") return "var(--success)";
@@ -17,6 +18,12 @@ function badgeColor(status: string): string {
  * Jamas muestra valores de keys: solo estado + guardar/borrar.
  */
 export function AiKeysCard() {
+  const { firebaseUser, isGuest } = useAuth();
+  const accountLabel = !firebaseUser
+    ? "sin sesión"
+    : isGuest || firebaseUser.isAnonymous
+      ? "invitado (este navegador)"
+      : (firebaseUser.email || "tu cuenta de Google");
   const [rows, setRows] = useState<AiKeyStatus[] | null>(null);
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -80,6 +87,11 @@ export function AiKeysCard() {
         se usa la del proyecto). Solo se guarda el estado, jamás el valor
         de la key. Sin keys configuradas, la generación usa el modo
         determinístico local.
+      </p>
+      <p className="card-sub" style={{ marginTop: 4 }}>
+        Keys de <strong>{accountLabel}</strong>: se guardan cifradas en el
+        servidor y solo valen para esta cuenta (invitado, Google o admin
+        tienen cada uno las suyas).
       </p>
       {error && (
         <p style={{ color: "var(--danger)", fontSize: 13 }}>⚠ {error}</p>

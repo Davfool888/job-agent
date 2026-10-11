@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, RotateCcw, Send, Undo2, X } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
+  Send,
+  Undo2,
+  X,
+} from "lucide-react";
 import { Header } from "../components/layout/Header";
 import {
   EmptyState,
@@ -8,9 +16,12 @@ import {
 } from "../components/jobs/States";
 import { SliceCard, type SliceExit } from "../components/slices/SliceCard";
 import { useJobs } from "../hooks/useApi";
-import { fetchJobAnalysis } from "../services/jobs";
+import { fetchJobAnalysis, updateJobStatus } from "../services/jobs";
 import { DISCARD_REASONS } from "../utils/constants";
+import { uniqueLocations } from "../utils/jobs";
+import { canonicalLocation, normText } from "../utils/profileOptions";
 import type { Job, JobAnalysis, JobStatus } from "../types/job";
+import type { StatusUpdatePayload } from "../types/job";
 
 interface HistoryEntry {
   id: string;
@@ -18,70 +29,197 @@ interface HistoryEntry {
   dir: Exclude<SliceExit, null>;
 }
 
+interface FailedAction {
+  id: string;
+  payload: StatusUpdatePayload;
+  label: string;
+}
+
 const SWIPE_X = 100;
 const SWIPE_UP_Y = -80;
 // Flick corto hacia abajo expande: 45px basta en táctil/mouse.
 const EXPAND_Y = 45;
+// La animación de salida dura 0.22s; a los 180ms la siguiente ya manda.
+const EXIT_MS = 180;
+// Tiempo mirando una tarjeta antes de registrarla como vista.
+const VIEW_DELAY_MS = 800;
+// Recargas de sincronización diferidas para no frenar el swipe.
+const RELOAD_DEBOUNCE_MS = 6000;
+// Cuántas tarjetas siguientes se montan + pre-analizan por adelantado.
+const PRELOAD_AHEAD = 3;
 
-type SortMode = "recent" | "match";
+type SortMode = "match" | "found_desc" | "found_asc";
+
+function foundTime(j: Job): number {
+  const t = new Date(j.found_at ?? j.created_at).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
 
 export function Slices() {
-  const { data, loading, error, reload, mutate } = useJobs();
+  // Sin reload por acción: el deck avanza optimista y la red va por detrás.
+  const { data, loading, error, reload } = useJobs();
   const [index, setIndex] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [drag, setDrag] = useState({ x: 0, y: 0, dragging: false });
   const [exit, setExit] = useState<SliceExit>(null);
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [undoBusy, setUndoBusy] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [failed, setFailed] = useState<FailedAction[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  // Decididas en la sesión: salen del deck al instante, sin esperar red.
+  const [acted, setActed] = useState<Set<string>>(new Set());
+  // Marcadas como vistas en la sesión: siguen en el deck con badge Abierta.
+  const [viewed, setViewed] = useState<Set<string>>(new Set());
   const [kept, setKept] = useState(0);
   const [dropped, setDropped] = useState(0);
   const [applied, setApplied] = useState(0);
-  // Filtros rápidos para triage: evita revisar 775 nuevas sin orden.
+  // Filtros de triage.
   const [minMatch, setMinMatch] = useState(0);
   const [onlyScored, setOnlyScored] = useState(false);
-  const [sort, setSort] = useState<SortMode>("match");
+  const [sort, setSort] = useState<SortMode>("found_desc");
+  const [city, setCity] = useState("");
   const [discardReason, setDiscardReason] = useState<string>(DISCARD_REASONS[0]);
   const [analyses, setAnalyses] = useState<Record<string, JobAnalysis>>({});
   const [analysisLoading, setAnalysisLoading] = useState<string | null>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const exitTimer = useRef<number | null>(null);
+  const viewTimer = useRef<number | null>(null);
+  const reloadTimer = useRef<number | null>(null);
+  const analysisFlight = useRef<Set<string>>(new Set());
+  const emptiedRef = useRef(false);
 
-  // Solo pendientes de decisión + filtros de triage, ordenados.
+  // Solo ofertas traídas por perfiles de búsqueda automática.
+  const autoJobs = useMemo(
+    () =>
+      (data ?? []).filter(
+        (j) =>
+          ((j.status === "new" || j.status === "kept") ||
+            viewed.has(String(j.id))) &&
+          (j.search_profile_ids ?? []).length > 0,
+      ),
+    [data, viewed],
+  );
+  const cities = useMemo(() => uniqueLocations(autoJobs), [autoJobs]);
+
   const deck = useMemo(() => {
-    const base = (data ?? []).filter(
-      (j) => j.status === "new" || j.status === "kept",
-    );
-    const filtered = base.filter((j) => {
+    const filtered = autoJobs.filter((j) => {
+      if (acted.has(String(j.id))) return false;
       if (onlyScored && j.match_score === null) return false;
       if (minMatch > 0 && (j.match_score === null || j.match_score < minMatch))
         return false;
+      if (city) {
+        const jobCity = normText(canonicalLocation(j.location));
+        if (jobCity !== normText(city)) return false;
+      }
       return true;
     });
     return [...filtered].sort((a, b) =>
       sort === "match"
-        ? (b.match_score ?? -1) - (a.match_score ?? -1)
-        : Number(b.id) - Number(a.id),
+        ? (b.match_score ?? -1) - (a.match_score ?? -1) || foundTime(b) - foundTime(a)
+        : sort === "found_asc"
+          ? foundTime(a) - foundTime(b)
+          : foundTime(b) - foundTime(a),
     );
-  }, [data, minMatch, onlyScored, sort]);
-  const current: Job | undefined = deck[index];
-  const next: Job | undefined = deck[index + 1];
+  }, [autoJobs, acted, city, minMatch, onlyScored, sort]);
+  // Sin decidir quedan fuera de filtros: ¿se acabó por decidir o por filtrar?
+  const unactedCount = useMemo(
+    () => autoJobs.filter((j) => !acted.has(String(j.id))).length,
+    [autoJobs, acted],
+  );
+  const safeIndex = deck.length === 0 ? 0 : Math.min(index, deck.length - 1);
+  const current: Job | undefined = deck[safeIndex];
+  const upcoming: Job[] = deck.slice(safeIndex + 1, safeIndex + 1 + PRELOAD_AHEAD);
+  const remaining = deck.length === 0 ? 0 : deck.length - safeIndex - 1;
+  // Badge Abierta inmediato aunque el reload aún no llegue.
+  const displayJob: Job | undefined =
+    current && current.status === "new" && viewed.has(String(current.id))
+      ? { ...current, status: "opened" as const }
+      : current;
 
-  // Reset al cambiar filtros o llegar datos nuevos.
+  // Reset de posición al cambiar filtros (las decisiones usan `acted`,
+  // no dependen del reload).
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     setIndex(0);
     setExpanded(false);
     setDrag({ x: 0, y: 0, dragging: false });
     setExit(null);
-  }, [data, minMatch, onlyScored, sort]);
+  }, [minMatch, onlyScored, sort, city]);
 
   useEffect(
     () => () => {
       if (exitTimer.current) window.clearTimeout(exitTimer.current);
+      if (viewTimer.current) window.clearTimeout(viewTimer.current);
+      if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
     },
     [],
   );
+
+  const scheduleReload = useCallback(() => {
+    if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
+    reloadTimer.current = window.setTimeout(reload, RELOAD_DEBOUNCE_MS);
+  }, [reload]);
+
+  // Guardado en segundo plano: nunca bloquea la tarjeta siguiente.
+  const saveInBackground = useCallback(
+    (id: string, payload: StatusUpdatePayload, label: string) => {
+      updateJobStatus(id, payload).then(
+        () => scheduleReload(),
+        () => {
+          setFailed((f) =>
+            f.some((x) => x.id === id)
+              ? f
+              : [...f, { id, payload, label }],
+          );
+        },
+      );
+    },
+    [scheduleReload],
+  );
+
+  const retryFailed = useCallback(async () => {
+    if (failed.length === 0 || retrying) return;
+    setRetrying(true);
+    try {
+      await Promise.all(
+        failed.map((f) =>
+          updateJobStatus(f.id, f.payload).then(
+            () => ({ id: f.id, ok: true as const }),
+            () => ({ id: f.id, ok: false as const }),
+          ),
+        ),
+      ).then((results) => {
+        const okIds = new Set(
+          results.filter((r) => r.ok).map((r) => r.id),
+        );
+        setFailed((f) => f.filter((x) => !okIds.has(x.id)));
+      });
+      reload();
+    } finally {
+      setRetrying(false);
+    }
+  }, [failed, retrying, reload]);
+
+  // Mirar una tarjeta la registra como vista (sección Vistas) sin
+  // sacarla del deck: se añade a `viewed` para conservarla tras el reload.
+  useEffect(() => {
+    if (viewTimer.current) window.clearTimeout(viewTimer.current);
+    if (
+      !current ||
+      current.status !== "new" ||
+      viewed.has(String(current.id)) ||
+      acted.has(String(current.id))
+    )
+      return;
+    const id = String(current.id);
+    viewTimer.current = window.setTimeout(() => {
+      setViewed((v) => new Set(v).add(id));
+      saveInBackground(id, { status: "opened" }, "vista");
+    }, VIEW_DELAY_MS);
+    return () => {
+      if (viewTimer.current) window.clearTimeout(viewTimer.current);
+    };
+  }, [current, viewed, acted, saveInBackground]);
 
   // Análisis perezoso: solo al expandir, una vez por oferta.
   useEffect(() => {
@@ -97,87 +235,128 @@ export function Slices() {
       .finally(() => setAnalysisLoading((v) => (v === id ? null : v)));
   }, [expanded, current, analyses, analysisLoading]);
 
+  // Precarga: análisis de las siguientes para que expandir sea instantáneo.
+  useEffect(() => {
+    for (const j of upcoming) {
+      const id = String(j.id);
+      if (analyses[id] || analysisFlight.current.has(id)) continue;
+      analysisFlight.current.add(id);
+      fetchJobAnalysis(j.id)
+        .then((a) => setAnalyses((m) => ({ ...m, [id]: a })))
+        .catch(() => {
+          /* precarga best-effort */
+        })
+        .finally(() => analysisFlight.current.delete(id));
+    }
+  }, [upcoming, analyses]);
+
+  // Al acabarse por decidir: una recarga (se ve "buscando") y si no hay
+  // nada nuevo, mensaje de volver más tarde.
+  useEffect(() => {
+    if (loading || data === null) return;
+    if (deck.length > 0 || unactedCount > 0) {
+      emptiedRef.current = false;
+      return;
+    }
+    if (acted.size === 0) return;
+    if (emptiedRef.current) return;
+    emptiedRef.current = true;
+    reload();
+  }, [deck.length, unactedCount, acted.size, data, loading, reload]);
+
   const swipe = useCallback(
     (dir: Exclude<SliceExit, null>) => {
-      if (!current || busy || exit) return;
+      if (!current || exit) return;
       // Abrir PRIMERO para swipe-up (gesto del usuario): evita que el
       // bloqueador de popups intercepte la ventana (patrón de Jobs.tsx).
       if (dir === "up") window.open(current.url, "_blank", "noopener");
+      const job = current;
+      const id = String(job.id);
+      const label =
+        dir === "right" ? "guardada" : dir === "up" ? "postulación" : "descarte";
+      const payload: StatusUpdatePayload =
+        dir === "right"
+          ? { status: "kept" }
+          : dir === "up"
+            ? { status: "applied", application_status: "iniciada" }
+            : { status: "discarded", discard_reason: discardReason };
+      // La red va por detrás: no se espera para mostrar la siguiente.
+      saveInBackground(id, payload, label);
       setExit(dir);
       setExpanded(false);
       exitTimer.current = window.setTimeout(() => {
-        const job = deck[index];
-        if (!job) {
-          setExit(null);
-          return;
-        }
-        setBusy(true);
-        setActionError(null);
-        const payload =
-          dir === "right"
-            ? { status: "kept" as const }
-            : dir === "up"
-              ? {
-                  status: "applied" as const,
-                  application_status: "iniciada",
-                }
-              : {
-                  status: "discarded" as const,
-                  discard_reason: discardReason,
-                };
-        mutate(job.id, payload).then(
-          () => {
-            setHistory((h) => [...h, { id: String(job.id), prev: job.status, dir }]);
-            if (dir === "right") setKept((n) => n + 1);
-            else if (dir === "up") setApplied((n) => n + 1);
-            else setDropped((n) => n + 1);
-            setIndex((i) => i + 1);
-            setDrag({ x: 0, y: 0, dragging: false });
-            setExit(null);
-            setBusy(false);
-          },
-          (e: unknown) => {
-            setActionError(
-              e instanceof Error ? e.message : "No se pudo guardar la decisión",
-            );
-            setExit(null);
-            setBusy(false);
-          },
-        );
-      }, 230);
+        setHistory((h) => [...h, { id, prev: job.status, dir }]);
+        setActed((a) => new Set(a).add(id));
+        if (dir === "right") setKept((n) => n + 1);
+        else if (dir === "up") setApplied((n) => n + 1);
+        else setDropped((n) => n + 1);
+        // Sin mover el índice: la precargada se desliza al lugar.
+        setDrag({ x: 0, y: 0, dragging: false });
+        setExit(null);
+      }, EXIT_MS);
     },
-    [busy, current, deck, discardReason, exit, index, mutate],
+    [current, exit, discardReason, saveInBackground],
   );
 
   const keep = useCallback(() => swipe("right"), [swipe]);
   const discard = useCallback(() => swipe("left"), [swipe]);
   const apply = useCallback(() => swipe("up"), [swipe]);
 
+  // Mirar sin decidir: avanza/retrocede sin mutar nada.
+  const browse = useCallback(
+    (delta: 1 | -1) => {
+      if (exit || deck.length === 0) return;
+      setExpanded(false);
+      setDrag({ x: 0, y: 0, dragging: false });
+      setIndex((i) =>
+        Math.min(deck.length - 1, Math.max(0, Math.min(i, deck.length - 1) + delta)),
+      );
+    },
+    [exit, deck.length],
+  );
+  const browseNext = useCallback(() => browse(1), [browse]);
+  const browsePrev = useCallback(() => browse(-1), [browse]);
+
   const undo = useCallback(async () => {
     const last = history[history.length - 1];
-    if (!last || busy) return;
-    setBusy(true);
-    setActionError(null);
+    if (!last || undoBusy) return;
+    setUndoBusy(true);
     try {
-      await mutate(last.id, { status: last.prev });
+      await updateJobStatus(last.id, { status: last.prev });
+      setActed((a) => {
+        const copy = new Set(a);
+        copy.delete(last.id);
+        return copy;
+      });
       setHistory((h) => h.slice(0, -1));
-      setIndex((i) => Math.max(0, i - 1));
       if (last.dir === "right") setKept((n) => Math.max(0, n - 1));
       else if (last.dir === "up") setApplied((n) => Math.max(0, n - 1));
       else setDropped((n) => Math.max(0, n - 1));
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "No se pudo deshacer");
+      reload();
+    } catch {
+      setFailed((f) =>
+        f.some((x) => x.id === last.id)
+          ? f
+          : [
+              ...f,
+              {
+                id: last.id,
+                payload: { status: last.prev },
+                label: "deshacer",
+              },
+            ],
+      );
     } finally {
-      setBusy(false);
+      setUndoBusy(false);
     }
-  }, [busy, history, mutate]);
+  }, [history, undoBusy, reload]);
 
   // Teclado: ← descarta, → guarda, ↑ postula, ↓ expande. Se ignoran inputs.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName)) return;
-      if (!current || busy) return;
+      if (!current) return;
       if (e.key === "ArrowRight") {
         e.preventDefault();
         keep();
@@ -194,10 +373,10 @@ export function Slices() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [busy, current, apply, discard, keep]);
+  }, [current, apply, discard, keep]);
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if (busy || exit || !current) return;
+    if (exit || !current) return;
     // No secuestrar scroll cuando el gesto nace dentro de la zona con
     // scroll propio (descripción expandida) o en botones/enlaces.
     const t = e.target as HTMLElement | null;
@@ -232,8 +411,6 @@ export function Slices() {
       swipe("up");
       return;
     }
-    // Umbral menor para expandir: el colapsado mide ~400px y antes
-    // pedía 90px, demasiado para un flick corto en táctil.
     if (dy > EXPAND_Y) {
       setExpanded((v) => !v);
     }
@@ -271,15 +448,15 @@ export function Slices() {
         title="Slices"
         subtitle={
           deck.length > 0
-            ? `${Math.min(index + 1, deck.length)} / ${deck.length} · ← descarta · → guarda · ↑ postula · ↓ detalles`
-            : "Revisa ofertas una por una al estilo app de citas"
+            ? `${Math.min(safeIndex + 1, deck.length)} / ${deck.length} · ← descarta · → guarda · ↑ postula · ↓ detalles · ‹ › mirar`
+            : "Solo ofertas de tus perfiles de búsqueda automática"
         }
         actions={
           history.length > 0 ? (
             <button
               className="btn btn-ghost btn-sm"
               onClick={() => void undo()}
-              disabled={busy}
+              disabled={undoBusy}
               title="Deshacer última decisión"
             >
               <Undo2 /> Deshacer
@@ -288,28 +465,45 @@ export function Slices() {
         }
       />
       <div className="content slices-wrap">
-        {actionError && <div className="alert-error">{actionError}</div>}
+        {failed.length > 0 && (
+          <div className="alert-error">
+            No se pudo guardar {failed.length === 1 ? "una decisión" : `${failed.length} decisiones`} por red.{" "}
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => void retryFailed()}
+              disabled={retrying}
+            >
+              {retrying ? "Reintentando…" : "Reintentar"}
+            </button>
+          </div>
+        )}
         {(kept > 0 || dropped > 0 || applied > 0) && deck.length > 0 && (
           <p className="slices-count">
             ✅ {kept} guardadas · ❌ {dropped} descartadas · 📨 {applied}{" "}
             postuladas en esta sesión
+            {remaining > 0 && remaining <= 5 && ` · Quedan ${remaining}`}
           </p>
         )}
         {loading ? (
-          <LoadingState label="Cargando ofertas…" />
+          <LoadingState label="Buscando ofertas…" />
         ) : error ? (
           <ErrorState message={error} onRetry={reload} />
-        ) : deck.length === 0 ? (
+        ) : autoJobs.length === 0 ? (
+          <EmptyState
+            title="Sin ofertas de búsqueda automática."
+            hint="Crea un perfil en Búsqueda con frecuencia y ejecútalo (o espera el scheduler) para traer ofertas aquí."
+          />
+        ) : deck.length === 0 && unactedCount > 0 ? (
           <EmptyState
             title="No hay ofertas para esos filtros."
-            hint="Baja el match mínimo o usa «Buscar nuevas ofertas» en el Dashboard."
+            hint="Ajusta ciudad, match mínimo o revisa las ya decididas en Ofertas, Vistas y Descartadas."
           />
         ) : !current ? (
           <div className="card slices-done">
-            <h3>¡Al día! 🎉</h3>
+            <h3>Ya no hay ofertas por mostrar 🎉</h3>
             <p>
-              Revisaste las {deck.length} ofertas filtradas. ✅ {kept} · ❌{" "}
-              {dropped} · 📨 {applied}.
+              Revisaste todo lo pendiente (✅ {kept} · ❌ {dropped} · 📨{" "}
+              {applied}). Vuelve más tarde: la búsqueda automática trae más.
             </p>
             <div className="slices-done-actions">
               <button
@@ -320,10 +514,11 @@ export function Slices() {
                   setDropped(0);
                   setApplied(0);
                   setHistory([]);
+                  setActed(new Set());
                   reload();
                 }}
               >
-                <RotateCcw /> Recargar
+                <RotateCcw /> Buscar de nuevo
               </button>
             </div>
           </div>
@@ -331,6 +526,35 @@ export function Slices() {
           <>
             <div className="toolbar slices-filters">
               <div className="toolbar-row">
+                <label className="slices-filter">
+                  Ciudad
+                  <select
+                    className="select"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                  >
+                    <option value="">Todas</option>
+                    {cities.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="slices-filter">
+                  Orden
+                  <select
+                    className="select"
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value as SortMode)}
+                  >
+                    <option value="found_desc">
+                      Recién encontradas primero
+                    </option>
+                    <option value="found_asc">Antiguas primero</option>
+                    <option value="match">Mejor match</option>
+                  </select>
+                </label>
                 <label className="slices-filter">
                   Match mín.
                   <select
@@ -343,17 +567,6 @@ export function Slices() {
                         {v === 0 ? "Todos" : `≥ ${v}%`}
                       </option>
                     ))}
-                  </select>
-                </label>
-                <label className="slices-filter">
-                  Orden
-                  <select
-                    className="select"
-                    value={sort}
-                    onChange={(e) => setSort(e.target.value as SortMode)}
-                  >
-                    <option value="match">Mejor match</option>
-                    <option value="recent">Recientes</option>
                   </select>
                 </label>
                 <label className="slices-check">
@@ -382,51 +595,90 @@ export function Slices() {
                 </label>
               </div>
             </div>
-            <div
-              className="slice-deck"
-              aria-live="polite"
-              aria-label={`Oferta ${index + 1} de ${deck.length}: ${current.title}`}
-            >
-              {next && (
-                <div className="slice-next" aria-hidden>
-                  <p className="slice-next-title">{next.title}</p>
-                  <p className="slice-next-sub">
-                    {next.company ?? "Empresa no indicada"} · Siguiente
-                  </p>
-                </div>
-              )}
-              <div
-                className="slice-grip"
-                onPointerDown={onPointerDown}
-                onPointerMove={onPointerMove}
-                onPointerUp={onPointerUp}
-                onPointerCancel={onPointerCancel}
-                // Colapsada (none): el gesto vertical lo gestiona el deck
-                // (expandir); el navegador no lo roba para scroll.
-                // Expandida (pan-y): la descripción larga necesita scroll
-                // nativo en táctil; en mouse el drag sigue funcionando
-                // (touch-action no afecta al mouse) y ↓/botón colapsan.
-                style={{ touchAction: expanded ? "pan-y" : "none" }}
+            <div className="slices-browser">
+              <button
+                className="btn btn-ghost slice-nav"
+                onClick={browsePrev}
+                disabled={safeIndex <= 0}
+                title="Anterior (mirar sin decidir)"
+                aria-label="Ver anterior sin decidir"
               >
-                <SliceCard
-                  key={current.id}
-                  job={current}
-                  dragX={drag.x}
-                  dragY={drag.y}
-                  dragging={drag.dragging}
-                  exiting={exit}
-                  expanded={expanded}
-                  analysis={analyses[String(current.id)] ?? null}
-                  analysisLoading={analysisLoading === String(current.id)}
-                  onToggleExpand={() => setExpanded((v) => !v)}
-                />
+                <ChevronLeft />
+              </button>
+              <div
+                className="slice-deck"
+                aria-live="polite"
+                aria-label={`Oferta ${safeIndex + 1} de ${deck.length}: ${displayJob?.title ?? ""}`}
+              >
+                <div className="slice-stack">
+                  {upcoming
+                    .slice()
+                    .reverse()
+                    .map((job, i) => (
+                      <div
+                        key={job.id}
+                        className={`slice-under slice-under-${upcoming.length - i}`}
+                        aria-hidden
+                      >
+                        <SliceCard
+                          job={job}
+                          dragX={0}
+                          dragY={0}
+                          dragging={false}
+                          exiting={null}
+                          expanded={false}
+                          analysis={analyses[String(job.id)] ?? null}
+                          analysisLoading={false}
+                          onToggleExpand={() => {}}
+                        />
+                      </div>
+                    ))}
+                  <div
+                    className="slice-grip"
+                    onPointerDown={onPointerDown}
+                    onPointerMove={onPointerMove}
+                    onPointerUp={onPointerUp}
+                    onPointerCancel={onPointerCancel}
+                    // Colapsada (none): el gesto vertical lo gestiona el deck
+                    // (expandir); el navegador no lo roba para scroll.
+                    // Expandida (pan-y): la descripción larga necesita scroll
+                    // nativo en táctil; en mouse el drag sigue funcionando
+                    // (touch-action no afecta al mouse) y ↓/botón colapsan.
+                    style={{ touchAction: expanded ? "pan-y" : "none" }}
+                  >
+                    {displayJob && (
+                      <SliceCard
+                        key={displayJob.id}
+                        job={displayJob}
+                        dragX={drag.x}
+                        dragY={drag.y}
+                        dragging={drag.dragging}
+                        exiting={exit}
+                        expanded={expanded}
+                        analysis={analyses[String(displayJob.id)] ?? null}
+                        analysisLoading={
+                          analysisLoading === String(displayJob.id)
+                        }
+                        onToggleExpand={() => setExpanded((v) => !v)}
+                      />
+                    )}
+                  </div>
+                </div>
               </div>
+              <button
+                className="btn btn-ghost slice-nav"
+                onClick={browseNext}
+                disabled={safeIndex >= deck.length - 1}
+                title="Siguiente (mirar sin decidir)"
+                aria-label="Ver siguiente sin decidir"
+              >
+                <ChevronRight />
+              </button>
             </div>
             <div className="slice-actions">
               <button
                 className="btn btn-danger-ghost slice-btn"
                 onClick={discard}
-                disabled={busy}
                 title="Descartar (←)"
               >
                 <X /> Descartar
@@ -434,7 +686,6 @@ export function Slices() {
               <button
                 className="btn btn-primary slice-btn"
                 onClick={apply}
-                disabled={busy}
                 title="Abrir oferta y marcar postulada (↑)"
               >
                 <Send /> Postularme
@@ -442,7 +693,6 @@ export function Slices() {
               <button
                 className="btn btn-success slice-btn"
                 onClick={keep}
-                disabled={busy}
                 title="Guardar (→)"
               >
                 <Check /> Guardar
@@ -450,7 +700,7 @@ export function Slices() {
             </div>
             <p className="slices-hint">
               Arrastra o usa ← / → / ↑ del teclado. ↓ o botón para detalles.
-              Arriba abre la oferta y la marca postulada.
+              ‹ › para mirar sin decidir. Mirar registra la vista en Vistas.
             </p>
           </>
         )}

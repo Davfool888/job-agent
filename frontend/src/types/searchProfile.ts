@@ -40,6 +40,14 @@ export interface SearchProfileRun {
   relevant: number;
   errors: string[];
   fit_filtered?: Record<string, number>;
+  // Resumen de avisos Telegram del run (backend/app/services/telegram.py).
+  telegram?: {
+    sent: number;
+    skipped: number;
+    errors: string[];
+    reason?: string;
+    note?: string;
+  };
 }
 
 // CV de referencia subido al perfil (PDF). has_cv=false si no hay.

@@ -39,13 +39,46 @@ export interface AdaptStartAccepted {
 
 export type AdaptJobStatus =
   | { status: "idle"; job_id: string }
-  | { status: "processing"; job_id: string; started_at?: string }
+  | { status: "processing"; job_id: string; started_at?: string; stage?: string }
   | { status: "done"; job_id: string; result: AdaptCvResult }
   | {
       status: "error";
       job_id: string;
       error: { code: string; message: string };
     };
+
+// Etapa real del worker (status.json) -> texto para el indicador.
+// Si el backend no la trae (version vieja), se sigue con las genericas.
+export function adaptStageLabel(stage?: string | null): string | null {
+  switch (stage) {
+    case "config":
+      return "Leyendo configuración…";
+    case "job":
+      return "Leyendo oferta…";
+    case "profile":
+      return "Leyendo tu perfil…";
+    case "coerce":
+      return "Preparando datos…";
+    case "match":
+      return "Analizando oferta…";
+    case "select":
+      return "Seleccionando contenido…";
+    case "llm":
+      return "Personalizando con IA…";
+    case "validate":
+      return "Verificando contenido…";
+    case "render":
+      return "Armando curriculum…";
+    case "pdf":
+      return "Generando PDF…";
+    case "audit":
+      return "Auditando resultado…";
+    case "finish":
+      return "Finalizando…";
+    default:
+      return null;
+  }
+}
 
 export type AdaptErrorCode =
   | "PROFILE_INCOMPLETE"

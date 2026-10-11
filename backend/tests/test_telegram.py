@@ -441,3 +441,52 @@ def test_bot_global_legacy_sigue_funcionando(_env, _auth, monkeypatch):
                               headers=headers).json()
         assert started["deep_link"].startswith(
             "https://t.me/bot_global?start=")
+
+
+def test_notify_reason_sin_bot(_env):
+    """Sin token (ni propio ni global): reason no_bot, sin excepcion."""
+    from app.database.connection import SessionLocal
+    from app.services import telegram as tg
+
+    db = SessionLocal()
+    try:
+        out = tg.notify_new_jobs(db, "uid-sin-nada", ["1"])
+        assert out["sent"] == 0
+        assert out["reason"] == "no_bot"
+        assert out["note"]
+    finally:
+        db.close()
+
+
+def test_notify_reason_sin_chat(_env, monkeypatch):
+    """Con bot pero sin chat vinculado: reason no_chat."""
+    _ok_sender(monkeypatch)
+    from app.database.connection import SessionLocal
+    from app.services import telegram as tg
+
+    db = SessionLocal()
+    try:
+        tg.set_user_bot(db, UID, VALID_TOKEN)
+        out = tg.notify_new_jobs(db, UID, ["1"])
+        assert out["reason"] == "no_chat"
+        assert "Conectar" in out["note"]
+    finally:
+        db.close()
+
+
+def test_notify_reason_sin_nuevas(_env, monkeypatch):
+    """Chat vinculado pero nada nuevo: reason no_new."""
+    _ok_sender(monkeypatch)
+    from app.database.connection import SessionLocal
+    from app.database.models import TelegramLink
+    from app.services import telegram as tg
+
+    db = SessionLocal()
+    try:
+        tg.set_user_bot(db, UID, VALID_TOKEN)
+        db.merge(TelegramLink(uid=UID, chat_id="999"))
+        db.commit()
+        out = tg.notify_new_jobs(db, UID, [])
+        assert out["reason"] == "no_new"
+    finally:
+        db.close()

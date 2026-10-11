@@ -618,15 +618,24 @@ def notify_new_jobs(db, uid: str | None, job_ids: list,
     """Avisa ofertas nuevas al usuario. NUNCA lanza: devuelve resumen.
 
     Se llama al final de run_profile (cubre manual + automatico).
+
+    `reason` explica los saltos silenciosos (para el aviso de la UI):
+    no_uid | no_bot | no_chat | invalid | no_new | ok.
     """
     max_per_run = _env_int("TELEGRAM_MAX_PER_RUN", 10)
 
-    summary: dict = {"sent": 0, "skipped": 0, "errors": []}
+    summary: dict = {"sent": 0, "skipped": 0, "errors": [],
+                     "reason": "ok", "note": ""}
     if not uid:
+        summary.update(reason="no_uid", note="Sin usuario.")
         return summary
     try:
         _effective_token(db, uid)  # sin bot (ni propio ni global): silencio
     except TelegramError:
+        summary.update(
+            reason="no_bot",
+            note="Sin bot para este perfil: pega tu token en "
+                 "Configuración → Telegram con la misma cuenta.")
         return summary
     except Exception as error:  # noqa: BLE001 (el scheduler nunca revienta)
         logger.warning("Telegram notify fallo (no rompe busqueda): %s",
@@ -635,11 +644,23 @@ def notify_new_jobs(db, uid: str | None, job_ids: list,
         return summary
     try:
         link = _get_link(db, uid) or {}
-        if not link.get("chat_id") or link.get("invalid"):
+        if not link.get("chat_id"):
+            summary.update(
+                reason="no_chat",
+                note="Chat no vinculado para este perfil: usa Conectar "
+                     "Telegram con la misma cuenta.")
+            return summary
+        if link.get("invalid"):
+            summary.update(
+                reason="invalid",
+                note="Chat marcado inválido (¿bloqueaste al bot?). "
+                     "Reconecta Telegram.")
             return summary
         pending = [jid for jid in (job_ids or [])
                    if not was_sent(db, uid, jid)]
         if not pending:
+            summary.update(reason="no_new",
+                           note="Sin ofertas nuevas en esta ejecución.")
             return summary
         from app.services import job_service as jobs
 
@@ -661,6 +682,9 @@ def notify_new_jobs(db, uid: str | None, job_ids: list,
                 summary["errors"].append(str(error)[:150])
         left = len(pending) - min(len(pending), max_per_run)
         summary["skipped"] += max(0, left)
+        if summary["sent"]:
+            summary["note"] = (
+                f"{summary['sent']} avisada(s) por Telegram.")
     except Exception as error:  # noqa: BLE001
         logger.warning("Telegram notify fallo (no rompe busqueda): %s",
                        error)

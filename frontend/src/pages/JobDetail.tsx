@@ -37,6 +37,7 @@ import {
   adaptCvAsync,
   adaptDownloadUrl,
   adaptErrorMessage,
+  adaptStageLabel,
   type AdaptAsyncError,
   type AdaptCvResult,
 } from "../services/adapt";
@@ -199,6 +200,13 @@ export function JobDetail() {
             onPoll: (attempt, status) => {
               if (status.status === "done") {
                 setAdaptStage("Listo ✓");
+                return;
+              }
+              const real = status.status === "processing"
+                ? adaptStageLabel(status.stage)
+                : null;
+              if (real) {
+                setAdaptStage(real);
               } else if (attempt > 4) {
                 // Tras ~12s sin done, casi seguro esta en Chromium/PDF.
                 setAdaptStage(ADAPT_STAGES[2]);

@@ -33,6 +33,7 @@ import {
 import { fetchSources } from "../services/jobs";
 import { fetchCatalogs } from "../services/profile";
 import { fetchSearchOptions } from "../services/searchConfig";
+import { bustCache, isFresh, readCache, writeCache } from "../services/cache";
 import type { FitOptions } from "../services/searchConfig";
 import { FitFields } from "../components/search/FitFields";
 import type { Catalogs } from "../types/profile";
@@ -117,8 +118,12 @@ function formatBytes(n: number | null | undefined): string {
 }
 
 export function Search() {
-  const [profiles, setProfiles] = useState<SearchProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [profiles, setProfiles] = useState<SearchProfile[]>(() =>
+    readCache<SearchProfile[]>("search-profiles") ?? [],
+  );
+  const [loading, setLoading] = useState(
+    () => !isFresh("search-profiles"),
+  );
   const [error, setError] = useState<string | null>(null);
   const [allSources, setAllSources] = useState<string[]>([]);
   const [scheduler, setScheduler] = useState<SchedulerStatus | null>(null);
@@ -136,13 +141,20 @@ export function Search() {
   const [fitOptions, setFitOptions] = useState<FitOptions | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
+    // Con caché fresca no hay spinner ni consulta de perfiles: pintado
+    // instantáneo. Crear/editar/eliminar la invalidan explícitamente.
+    const useCache = isFresh("search-profiles");
+    if (!useCache) setLoading(true);
     try {
-      const [list, status] = await Promise.all([
-        fetchSearchProfiles(),
-        fetchSchedulerStatus().catch(() => null),
-      ]);
+      let list: SearchProfile[];
+      if (useCache) {
+        list = readCache<SearchProfile[]>("search-profiles") ?? [];
+      } else {
+        list = await fetchSearchProfiles();
+        writeCache("search-profiles", list);
+      }
+      const status = await fetchSchedulerStatus().catch(() => null);
       setProfiles(list);
       setScheduler(status);
       // CVs de referencia (uno por perfil): un fallo individual no
@@ -319,6 +331,8 @@ export function Search() {
         await createSearchProfile(payload);
         setNotice("Perfil creado.");
       }
+      bustCache("profiles-min");
+      bustCache("search-profiles");
       closeForm();
       await load();
     } catch (e) {
@@ -332,6 +346,8 @@ export function Search() {
     setBusyId(p.id);
     try {
       await updateSearchProfile(p.id, { active: !p.active });
+      bustCache("profiles-min");
+      bustCache("search-profiles");
       await load();
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Error cambiando estado");
@@ -345,6 +361,8 @@ export function Search() {
     setConfirming(null);
     try {
       await deleteSearchProfile(p.id);
+      bustCache("profiles-min");
+      bustCache("search-profiles");
       await load();
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Error eliminando perfil");
@@ -392,10 +410,23 @@ export function Search() {
     setNotice(null);
     try {
       const r = await runSearchProfile(p.id);
+      const tg = r.telegram;
+      const tgText =
+        tg == null
+          ? ""
+          : tg.sent > 0
+            ? ` Telegram: ${tg.sent} avisada(s).`
+            : tg.errors.length > 0
+              ? ` Telegram: falló (${tg.errors[0]}).`
+              : tg.note
+                ? ` Telegram: ${tg.note}`
+                : "";
       setNotice(
         `"${p.name}": ${r.found} encontradas, ${r.new} nuevas, ${r.analyzed} analizadas.` +
-          (r.errors.length ? ` ${r.errors.length} errores.` : ""),
+          (r.errors.length ? ` ${r.errors.length} errores.` : "") +
+          tgText,
       );
+      bustCache("search-profiles");
       await load();
     } catch (e) {
       setNotice(e instanceof Error ? e.message : "Error ejecutando perfil");

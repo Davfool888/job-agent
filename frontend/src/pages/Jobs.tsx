@@ -11,6 +11,7 @@ import {
   LoadingState,
 } from "../components/jobs/States";
 import { useJobs, useProfileOptions } from "../hooks/useApi";
+import { usePagedList } from "../hooks/usePagedList";
 import { fetchJobsSince } from "../services/searchProfiles";
 import type { Job } from "../types/job";
 import {
@@ -73,6 +74,8 @@ export function Jobs() {
   );
 
   const visible = useMemo(() => applyJobFilters(active, filters), [active, filters]);
+  // Primera pintura: 20 ofertas; al bajar se amplía solo (sin backend).
+  const paged = usePagedList(visible, 20);
 
   const companies = useMemo(() => uniqueSorted(active, (j) => j.company), [active]);
   // Sin colapsar variantes, el desplegable de ubicaciones era una lista de
@@ -179,7 +182,7 @@ const locations = useMemo(() => uniqueLocations(active), [active]);
               />
             ) : (
               <div className="job-list">
-                {visible.map((job) => (
+                {paged.visible.map((job) => (
                   <JobCard
                     key={job.id}
                     job={job}
@@ -190,6 +193,13 @@ const locations = useMemo(() => uniqueLocations(active), [active]);
                     onOpen={openOriginal}
                   />
                 ))}
+              </div>
+            )}
+            {paged.hasMore && (
+              <div ref={paged.sentinelRef} style={{ padding: "12px 0", textAlign: "center" }}>
+                <span className="card-sub">
+                  Mostrando {paged.shown} de {paged.total}… baja para ver más
+                </span>
               </div>
             )}
           </>

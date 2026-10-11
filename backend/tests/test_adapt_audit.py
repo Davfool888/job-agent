@@ -658,3 +658,41 @@ def test_download_409_con_auditoria_bloqueante(tmp_path, monkeypatch):
         db.commit()
         db.close()
 
+
+def test_timed_dispara_hook_progreso():
+    """Cada etapa avisa al hook (base del diagnostico de cuelgues)."""
+    from app.adapt import pipeline as stages
+
+    seen: list = []
+    stages.set_progress_hook(seen.append)
+    try:
+        with stages._timed(stages.Timings(), "llm"):
+            pass
+    finally:
+        stages.set_progress_hook(None)
+    assert seen == ["llm"]
+    assert stages._PROGRESS_HOOK is None
+
+
+def test_status_guarda_etapa_worker(tmp_path, monkeypatch):
+    """El worker deja la ultima etapa en status.json (done y error)."""
+    from app.adapt import jobs as adapt_jobs
+    from app.adapt import pipeline as stages
+
+    monkeypatch.setattr("app.config.ADAPT_CVS_DIR", tmp_path)
+
+    def fake_adapt(handle, job_id, uid, email, preferred=None):
+        timings = stages.Timings()
+        with stages._timed(timings, "pdf"):
+            pass
+        return {"ok": True}
+
+    monkeypatch.setattr(
+        "app.adapt.service.adapt_profile_for_job", fake_adapt)
+    adapt_jobs._run_in_background("7", "u7", "u@x.co")
+    status = adapt_jobs._read_status("7", "u7", "u@x.co")
+    assert status is not None
+    assert status["status"] == "done"
+    assert status["stage"] == "pdf"
+    assert stages._PROGRESS_HOOK is None
+

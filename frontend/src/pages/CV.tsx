@@ -12,6 +12,7 @@ import {
 import { Header } from "../components/layout/Header";
 import { MatchBadge } from "../components/jobs/MatchBadge";
 import { useAdaptToken } from "../hooks/useAdaptToken";
+import { usePagedList } from "../hooks/usePagedList";
 import {
   EmptyState,
   ErrorState,
@@ -61,6 +62,7 @@ export function CV() {
   const kept = useMemo(() => data ?? [], [data]);
   const [filters, setFilters] = useState<JobFilterState>(DEFAULT_FILTERS);
   const visible = useMemo(() => applyJobFilters(kept, filters), [kept, filters]);
+  const paged = usePagedList(visible, 20);
   const companies = useMemo(() => uniqueSorted(kept, (j) => j.company), [kept]);
   const locations = useMemo(() => uniqueSorted(kept, (j) => j.location), [kept]);
   const sources = useMemo(() => uniqueSorted(kept, (j) => j.source), [kept]);
@@ -411,7 +413,7 @@ export function CV() {
               />
             ) : (
               <div className="job-list">
-                {visible.map((j) => (
+                {paged.visible.map((j) => (
                   <div key={j.id} className="job-card">
                     <div className="job-card-top">
                       <div className="job-card-main">
@@ -478,6 +480,13 @@ export function CV() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+            {paged.hasMore && (
+              <div ref={paged.sentinelRef} style={{ padding: "12px 0", textAlign: "center" }}>
+                <span className="card-sub">
+                  Mostrando {paged.shown} de {paged.total}… baja para ver más
+                </span>
               </div>
             )}
           </>

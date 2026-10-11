@@ -53,11 +53,18 @@ def decrypt_key(enc: str) -> str:
     return _cipher().decrypt(enc.encode()).decode()
 
 
-def _public_row(provider: str, row) -> dict:
+def _public_row(provider: str, row, unreadable: bool = False) -> dict:
     from app.ai.user_providers import SUPPORTED
 
     spec = SUPPORTED[provider]
     status = (row.status if row is not None else None) or STATUS_UNVERIFIED
+    detail = (row.detail if row is not None else "")
+    if unreadable:
+        status = STATUS_ERROR
+        detail = (
+            "No se pudo leer la key guardada "
+            "(¿cambió AI_KEYS_SECRET en el servidor?). "
+            "Vuélvela a guardar.")
     return {
         "provider": provider,
         "label": spec.label,
@@ -65,7 +72,7 @@ def _public_row(provider: str, row) -> dict:
         "key_help": spec.key_help,
         "configured": row is not None,
         "status": status if row is not None else "no_configurado",
-        "detail": (row.detail if row is not None else ""),
+        "detail": detail,
         "updated_at": row.updated_at.isoformat()
         if row is not None and row.updated_at else None,
     }
@@ -123,11 +130,26 @@ def _save_row(db, uid: str, provider: str, key_enc: str,
 
 
 def list_status(db, uid: str) -> list[dict]:
-    """Estado por proveedor (sin material de keys)."""
+    """Estado por proveedor (sin material de keys).
+
+    Verifica que cada key guardada sea legible con el secreto actual:
+    si AI_KEYS_SECRET cambio, la fila existe pero es indescifrable y se
+    reporta como error (antes parecia "disponible" y solo fallaba al
+    usarla). No borra nada: al restaurar el secreto, revive sola.
+    """
     from app.ai.user_providers import SUPPORTED
 
-    return [_public_row(pid, _get_row(db, uid, pid))
-            for pid in sorted(SUPPORTED)]
+    out = []
+    for pid in sorted(SUPPORTED):
+        row = _get_row(db, uid, pid)
+        unreadable = False
+        if row is not None and row.key_enc:
+            try:
+                decrypt_key(row.key_enc)
+            except Exception:  # noqa: BLE001
+                unreadable = True
+        out.append(_public_row(pid, row, unreadable))
+    return out
 
 
 def configured_providers(db, uid: str) -> list[str]:

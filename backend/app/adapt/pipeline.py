@@ -16,6 +16,18 @@ class Timings(dict):
     """Acumula duraciones por etapa (segundos, 3 decimales)."""
 
 
+# Gancho opcional de progreso (lo pone el worker async): se llama con
+# el nombre de cada etapa al empezar, para dejarlo en status.json y
+# saber donde se atasca una generacion (PDF/Chromium en plan gratuito
+# es el sospechoso habitual). Nunca lanza.
+_PROGRESS_HOOK = None
+
+
+def set_progress_hook(fn) -> None:
+    global _PROGRESS_HOOK
+    _PROGRESS_HOOK = fn
+
+
 class _timed:
     def __init__(self, timings: Timings, name: str):
         self._timings = timings
@@ -23,6 +35,11 @@ class _timed:
 
     def __enter__(self):
         self._t0 = _time.perf_counter()
+        if _PROGRESS_HOOK is not None:
+            try:
+                _PROGRESS_HOOK(self._name)
+            except Exception:  # noqa: BLE001
+                pass
         return self
 
     def __exit__(self, *exc):

@@ -185,14 +185,31 @@ def _run_in_background(job_id, uid: str | None,
 
     key = _owner_status_key(uid, email, job_id)
     handle, needs_close = _new_db()
+    seen: dict = {}
     try:
-        result = adapt_profile_for_job(handle, job_id, uid, email,
-                                       preferred_provider)
+        from app.adapt import pipeline as stages
+
+        def _progress(stage: str) -> None:
+            seen["stage"] = stage
+            current = _read_status(job_id, uid, email) or {}
+            if current.get("status") != "processing":
+                return
+            current["stage"] = stage
+            current["updated_at"] = _now_iso()
+            _write_status(job_id, current, uid, email)
+
+        stages.set_progress_hook(_progress)
+        try:
+            result = adapt_profile_for_job(handle, job_id, uid, email,
+                                           preferred_provider)
+        finally:
+            stages.set_progress_hook(None)
         _write_status(job_id, {
             "status": "done",
             "job_id": str(job_id),
             "started_at": (_read_status(job_id, uid, email) or {}).get("started_at"),
             "updated_at": _now_iso(),
+            "stage": seen.get("stage", "finish"),
             "result": result,
         }, uid, email)
     except AdaptError as error:
@@ -201,6 +218,7 @@ def _run_in_background(job_id, uid: str | None,
             "job_id": str(job_id),
             "started_at": (_read_status(job_id, uid, email) or {}).get("started_at"),
             "updated_at": _now_iso(),
+            "stage": seen.get("stage"),
             "error": {"code": error.code, "message": str(error)},
         }, uid, email)
     except Exception as error:  # noqa: BLE001
@@ -209,6 +227,7 @@ def _run_in_background(job_id, uid: str | None,
             "job_id": str(job_id),
             "started_at": (_read_status(job_id, uid, email) or {}).get("started_at"),
             "updated_at": _now_iso(),
+            "stage": seen.get("stage"),
             "error": {"code": "UNKNOWN_ERROR",
                       "message": f"Fallo inesperado: {error}"[:300]},
         }, uid, email)

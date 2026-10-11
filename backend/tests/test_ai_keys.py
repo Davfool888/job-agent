@@ -430,3 +430,22 @@ def test_groq_y_openrouter_peticion_correcta(monkeypatch):
     assert seen["headers"]["X-Title"] == "Job Agent"
     assert seen["json"]["model"].endswith(":free")
     assert "response_format" not in seen["json"]
+
+
+def test_status_detecta_secreto_rotado(_secret):
+    """Fila indescifrable (AI_KEYS_SECRET cambió): se reporta error con
+    pista en vez de parecer disponible; nada se borra."""
+    from app.services import ai_keys
+
+    db = _db()
+    try:
+        ai_keys._save_row(db, UID, "deepseek", "basura-no-cifrada",
+                          "disponible", "")
+        rows = {r["provider"]: r for r in ai_keys.list_status(db, UID)}
+        assert rows["deepseek"]["configured"] is True
+        assert rows["deepseek"]["status"] == "error"
+        assert "AI_KEYS_SECRET" in rows["deepseek"]["detail"]
+        # Los demas proveedores sin fila siguen igual.
+        assert rows["gemini"]["configured"] is False
+    finally:
+        db.close()

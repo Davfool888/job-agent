@@ -10,6 +10,7 @@ import {
   LoadingState,
 } from "../components/jobs/States";
 import { useJobs, useProfileOptions } from "../hooks/useApi";
+import { usePagedList } from "../hooks/usePagedList";
 import { formatDateTime } from "../utils/format";
 import { applyJobFilters, profileOptions, uniqueSorted } from "../utils/jobs";
 
@@ -22,6 +23,7 @@ export function Discarded() {
 
   const all = useMemo(() => data ?? [], [data]);
   const visible = useMemo(() => applyJobFilters(all, filters), [all, filters]);
+  const paged = usePagedList(visible, 20);
 
   const companies = useMemo(() => uniqueSorted(all, (j) => j.company), [all]);
   const locations = useMemo(() => uniqueSorted(all, (j) => j.location), [all]);
@@ -74,7 +76,7 @@ export function Discarded() {
               <EmptyState title="Sin resultados para esos filtros." />
             ) : (
               <div className="job-list">
-                {visible.map((job) => (
+                {paged.visible.map((job) => (
                   <div key={job.id}>
                     <JobCard
                       job={job}
@@ -102,6 +104,13 @@ export function Discarded() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+            {paged.hasMore && (
+              <div ref={paged.sentinelRef} style={{ padding: "12px 0", textAlign: "center" }}>
+                <span className="card-sub">
+                  Mostrando {paged.shown} de {paged.total}… baja para ver más
+                </span>
               </div>
             )}
           </>

@@ -9,6 +9,7 @@ import {
   LoadingState,
 } from "../components/jobs/States";
 import { useJobs } from "../hooks/useApi";
+import { usePagedList } from "../hooks/usePagedList";
 import { APPLICATION_STATUSES } from "../utils/constants";
 import { formatDateTime } from "../utils/format";
 import { updateJobStatus } from "../services/jobs";
@@ -19,7 +20,7 @@ export function Applications() {
   const [stageError, setStageError] = useState<string | null>(null);
   const [sort, setSort] = useState<"recent" | "match_desc" | "match_asc">("recent");
 
-  const applied = useMemo(() => {
+  const sorted = useMemo(() => {
     const list = [...(data ?? [])];
     if (sort === "match_desc") {
       list.sort(
@@ -34,6 +35,9 @@ export function Applications() {
     }
     return list;
   }, [data, sort]);
+  const paged = usePagedList(sorted, 20);
+
+  const applied = paged.visible;
 
   const setStage = async (id: string, stage: string) => {
     setBusyId(id);
@@ -128,6 +132,13 @@ export function Applications() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+        {paged.hasMore && (
+          <div ref={paged.sentinelRef} style={{ padding: "12px 0", textAlign: "center" }}>
+            <span className="card-sub">
+              Mostrando {paged.shown} de {paged.total}… baja para ver más
+            </span>
           </div>
         )}
       </div>
