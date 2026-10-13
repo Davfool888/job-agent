@@ -39,6 +39,7 @@ from .common import _auth_account_complete
 from .common import _json_list
 from .common import _pdf_config_to_out
 from .common import _profile_identity
+from .common import db_read
 from .common import PDFConfigIn
 from .common import PDFConfigOut
 
@@ -83,7 +84,10 @@ def list_jobs(
                 detail="since debe ser fecha ISO (YYYY-MM-DDTHH:MM:SS).",
             )
     uid, email = _profile_identity(request)
-    return get_all_jobs(db=db, limit=limit, status=status, since=since_dt, uid=uid, email=email)
+    return db_read(
+        lambda: get_all_jobs(db=db, limit=limit, status=status,
+                             since=since_dt, uid=uid, email=email),
+        "listar ofertas")
 
 
 @router.post("/jobs/{job_id}/analyze")
@@ -372,9 +376,11 @@ def download_adapt_cv(
 def get_job(job_id: str, request: Request, db: Session = Depends(get_db)):
     from app.services.job_service import can_view_job
     uid, email = _profile_identity(request)
-    if not can_view_job(db, job_id, uid, email):
+    if not db_read(lambda: can_view_job(db, job_id, uid, email),
+                   "ver la oferta"):
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
-    job = get_job_by_id(db=db, job_id=job_id)
+    job = db_read(lambda: get_job_by_id(db=db, job_id=job_id),
+                  "ver la oferta")
     if not job:
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
     return job
@@ -385,9 +391,11 @@ def get_job_analysis(job_id: str, request: Request, db: Session = Depends(get_db
     """Analisis estructurado guardado (§5, §14)."""
     from app.services.job_service import can_view_job
     uid, email = _profile_identity(request)
-    if not can_view_job(db, job_id, uid, email):
+    if not db_read(lambda: can_view_job(db, job_id, uid, email),
+                   "ver la oferta"):
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
-    job = get_job_by_id(db=db, job_id=job_id)
+    job = db_read(lambda: get_job_by_id(db=db, job_id=job_id),
+                  "ver la oferta")
     if not job:
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
     analysis = {
@@ -689,9 +697,11 @@ def patch_job_status(
     """Conservar / descartar / recuperar / marcar abierta o postulada."""
     from app.services.job_service import can_view_job
     uid, email = _profile_identity(request)
-    if not can_view_job(db, job_id, uid, email):
+    if not db_read(lambda: can_view_job(db, job_id, uid, email),
+                   "ver la oferta"):
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
-    job = get_job_by_id(db=db, job_id=job_id)
+    job = db_read(lambda: get_job_by_id(db=db, job_id=job_id),
+                  "ver la oferta")
     if not job:
         raise HTTPException(status_code=404, detail="Oferta no encontrada.")
     try:

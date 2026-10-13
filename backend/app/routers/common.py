@@ -131,6 +131,33 @@ def _pdf_config_to_out(cfg) -> PDFConfigOut:
     )
 
 
+def db_read(fn, what="leer la base de datos"):
+    """Ejecuta una lectura de BD mapeando fallos a HTTPException.
+
+    Las excepciones crudas (ej. 429 de Firestore) suben como 500 en
+    texto plano SIN headers CORS, y el navegador las reporta como un
+    falso "bloqueo CORS". Con HTTPException la respuesta sí lleva CORS
+    y el frontend muestra el error real (ErrorState) en vez de fallar
+    en silencio.
+    """
+    try:
+        return fn()
+    except HTTPException:
+        raise
+    except Exception as error:  # noqa: BLE001
+        text = str(error)
+        if ("429" in text or "Quota exceeded" in text
+                or "ResourceExhausted" in type(error).__name__):
+            raise HTTPException(
+                status_code=503,
+                detail="Firestore sin cuota (429). Espera al reset diario "
+                       "o revisa el plan en Firebase Console. Reintenta en "
+                       "unos minutos.")
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo {what}: {text[:200]}")
+
+
 def _profile_identity(request: Request) -> tuple:
     """(uid, email) de la sesion Firebase, o (None, None) sin token.
 

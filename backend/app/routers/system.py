@@ -39,6 +39,7 @@ from .common import _auth_account_complete
 from .common import _json_list
 from .common import _pdf_config_to_out
 from .common import _profile_identity
+from .common import db_read
 from .common import PDFConfigIn
 from .common import PDFConfigOut
 
@@ -126,7 +127,8 @@ def health_detailed():
 def stats(request: Request, db: Session = Depends(get_db)):
     """Resumen agregado con datos reales (para el dashboard)."""
     uid, email = _profile_identity(request)
-    return get_stats(db, uid=uid, email=email)
+    return db_read(lambda: get_stats(db, uid=uid, email=email),
+                   "calcular estadísticas")
 
 
 @router.get("/analytics")
