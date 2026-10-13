@@ -1869,33 +1869,52 @@ def save_rich_profile_for(
 
 def backfill_fingerprints(db: Session) -> int:
     """Recalcula huellas con los valores actuales y contadores de grupo.
-    Idempotente. Devuelve cuantas filas actualizo."""
-    if is_firestore(db):
-        from app.database import firestore_repo as fs
+    Idempotente. Devuelve cuantas filas actualizo.
 
-        rows = fs.iter_all_jobs(db)
-    else:
-        rows = [orm_to_record(row) for row in db.query(Job).all()]
-    touched = 0
-    for job in rows:
-        fresh = fingerprint_of(job.title, job.company, job.location)
-        if job.fingerprint != fresh or not job.last_seen_at:
-            update_job_fields(db, job.id, {
-                "fingerprint": fresh,
-                "last_seen_at": job.last_seen_at or job.created_at,
-            })
-            touched += 1
-    # Recalcula contadores de todos los grupos.
-    seen: set[str] = set()
-    for job in iter_all_jobs(db):
-        fingerprint = job.fingerprint
-        if fingerprint and fingerprint not in seen:
-            seen.add(fingerprint)
-            count = count_by_fingerprint(db, fingerprint)
-            update_fingerprint_group(
-                db, fingerprint, {"times_seen": count}
-            )
-    return touched
+    Resiliente a cuota: si Firestore responde 429 (u otro fallo) a mitad
+    del barrido, se detiene y devuelve lo avanzado en vez de tumbar el
+    arranque (el deploy reintentaria en loop y quemaria mas cuota).
+    SKIP_BACKFILL=true lo omite por completo (emergencia en deploy).
+    """
+    import logging as _logging
+    import os as _os
+
+    _log = _logging.getLogger("job-agent.backfill")
+    if (_os.getenv("SKIP_BACKFILL") or "").strip().lower() in (
+            "1", "true", "yes"):
+        _log.warning("SKIP_BACKFILL activo: se omite el backfill.")
+        return 0
+    try:
+        if is_firestore(db):
+            from app.database import firestore_repo as fs
+
+            rows = fs.iter_all_jobs(db)
+        else:
+            rows = [orm_to_record(row) for row in db.query(Job).all()]
+        touched = 0
+        for job in rows:
+            fresh = fingerprint_of(job.title, job.company, job.location)
+            if job.fingerprint != fresh or not job.last_seen_at:
+                update_job_fields(db, job.id, {
+                    "fingerprint": fresh,
+                    "last_seen_at": job.last_seen_at or job.created_at,
+                })
+                touched += 1
+        # Recalcula contadores de todos los grupos.
+        seen: set[str] = set()
+        for job in iter_all_jobs(db):
+            fingerprint = job.fingerprint
+            if fingerprint and fingerprint not in seen:
+                seen.add(fingerprint)
+                count = count_by_fingerprint(db, fingerprint)
+                update_fingerprint_group(
+                    db, fingerprint, {"times_seen": count}
+                )
+        return touched
+    except Exception as error:  # noqa: BLE001
+        _log.warning("Backfill incompleto (%s); el arranque continua.",
+                     str(error)[:200])
+        return 0
 
 
 def save_analysis(

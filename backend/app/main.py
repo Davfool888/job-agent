@@ -64,7 +64,14 @@ async def lifespan(app: FastAPI):
             ) from error
         _log.warning("DB backend: firestore (proyecto %s, persistente).",
                      FIREBASE_PROJECT_ID or "?")
-        backfill_fingerprints(db)
+        # Mantenimiento mejor-esfuerzo: si la cuota esta agotada (429)
+        # el backfill se rinde solo; jamas debe tumbar el arranque
+        # (el loop de reinicios quemaria mas cuota).
+        try:
+            backfill_fingerprints(db)
+        except Exception as error:  # noqa: BLE001
+            _log.warning("Backfill omitido en arranque: %s",
+                         str(error)[:200])
     else:
         if not _os.getenv("ALLOW_EPHEMERAL_SQLITE"):
             _log.warning(
@@ -76,6 +83,9 @@ async def lifespan(app: FastAPI):
         db = SessionLocal()
         try:
             backfill_fingerprints(db)
+        except Exception as error:  # noqa: BLE001
+            _log.warning("Backfill omitido en arranque: %s",
+                         str(error)[:200])
         finally:
             db.close()
     import sys as _sys
