@@ -397,9 +397,31 @@ def get_jobs_by_ids(db, ids: list) -> list[Record]:
 
 def list_jobs(db, limit: int = 200, status: str | None = None,
               since: datetime | None = None) -> list[Record]:
+    """Ventana de ofertas con lecturas acotadas.
+
+    Antes hacía `.stream()` de TODA la colección (1 lectura facturada
+    por documento) y recortaba en Python: con ~800 ofertas, cada
+    `GET /jobs` quemaba ~800 lecturas. La cuota gratuita de Firestore
+    (~50K lecturas/día) caía con ~60 recargas + scheduler.
+    Ahora el límite/filtro se aplica en el servidor (solo índices
+    automáticos: igualdad en un campo, orden en un campo, sin índices
+    compuestos nuevos).
+    """
+    from google.cloud.firestore_v1 import FieldFilter
+
     limit = max(1, min(limit, 500))
+    query = _col(db, "jobs")
+    if status:
+        # Igualdad en un campo: índice automático, lecturas mínimas.
+        query = query.where(filter=FieldFilter("status", "==", status))
+    else:
+        # Sin filtro: lo más reciente primero (índice automático de
+        # un campo). Todos los docs migrados tienen created_at.
+        query = query.order_by("created_at", direction="DESCENDING")
+    # `since` se filtra en Python (rango+orden en campos distintos
+    # exigiría índice compuesto); el límite acota el costo igual.
     records = []
-    for snap in _col(db, "jobs").stream():
+    for snap in query.limit(limit if not since else max(limit, 500)).stream():
         record = fs_to_app(snap.id, snap.to_dict())
         if status and record.status != status:
             continue

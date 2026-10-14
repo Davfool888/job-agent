@@ -152,7 +152,8 @@ def db_read(fn, what="leer la base de datos"):
                 status_code=503,
                 detail="Firestore sin cuota (429). Espera al reset diario "
                        "o revisa el plan en Firebase Console. Reintenta en "
-                       "unos minutos.")
+                       "unos minutos.",
+                headers={"Retry-After": "300"})
         raise HTTPException(
             status_code=502,
             detail=f"No se pudo {what}: {text[:200]}")

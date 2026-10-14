@@ -43,9 +43,8 @@ const EXPAND_Y = 45;
 const EXIT_MS = 180;
 // Tiempo mirando una tarjeta antes de registrarla como vista.
 const VIEW_DELAY_MS = 800;
-// Recargas de sincronización diferidas para no frenar el swipe.
-const RELOAD_DEBOUNCE_MS = 6000;
-// Cuántas tarjetas siguientes se montan + pre-analizan por adelantado.
+// Cuántas tarjetas siguientes se montan por adelantado (datos ya locales,
+// sin costo de red: el deck completo vive en memoria tras un solo GET).
 const PRELOAD_AHEAD = 3;
 
 type SortMode = "match" | "found_desc" | "found_asc";
@@ -84,8 +83,6 @@ export function Slices() {
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const exitTimer = useRef<number | null>(null);
   const viewTimer = useRef<number | null>(null);
-  const reloadTimer = useRef<number | null>(null);
-  const analysisFlight = useRef<Set<string>>(new Set());
   const emptiedRef = useRef(false);
 
   // Solo ofertas traídas por perfiles de búsqueda automática.
@@ -150,21 +147,18 @@ export function Slices() {
     () => () => {
       if (exitTimer.current) window.clearTimeout(exitTimer.current);
       if (viewTimer.current) window.clearTimeout(viewTimer.current);
-      if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
     },
     [],
   );
 
-  const scheduleReload = useCallback(() => {
-    if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
-    reloadTimer.current = window.setTimeout(reload, RELOAD_DEBOUNCE_MS);
-  }, [reload]);
-
-  // Guardado en segundo plano: nunca bloquea la tarjeta siguiente.
+  // Guardado en segundo plano: nunca bloquea la tarjeta siguiente y no
+  // dispara recargas (el deck usa `acted`/`viewed` locales). Recargas solo
+  // en deshacer, reintentar, fin de deck o botón manual: cada recarga en
+  // Firestore cuesta ~1 lectura por oferta.
   const saveInBackground = useCallback(
     (id: string, payload: StatusUpdatePayload, label: string) => {
       updateJobStatus(id, payload).then(
-        () => scheduleReload(),
+        () => {},
         () => {
           setFailed((f) =>
             f.some((x) => x.id === id)
@@ -174,7 +168,7 @@ export function Slices() {
         },
       );
     },
-    [scheduleReload],
+    [],
   );
 
   const retryFailed = useCallback(async () => {
@@ -235,20 +229,9 @@ export function Slices() {
       .finally(() => setAnalysisLoading((v) => (v === id ? null : v)));
   }, [expanded, current, analyses, analysisLoading]);
 
-  // Precarga: análisis de las siguientes para que expandir sea instantáneo.
-  useEffect(() => {
-    for (const j of upcoming) {
-      const id = String(j.id);
-      if (analyses[id] || analysisFlight.current.has(id)) continue;
-      analysisFlight.current.add(id);
-      fetchJobAnalysis(j.id)
-        .then((a) => setAnalyses((m) => ({ ...m, [id]: a })))
-        .catch(() => {
-          /* precarga best-effort */
-        })
-        .finally(() => analysisFlight.current.delete(id));
-    }
-  }, [upcoming, analyses]);
+  // Análisis bajo demanda al expandir. Sin precarga automática: cada
+  // análisis son varias lecturas en Firestore y hojear 190 tarjetas
+  // las quemaría sin que el usuario las abra.
 
   // Al acabarse por decidir: una recarga (se ve "buscando") y si no hay
   // nada nuevo, mensaje de volver más tarde.
